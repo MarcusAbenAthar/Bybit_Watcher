@@ -20,7 +20,7 @@ class Plugin:
         """
         self.config = config
 
-    def inicializar(self):
+    def inicializar(self, plugins=None):
         """
         Inicializa o plugin.
 

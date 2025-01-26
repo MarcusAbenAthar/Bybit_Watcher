@@ -1,0 +1,12 @@
+Regras de OURO para programar o bot:
+
+1 - Autonomo nas decisões (TP/SL), ele não fará trades
+2 - Criterioso
+3 - Seguro
+4 - Certeiro
+5 - Eficiente
+6 - Clareza
+7 - Modular
+8 - Composto por plugins
+9 - Testável
+10 - Documentado com Docstrings e comentários

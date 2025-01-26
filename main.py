@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from loguru import logger
 import ccxt
 from plugins import carregar_plugins
+from plugins.armazenamento import Armazenamento
+from plugins.banco_dados import BancoDados
 from plugins.conexao import Conexao
 
 # 1. Configuração do Loguru
@@ -39,19 +41,42 @@ plugins = carregar_plugins("plugins", config)
 
 # Inicializa os plugins
 for plugin in plugins:
-    try:
-        plugin.inicializar()
-    except Exception as e:
-        logger.exception(
-            f"Erro ao inicializar o plugin {plugin.__class__.__name__}: {e}"
-        )
-        exit(1)
+    if isinstance(plugin, BancoDados):  # Inicializa o BancoDados primeiro
+        try:
+            plugin.inicializar(plugins)
+        except Exception as e:
+            logger.exception(
+                f"Erro ao inicializar o plugin {plugin.__class__.__name__}: {e}"
+            )
+            exit(1)
+
+for plugin in plugins:
+    if not isinstance(plugin, BancoDados):  # Inicializa os outros plugins depois
+        try:
+            if isinstance(
+                plugin, Armazenamento
+            ):  # Verifica se é o plugin Armazenamento
+                plugin.inicializar(plugins)  # Passa o argumento 'plugins' aqui
+            else:
+                plugin.inicializar()  # Remove o argumento 'plugins' para outros plugins
+        except Exception as e:
+            logger.exception(
+                f"Erro ao inicializar o plugin {plugin.__class__.__name__}: {e}"
+            )
+            exit(1)
 
 # Obtém o plugin de conexão
 plugin_conexao = next((p for p in plugins if isinstance(p, Conexao)), None)
 if plugin_conexao is None:
     logger.error("Plugin de conexão não encontrado!")
     exit(1)
+
+# Obtém o plugin de armazenamento
+plugin_armazenamento = next((p for p in plugins if isinstance(p, Armazenamento)), None)
+if plugin_armazenamento is None:
+    logger.error("Plugin de armazenamento não encontrado!")
+    exit(1)
+
 # Loop principal do bot
 while True:  # Remove a verificação do plugin de interrupção
     try:
@@ -69,42 +94,35 @@ while True:  # Remove a verificação do plugin de interrupção
 
         # Coleta os dados de mercado para cada par e timeframe
         for par in pares_usdt:
-            for timeframe in config[
-                "timeframes"
-            ]:  # Remove a verificação do plugin de interrupção
-                print(f"Coletando dados para {par} - {timeframe}...")
-                logger.debug(f"Coletando dados para {par} - {timeframe}...")
+            for timeframe in config["timeframes"]:
+                logger.debug(
+                    # f"Coletando dados para {par} - {timeframe}..."
+                )  # Usa logger.debug
                 klines = exchange.fetch_ohlcv(par, timeframe)
 
-                # Executa os plugins com os dados coletados
+                # Armazena os dados no banco de dados
+                plugin_armazenamento.executar(klines, par, timeframe)
+
+                # Executa os outros plugins com os dados coletados
                 for plugin in plugins:
-                    if (
-                        plugin != plugin_conexao
-                    ):  # Remove a verificação do plugin de interrupção
-                        print(
-                            f"Executando plugin {plugin.__class__.__name__} para {par} - {timeframe}..."
-                        )
-                        logger.debug(
-                            f"Executando plugin {plugin.__class__.__name__} para {par} - {timeframe}..."
-                        )
+                    if plugin != plugin_conexao and plugin != plugin_armazenamento:
                         plugin.executar(klines, par, timeframe)
 
         # Aguarda um intervalo de tempo antes da próxima iteração
-        print(f"Aguardando {30} segundos para a próxima coleta...")
-        logger.debug(f"Aguardando {30} segundos para a próxima coleta...")
+        logger.debug(
+            f"Aguardando {30} segundos para a próxima coleta..."
+        )  # Usa logger.debug
         time.sleep(30)
 
     except ccxt.NetworkError as e:
-        print(f"Erro de rede: {e}")
-        logger.error(f"Erro de rede: {e}")
+        logger.error(f"Erro de rede: {e}")  # Usa logger.error
         time.sleep(60)
     except ccxt.ExchangeError as e:
-        print(f"Erro na exchange: {e}")
-        logger.error(f"Erro na exchange: {e}")
+        logger.error(f"Erro na exchange: {e}")  # Usa logger.error
         time.sleep(60)
     except Exception as e:
         # Captura outras interrupções inesperadas
-        logger.exception(f"Erro inesperado: {e}")
+        logger.exception(f"Erro inesperado: {e}")  # Usa logger.exception
 
     # Finaliza os plugins
     for plugin in plugins:
