@@ -1,6 +1,5 @@
-from loguru import logger
 import talib
-
+from loguru import logger
 from .plugin import Plugin
 
 
@@ -10,12 +9,11 @@ class CalculoAlavancagem(Plugin):
     considerando a volatilidade e as Regras de Ouro.
     """
 
-    def __init__(self, config, gemini_api):
+    def __init__(self, config):
         """
         Inicializa o plugin.
         """
         super().__init__(config)
-        self.gemini_api = gemini_api
         self.cache_volatilidade = {}  # Cache para evitar recalcular a volatilidade
 
     def calcular_alavancagem(self, data, par, timeframe):
@@ -33,8 +31,10 @@ class CalculoAlavancagem(Plugin):
         # Verifica se a volatilidade já foi calculada para o par e timeframe
         chave_cache = f"{par}-{timeframe}"
         if chave_cache not in self.cache_volatilidade:
-            # Obter o histórico de preços do ativo
-            historico = self.gemini_api.obter_historico(par, timeframe)
+            # Obter o histórico de preços do ativo (agora, usando a conexão com a Bybit)
+            historico = self.conexao.obter_exchange().fetch_ohlcv(
+                par, timeframe, limit=500
+            )
 
             # Calcular a volatilidade do ativo (exemplo com ATR)
             self.cache_volatilidade[chave_cache] = self.calcular_atr(historico)
