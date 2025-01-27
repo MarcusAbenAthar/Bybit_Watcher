@@ -4,10 +4,14 @@ import time
 from dotenv import load_dotenv
 from loguru import logger
 import ccxt
+from injector import Injector
+
+from app_module import AppModule
 from plugins import carregar_plugins
 from plugins.armazenamento import Armazenamento
 from plugins.banco_dados import BancoDados
 from plugins.conexao import Conexao
+from plugins.calculo_alavancagem import CalculoAlavancagem
 
 # 1. Configuração do Loguru
 logs_dir = "logs"  # Diretório para armazenar os logs
@@ -39,43 +43,28 @@ config = {
 # Carrega os plugins
 plugins = carregar_plugins("plugins", config)
 
+# Cria o injetor
+injector = Injector(AppModule)
+
 # Inicializa os plugins
 for plugin in plugins:
-    if isinstance(plugin, BancoDados):  # Inicializa o BancoDados primeiro
-        try:
-            plugin.inicializar(plugins)
-        except Exception as e:
-            logger.exception(
-                f"Erro ao inicializar o plugin {plugin.__class__.__name__}: {e}"
-            )
-            exit(1)
-
-for plugin in plugins:
-    if not isinstance(plugin, BancoDados):  # Inicializa os outros plugins depois
-        try:
-            if isinstance(
-                plugin, Armazenamento
-            ):  # Verifica se é o plugin Armazenamento
-                plugin.inicializar(plugins)  # Passa o argumento 'plugins' aqui
-            else:
-                plugin.inicializar()  # Remove o argumento 'plugins' para outros plugins
-        except Exception as e:
-            logger.exception(
-                f"Erro ao inicializar o plugin {plugin.__class__.__name__}: {e}"
-            )
-            exit(1)
+    try:
+        injector.call_with_injection(
+            plugin.inicializar
+        )  # Injeta as dependências automaticamente
+    except Exception as e:
+        logger.exception(
+            f"Erro ao inicializar o plugin {plugin.__class__.__name__}: {e}"
+        )
+        exit(1)
 
 # Obtém o plugin de conexão
-plugin_conexao = next((p for p in plugins if isinstance(p, Conexao)), None)
-if plugin_conexao is None:
-    logger.error("Plugin de conexão não encontrado!")
-    exit(1)
+plugin_conexao = injector.get(Conexao)  # Obtém a instância do plugin Conexao
 
 # Obtém o plugin de armazenamento
-plugin_armazenamento = next((p for p in plugins if isinstance(p, Armazenamento)), None)
-if plugin_armazenamento is None:
-    logger.error("Plugin de armazenamento não encontrado!")
-    exit(1)
+plugin_armazenamento = injector.get(
+    Armazenamento
+)  # Obtém a instância do plugin Armazenamento
 
 # Loop principal do bot
 while True:  # Remove a verificação do plugin de interrupção
@@ -95,9 +84,9 @@ while True:  # Remove a verificação do plugin de interrupção
         # Coleta os dados de mercado para cada par e timeframe
         for par in pares_usdt:
             for timeframe in config["timeframes"]:
-                logger.debug(
-                    # f"Coletando dados para {par} - {timeframe}..."
-                )  # Usa logger.debug
+                # logger.debug(
+                #     f"Coletando dados para {par} - {timeframe}..."
+                # )  # Usa logger.debug
                 klines = exchange.fetch_ohlcv(par, timeframe)
 
                 # Armazena os dados no banco de dados

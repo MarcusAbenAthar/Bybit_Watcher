@@ -1,5 +1,7 @@
 from loguru import logger
 import psycopg2
+
+from utils.padroes_candles import PADROES_CANDLES
 from .plugin import Plugin
 import talib
 
@@ -37,67 +39,67 @@ class AnaliseCandles(Plugin):
 
         # Mapeia os códigos numéricos dos padrões para nomes mais descritivos
         padroes = {
-            talib.CDL2CROWS: "two_crows",
-            talib.CDL3BLACKCROWS: "three_black_crows",
-            talib.CDL3INSIDE: "three_inside_up_down",
-            talib.CDL3LINESTRIKE: "three_line_strike",
-            talib.CDL3OUTSIDE: "three_outside_up_down",
-            talib.CDL3STARSINSOUTH: "three_stars_in_the_south",
-            talib.CDL3WHITESOLDIERS: "three_white_soldiers",
-            talib.CDLABANDONEDBABY: "abandoned_baby",
-            talib.CDLADVANCEBLOCK: "advance_block",
-            talib.CDLBELTHOLD: "belt_hold",
-            talib.CDLBREAKAWAY: "breakaway",
-            talib.CDLCLOSINGMARUBOZU: "closing_marubozu",
-            talib.CDLCONCEALBABYSWALL: "concealing_baby_swallow",
-            talib.CDLCOUNTERATTACK: "counterattack",
-            talib.CDLDARKCLOUDCOVER: "dark_cloud_cover",
+            talib.CDL2CROWS: "dois_corvos",
+            talib.CDL3BLACKCROWS: "tres_corvos_negros",
+            talib.CDL3INSIDE: "tres_dentro_cima_baixo",
+            talib.CDL3LINESTRIKE: "golpe_de_tres_linhas",
+            talib.CDL3OUTSIDE: "tres_fora_cima_baixo",
+            talib.CDL3STARSINSOUTH: "tres_estrelas_no_sul",
+            talib.CDL3WHITESOLDIERS: "tres_soldados_brancos",
+            talib.CDLABANDONEDBABY: "bebe_abandonado",
+            talib.CDLADVANCEBLOCK: "avanco_de_bloco",
+            talib.CDLBELTHOLD: "cinturao",
+            talib.CDLBREAKAWAY: "rompimento",
+            talib.CDLCLOSINGMARUBOZU: "fechamento_marubozu",
+            talib.CDLCONCEALBABYSWALL: "engolimento_de_bebe",
+            talib.CDLCOUNTERATTACK: "contra_ataque",
+            talib.CDLDARKCLOUDCOVER: "cobertura_de_nuvem_escura",
             talib.CDLDOJI: "doji",
-            talib.CDLDOJISTAR: "doji_star",
-            talib.CDLDRAGONFLYDOJI: "dragonfly_doji",
-            talib.CDLENGULFING: "engulfing",
-            talib.CDLEVENINGDOJISTAR: "evening_doji_star",
-            talib.CDLEVENINGSTAR: "evening_star",
-            talib.CDLGAPSIDESIDEWHITE: "gap_side_side_white",
-            talib.CDLGRAVESTONEDOJI: "gravestone_doji",
-            talib.CDLHAMMER: "hammer",
-            talib.CDLHANGINGMAN: "hanging_man",
+            talib.CDLDOJISTAR: "doji_estrela",
+            talib.CDLDRAGONFLYDOJI: "libelula_doji",
+            talib.CDLENGULFING: "engolfo",
+            talib.CDLEVENINGDOJISTAR: "estrela_da_noite_doji",
+            talib.CDLEVENINGSTAR: "estrela_da_noite",
+            talib.CDLGAPSIDESIDEWHITE: "lacuna_lateral_lado_branco",
+            talib.CDLGRAVESTONEDOJI: "lapide_doji",
+            talib.CDLHAMMER: "martelo",
+            talib.CDLHANGINGMAN: "enforcado",
             talib.CDLHARAMI: "harami",
-            talib.CDLHARAMICROSS: "harami_cross",
-            talib.CDLHIGHWAVE: "high_wave",
+            talib.CDLHARAMICROSS: "harami_cruzado",
+            talib.CDLHIGHWAVE: "onda_alta",
             talib.CDLHIKKAKE: "hikkake",
-            talib.CDLHIKKAKEMOD: "modified_hikkake",
-            talib.CDLHOMINGPIGEON: "homing_pigeon",
-            talib.CDLIDENTICAL3CROWS: "identical_three_crows",
-            talib.CDLINNECK: "in_neck",
-            talib.CDLINVERTEDHAMMER: "inverted_hammer",
-            talib.CDLKICKING: "kicking",
-            talib.CDLKICKINGBYLENGTH: "kicking_by_length",
-            talib.CDLLADDERBOTTOM: "ladder_bottom",
-            talib.CDLLONGLEGGEDDOJI: "long_legged_doji",
-            talib.CDLLONGLINE: "long_line",
+            talib.CDLHIKKAKEMOD: "hikkake_modificado",
+            talib.CDLHOMINGPIGEON: "pombo_correio",
+            talib.CDLIDENTICAL3CROWS: "tres_corvos_identicos",
+            talib.CDLINNECK: "pescoco_interno",
+            talib.CDLINVERTEDHAMMER: "martelo_invertido",
+            talib.CDLKICKING: "chute",
+            talib.CDLKICKINGBYLENGTH: "chute_por_comprimento",
+            talib.CDLLADDERBOTTOM: "fundo_de_escada",
+            talib.CDLLONGLEGGEDDOJI: "doji_pernas_longas",
+            talib.CDLLONGLINE: "linha_longa",
             talib.CDLMARUBOZU: "marubozu",
-            talib.CDLMATCHINGLOW: "matching_low",
+            talib.CDLMATCHINGLOW: "minima_correspondente",
             talib.CDLMATHOLD: "mat_hold",
-            talib.CDLMORNINGDOJISTAR: "morning_doji_star",
-            talib.CDLMORNINGSTAR: "morning_star",
-            talib.CDLONNECK: "on_neck",
+            talib.CDLMORNINGDOJISTAR: "estrela_da_manha_doji",
+            talib.CDLMORNINGSTAR: "estrela_da_manha",
+            talib.CDLONNECK: "pescoco_externo",
             talib.CDLPIERCING: "piercing",
-            talib.CDLRICKSHAWMAN: "rickshaw_man",
-            talib.CDLRISEFALL3METHODS: "rise_fall_three_methods",
-            talib.CDLSEPARATINGLINES: "separating_lines",
-            talib.CDLSHOOTINGSTAR: "shooting_star",
-            talib.CDLSHORTLINE: "short_line",
-            talib.CDLSPINNINGTOP: "spinning_top",
-            talib.CDLSTALLEDPATTERN: "stalled_pattern",
-            talib.CDLSTICKSANDWICH: "stick_sandwich",
+            talib.CDLRICKSHAWMAN: "homem_de_riquixa",
+            talib.CDLRISEFALL3METHODS: "subida_e_queda_tres_metodos",
+            talib.CDLSEPARATINGLINES: "linhas_separadoras",
+            talib.CDLSHOOTINGSTAR: "estrela_cadente",
+            talib.CDLSHORTLINE: "linha_curta",
+            talib.CDLSPINNINGTOP: "pião",
+            talib.CDLSTALLEDPATTERN: "padrao_estagnado",
+            talib.CDLSTICKSANDWICH: "sanduiche_de_velas",
             talib.CDLTAKURI: "takuri",
-            talib.CDLTASUKIGAP: "tasuki_gap",
-            talib.CDLTHRUSTING: "thrusting",
-            talib.CDLTRISTAR: "tristar",
-            talib.CDLUNIQUE3RIVER: "unique_three_river",
-            talib.CDLUPSIDEGAP2CROWS: "upside_gap_two_crows",
-            talib.CDLXSIDEGAP3METHODS: "xside_gap_three_methods",
+            talib.CDLTASUKIGAP: "lacuna_tasuki",
+            talib.CDLTHRUSTING: "empurrando",
+            talib.CDLTRISTAR: "tri_estrela",
+            talib.CDLUNIQUE3RIVER: "tres_rios_unicos",
+            talib.CDLUPSIDEGAP2CROWS: "lacuna_de_alta_dois_corvos",
+            talib.CDLXSIDEGAP3METHODS: "lacuna_lateral_tres_metodos",
         }
 
         # Retorna o nome do padrão ou None se não for encontrado
@@ -129,93 +131,104 @@ class AnaliseCandles(Plugin):
         else:
             return "baixa"
 
+    def gerar_sinal(
+        self, data, padrao, classificacao, calculo_alavancagem, par, timeframe
+    ):
+        """
+        Gera um sinal de compra ou venda com base no padrão e na classificação do candle,
+        considerando a alavancagem dinâmica e as regras de ouro.
 
-def gerar_sinal(self, data, padrao, classificacao):
-    """
-    Gera um sinal de compra ou venda com base no padrão e na classificação do candle.
+        Args:
+            data (list): Dados do candle.
+            padrao (str): Nome do padrão identificado.
+            classificacao (str): Classificação do candle.
+            calculo_alavancagem (CalculoAlavancagem): Instância do plugin CalculoAlavancagem.
+            par (str): Par de moedas.
+            timeframe (str): Timeframe dos candles.
 
-    Args:
-        data (list): Dados do candle.
-        padrao (str): Nome do padrão identificado.
-        classificacao (str): Classificação do candle.
+        Returns:
+            dict: Um dicionário com o sinal, o stop loss e o take profit.
+        """
+        sinal = None
+        stop_loss = None
+        take_profit = None
 
-    Returns:
-        dict: Um dicionário com o sinal, o stop loss e o take profit.
-    """
-    sinal = None
-    stop_loss = None
-    take_profit = None
+        # Constrói a chave do dicionário com base no padrão e na classificação
+        chave_padrao = f"{padrao}_{classificacao}"
 
-    if padrao == "martelo" and classificacao == "alta":
-        sinal = "compra"
-        stop_loss = data[3]  # Stop loss no mínimo do candle
-        take_profit = data[2] + 2 * (
-            data[1] - data[3]
-        )  # Take profit 2 vezes o tamanho do corpo acima do máximo
+        # Verifica se a chave existe no dicionário de padrões
+        if chave_padrao in PADROES_CANDLES:
+            # Obtém a lógica para o padrão
+            logica = PADROES_CANDLES[chave_padrao]
+            sinal = logica["sinal"]
 
-    elif padrao == "estrela_cadente" and classificacao == "baixa":
-        sinal = "venda"
-        stop_loss = data[2]  # Stop loss no máximo do candle
-        take_profit = data[3] - 2 * (
-            data[0] - data[1]
-        )  # Take profit 2 vezes o tamanho do corpo abaixo do mínimo
+            # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
+            alavancagem = calculo_alavancagem.calcular_alavancagem(data, par, timeframe)
 
-    # ... (adicionar lógica para outros padrões e classificações) ...
+            # Calcula o stop loss e o take profit, passando a alavancagem como argumento
+            stop_loss = logica["stop_loss"](data, alavancagem)
+            take_profit = logica["take_profit"](data, alavancagem)
 
-    return {
-        "sinal": sinal,
-        "stop_loss": stop_loss,
-        "take_profit": take_profit,
-    }
+        return {
+            "sinal": sinal,
+            "stop_loss": stop_loss,
+            "take_profit": take_profit,
+        }
 
+    def executar(self, dados, par, timeframe):
+        """
+        Executa a análise dos candles, gera sinais de trading e salva os resultados no banco de dados.
 
-def executar(self, dados, par, timeframe):
-    """
-    Executa a análise dos candles e salva os resultados no banco de dados.
+        Args:
+            dados (list): Lista de candles.
+            par (str): Par de moedas.
+            timeframe (str): Timeframe dos candles.
+        """
+        try:
+            conn = self.banco_dados.conn
+            cursor = conn.cursor()
 
-    Args:
-        dados (list): Lista de candles.
-        par (str): Par de moedas.
-        timeframe (str): Timeframe dos candles.
-    """
-    try:
-        conn = self.banco_dados.conn
-        cursor = conn.cursor()
+            for candle in dados:
+                # Identifica o padrão do candle
+                padrao = self.identificar_padrao(candle)
 
-        for candle in dados:
-            # Identifica o padrão do candle
-            padrao = self.identificar_padrao(candle)
+                # Classifica o candle
+                classificacao = self.classificar_candle(candle)
 
-            # Classifica o candle
-            classificacao = self.classificar_candle(candle)
-
-            # Gera o sinal de compra ou venda
-            sinal = self.gerar_sinal(candle, padrao, classificacao)
-
-            # Salva os dados no banco de dados
-            timestamp = int(candle[0] / 1000)  # Converte o timestamp para segundos
-            cursor.execute(
-                """
-                INSERT INTO analise_candles (par, timeframe, timestamp, padrao, classificacao, sinal, stop_loss, take_profit)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (par, timeframe, timestamp) DO UPDATE
-                SET padrao = EXCLUDED.padrao, classificacao = EXCLUDED.classificacao,
-                    sinal = EXCLUDED.sinal, stop_loss = EXCLUDED.stop_loss, take_profit = EXCLUDED.take_profit;
-                """,
-                (
-                    par,
-                    timeframe,
-                    timestamp,
+                # Gera o sinal de compra ou venda
+                sinal = self.gerar_sinal(
+                    candle,
                     padrao,
                     classificacao,
-                    sinal["sinal"],
-                    sinal["stop_loss"],
-                    sinal["take_profit"],
-                ),
-            )
+                    self.calculo_alavancagem,
+                    par,
+                    timeframe,
+                )
 
-        conn.commit()
-        logger.debug(f"Análise de candles para {par} - {timeframe} concluída.")
+                # Salva os dados no banco de dados
+                timestamp = int(candle[0] / 1000)  # Converte o timestamp para segundos
+                cursor.execute(
+                    """
+                    INSERT INTO analise_candles (par, timeframe, timestamp, padrao, classificacao, sinal, stop_loss, take_profit)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (par, timeframe, timestamp) DO UPDATE
+                    SET padrao = EXCLUDED.padrao, classificacao = EXCLUDED.classificacao,
+                        sinal = EXCLUDED.sinal, stop_loss = EXCLUDED.stop_loss, take_profit = EXCLUDED.take_profit;
+                    """,
+                    (
+                        par,
+                        timeframe,
+                        timestamp,
+                        padrao,
+                        classificacao,
+                        sinal["sinal"],
+                        sinal["stop_loss"],
+                        sinal["take_profit"],
+                    ),
+                )
 
-    except (Exception, psycopg2.Error) as error:
-        logger.error(f"Erro ao analisar candles: {error}")
+            conn.commit()
+            logger.debug(f"Análise de candles para {par} - {timeframe} concluída.")
+
+        except (Exception, psycopg2.Error) as error:
+            logger.error(f"Erro ao analisar candles: {error}")

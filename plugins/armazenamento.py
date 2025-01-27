@@ -1,5 +1,6 @@
 import psycopg2
 from loguru import logger
+import plugins
 from plugins.banco_dados import BancoDados
 from .plugin import Plugin
 
