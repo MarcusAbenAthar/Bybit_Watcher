@@ -1,7 +1,6 @@
 # app_module.py
 
 from injector import Module
-
 from plugins.analise_candles import AnaliseCandles
 from plugins.armazenamento import Armazenamento
 from plugins.banco_dados import BancoDados
@@ -14,7 +13,6 @@ from plugins.price_action import PriceAction
 
 class AppModule(Module):
     def configure(self, binder):
-        # Configura as dependências
         binder.bind(AnaliseCandles)
         binder.bind(Armazenamento)
         binder.bind(BancoDados)

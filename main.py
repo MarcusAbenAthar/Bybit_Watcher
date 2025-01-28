@@ -5,13 +5,14 @@ from dotenv import load_dotenv
 from loguru import logger
 import ccxt
 from injector import Injector
-
 from app_module import AppModule
 from plugins import carregar_plugins
 from plugins.armazenamento import Armazenamento
-from plugins.banco_dados import BancoDados
 from plugins.conexao import Conexao
-from plugins.calculo_alavancagem import CalculoAlavancagem
+from plugins.indicadores.indicadores_tendencia import IndicadoresTendencia
+from plugins.indicadores.indicadores_osciladores import IndicadoresOsciladores
+from plugins.indicadores.indicadores_volatilidade import IndicadoresVolatilidade
+from plugins.indicadores.indicadores_volume import IndicadoresVolume
 
 # 1. Configuração do Loguru
 logs_dir = "logs"  # Diretório para armazenar os logs
@@ -40,23 +41,26 @@ config = {
     "timeframes": ["1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d"],
 }
 
-# Carrega os plugins
-plugins = carregar_plugins("plugins", config)
-
 # Cria o injetor
 injector = Injector(AppModule)
+# Carrega os plugins
+plugins = carregar_plugins("plugins", config, injector)
+
 
 # Inicializa os plugins
 for plugin in plugins:
     try:
-        injector.call_with_injection(
-            plugin.inicializar
-        )  # Injeta as dependências automaticamente
+        injector.call_with_injection(plugin.inicializar)
     except Exception as e:
         logger.exception(
             f"Erro ao inicializar o plugin {plugin.__class__.__name__}: {e}"
         )
         exit(1)
+# Inicializa os plugins de indicadores
+injector.call_with_injection(IndicadoresTendencia.inicializar)
+injector.call_with_injection(IndicadoresOsciladores.inicializar)
+injector.call_with_injection(IndicadoresVolatilidade.inicializar)
+injector.call_with_injection(IndicadoresVolume.inicializar)
 
 # Obtém o plugin de conexão
 plugin_conexao = injector.get(Conexao)  # Obtém a instância do plugin Conexao

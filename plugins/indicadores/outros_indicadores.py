@@ -1,7 +1,7 @@
 from loguru import logger
 import psycopg2
 import talib
-from .plugin import Plugin
+from plugins.plugin import Plugin
 
 
 class OutrosIndicadores(Plugin):
@@ -10,7 +10,7 @@ class OutrosIndicadores(Plugin):
     seguindo as Regras de Ouro.
     """
 
-    def __init__(self, config, calculo_alavancagem):
+    def __init__(self, config, calculo_alavancagem=False):
         """
         Inicializa o plugin.
         """

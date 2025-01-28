@@ -1,7 +1,7 @@
 from loguru import logger
 import psycopg2
 import talib
-from plugin import Plugin
+from plugins.plugin import Plugin
 
 
 class IndicadoresVolume(Plugin):

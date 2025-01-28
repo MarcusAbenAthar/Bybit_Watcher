@@ -1,5 +1,7 @@
+import injector
 from loguru import logger
 import psycopg2
+from plugins import calculo_alavancagem
 from .plugin import Plugin
 import talib
 
@@ -10,12 +12,11 @@ class MediasMoveis(Plugin):
     seguindo as Regras de Ouro.
     """
 
-    def __init__(self, config, calculo_alavancagem):
+    def __init__(self, config):
         """
         Inicializa o plugin.
         """
         super().__init__(config)
-        self.calculo_alavancagem = calculo_alavancagem
 
     def calcular_media_movel(self, dados, periodo, tipo="simples"):
         """
