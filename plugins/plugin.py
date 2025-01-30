@@ -1,4 +1,4 @@
-# plugins/plugin.py
+from core import Core
 
 
 class Plugin:
@@ -11,16 +11,17 @@ class Plugin:
     - finalizar(): Finaliza o plugin.
     """
 
-    def __init__(self, config):
+    def __init__(self, container: AppModule):
         """
         Inicializa o plugin.
 
         Args:
-            config (dict): Um dicionário com as configurações do bot.
+            container (AppModule): O contêiner de dependências do bot.
         """
-        self.config = config
+        self.container = container
+        self.config = container.config()
 
-    def inicializar(self, plugins=None):
+    def inicializar(self):
         """
         Inicializa o plugin.
 

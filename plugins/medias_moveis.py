@@ -1,22 +1,18 @@
-import injector
-from loguru import logger
+from venv import logger
 import psycopg2
-from plugins import calculo_alavancagem
-from .plugin import Plugin
+from core import Core
+from plugins.plugin import Plugin
 import talib
 
 
 class MediasMoveis(Plugin):
     """
-    Plugin para calcular médias móveis e gerar sinais de trading,
-    seguindo as Regras de Ouro.
+    Plugin para calcular as médias móveis.
     """
 
-    def __init__(self, config):
-        """
-        Inicializa o plugin.
-        """
-        super().__init__(config)
+    def __init__(self, container: AppModule):
+        self.container = container
+        super().__init__(container.config())
 
     def calcular_media_movel(self, dados, periodo, tipo="simples"):
         """

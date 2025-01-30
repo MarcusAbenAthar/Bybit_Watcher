@@ -1,36 +1,19 @@
+from core import Core
 from loguru import logger
 import psycopg2
 import talib
-
 from plugins.plugin import Plugin
 
 
 class IndicadoresOsciladores(Plugin):
     """
-    Plugin para calcular indicadores osciladores e gerar sinais de trading,
-    seguindo as Regras de Ouro.
+    Plugin para calcular indicadores de osciladores.
     """
 
-    def __init__(self, config, calculo_alavancagem):
-        """
-        Inicializa o plugin.
-        """
-        super().__init__(config)
-        self.calculo_alavancagem = calculo_alavancagem
-
-
-class IndicadoresOsciladores(Plugin):
-    """
-    Plugin para calcular indicadores osciladores e gerar sinais de trading,
-    seguindo as Regras de Ouro.
-    """
-
-    def __init__(self, config, calculo_alavancagem):
-        """
-        Inicializa o plugin.
-        """
-        super().__init__(config)
-        self.calculo_alavancagem = calculo_alavancagem
+    def __init__(self, container: AppModule):
+        self.container = container
+        super().__init__(container.config())
+        self.calculo_alavancagem = container.calculo_alavancagem()
 
     def calcular_rsi(self, dados, par, timeframe, periodo=14):
         """

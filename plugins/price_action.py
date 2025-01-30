@@ -1,16 +1,15 @@
-from .plugin import Plugin
+from core import Core
+from plugins.plugin import Plugin
 
 
 class PriceAction(Plugin):
     """
-    Plugin para identificar padrões de price action e gerar sinais de trading.
+    Plugin para analisar o price action.
     """
 
-    def __init__(self, config):
-        """
-        Inicializa o plugin.
-        """
-        super().__init__(config)
+    def __init__(self, container: AppModule):
+        self.container = container
+        super().__init__(container.config())
 
     def identificar_padrao(self, dados):
         """

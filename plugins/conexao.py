@@ -1,25 +1,17 @@
-# plugins/conexao.py
-
+from venv import logger
+from core import Core
 import ccxt
-from loguru import logger  # Importa o logger do Loguru
-
-from .plugin import Plugin
+from plugins.plugin import Plugin
 
 
 class Conexao(Plugin):
     """
-    Plugin responsável por estabelecer e gerenciar a conexão com a Bybit.
+    Plugin para gerenciar a conexão com a exchange.
     """
 
-    def __init__(self, config):
-        """
-        Inicializa o plugin de conexão.
-
-        Args:
-          config: Um dicionário com as configurações do bot.
-        """
-        super().__init__(config)
-        self.exchange = None
+    def __init__(self, container: AppModule):
+        self.container = container
+        super().__init__(container.config())
 
     def inicializar(self):
         """

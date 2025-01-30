@@ -2,38 +2,33 @@ import datetime
 import os
 import time
 from dotenv import load_dotenv
-from loguru import logger
 import ccxt
-from injector import Injector
-from app_module import AppModule
+from loguru import logger
+from core import Core  # Importa o Core
 from plugins import carregar_plugins
-from plugins.armazenamento import Armazenamento
-from plugins.conexao import Conexao
-from plugins.indicadores.indicadores_tendencia import IndicadoresTendencia
-from plugins.indicadores.indicadores_osciladores import IndicadoresOsciladores
-from plugins.indicadores.indicadores_volatilidade import IndicadoresVolatilidade
-from plugins.indicadores.indicadores_volume import IndicadoresVolume
 
-# 1. Configuração do Loguru
-logs_dir = "logs"  # Diretório para armazenar os logs
+# Remova as importações diretas dos plugins de indicadores
+# Eles serão inicializados e acessados através do Core
+
+# 1. Configuração do Loguru (sem alterações)
+logs_dir = "logs"
 if not os.path.exists(logs_dir):
     os.makedirs(logs_dir)
 
-# Obtém a data de hoje no formato DD-MM-YYYY
 data_hoje = datetime.datetime.now().strftime("%d%m%Y")
 
 logger.add(
     os.path.join(logs_dir, f"bot{data_hoje}.log"),
-    rotation="5 MB",  # Rotação de arquivos a cada 5 MB
-    retention="10 days",  # Mantém os logs por 10 dias
-    level="DEBUG",  # Nível de log
-    format="{time:DD-MM-YYYY HH:mm:ss} | {level} | {module} | {function} | {line} | {message}",  # Formato do log
+    rotation="5 MB",
+    retention="10 days",
+    level="DEBUG",
+    format="{time:DD-MM-YYYY HH:mm:ss} | {level} | {module} | {function} | {line} | {message}",
 )
 
-# Carrega as variáveis de ambiente
+# Carrega as variáveis de ambiente (sem alterações)
 load_dotenv()
 
-# Configurações do bot
+# Configurações do bot (sem alterações)
 config = {
     "api_key": os.getenv("BYBIT_API_KEY"),
     "api_secret": os.getenv("BYBIT_API_SECRET"),
@@ -41,82 +36,65 @@ config = {
     "timeframes": ["1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d"],
 }
 
-# Cria o injetor
-injector = Injector(AppModule)
-# Carrega os plugins
-plugins = carregar_plugins("plugins", config, injector)
+# Cria o Core
+core = Core()
+core.carregar_configuracoes_dict(config)  # Carrega as configurações no Core
 
+# Carrega os plugins, injetando o Core
+plugins = carregar_plugins("plugins", core)
 
-# Inicializa os plugins
+# Inicializa os plugins, usando o Core para injeção
 for plugin in plugins:
     try:
-        injector.call_with_injection(plugin.inicializar)
+        core.inject(plugin.inicializar)  # Injeção através do Core
     except Exception as e:
         logger.exception(
             f"Erro ao inicializar o plugin {plugin.__class__.__name__}: {e}"
         )
         exit(1)
-# Inicializa os plugins de indicadores
-injector.call_with_injection(IndicadoresTendencia.inicializar)
-injector.call_with_injection(IndicadoresOsciladores.inicializar)
-injector.call_with_injection(IndicadoresVolatilidade.inicializar)
-injector.call_with_injection(IndicadoresVolume.inicializar)
 
-# Obtém o plugin de conexão
-plugin_conexao = injector.get(Conexao)  # Obtém a instância do plugin Conexao
+# Inicializa os plugins de indicadores (agora através do Core)
+core.inject(
+    core.inicializar_indicadores
+)  # Método no Core para inicializar todos os indicadores
 
-# Obtém o plugin de armazenamento
-plugin_armazenamento = injector.get(
-    Armazenamento
-)  # Obtém a instância do plugin Armazenamento
-
-# Loop principal do bot
-while True:  # Remove a verificação do plugin de interrupção
+# Loop principal do bot (sem alterações na estrutura geral)
+while True:
     try:
-        # Obtém o objeto exchange do plugin de conexão
-        exchange = plugin_conexao.obter_exchange()
+        exchange = core.obter_exchange()  # Obtém o exchange do Core
 
-        # Carrega todos os mercados da Bybit
         markets = exchange.load_markets()
-
-        # Filtra apenas os pares USDT
         pares_usdt = [par for par in markets.keys() if par.endswith("USDT")]
 
-        # 2. Coleta de dados de mercado
         logger.info("Iniciando coleta de dados...")
 
-        # Coleta os dados de mercado para cada par e timeframe
         for par in pares_usdt:
             for timeframe in config["timeframes"]:
-                # logger.debug(
-                #     f"Coletando dados para {par} - {timeframe}..."
-                # )  # Usa logger.debug
                 klines = exchange.fetch_ohlcv(par, timeframe)
 
-                # Armazena os dados no banco de dados
-                plugin_armazenamento.executar(klines, par, timeframe)
+                core.armazenar_dados(
+                    klines, par, timeframe
+                )  # Armazenamento através do Core
 
-                # Executa os outros plugins com os dados coletados
                 for plugin in plugins:
-                    if plugin != plugin_conexao and plugin != plugin_armazenamento:
+                    if (
+                        plugin != core.plugin_conexao
+                        and plugin != core.plugin_armazenamento
+                    ):  # Acesso aos plugins através do Core
                         plugin.executar(klines, par, timeframe)
 
-        # Aguarda um intervalo de tempo antes da próxima iteração
-        logger.debug(
-            f"Aguardando {30} segundos para a próxima coleta..."
-        )  # Usa logger.debug
+        logger.debug(f"Aguardando {30} segundos para a próxima coleta...")
         time.sleep(30)
 
     except ccxt.NetworkError as e:
-        logger.error(f"Erro de rede: {e}")  # Usa logger.error
+        logger.error(f"Erro de rede: {e}")
         time.sleep(60)
     except ccxt.ExchangeError as e:
-        logger.error(f"Erro na exchange: {e}")  # Usa logger.error
+        logger.error(f"Erro na exchange: {e}")
         time.sleep(60)
     except Exception as e:
-        # Captura outras interrupções inesperadas
-        logger.exception(f"Erro inesperado: {e}")  # Usa logger.exception
+        logger.exception(f"Erro inesperado: {e}")
 
-    # Finaliza os plugins
+    # Finaliza os plugins (sem alterações)
     for plugin in plugins:
         plugin.finalizar()

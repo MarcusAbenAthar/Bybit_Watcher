@@ -1,20 +1,17 @@
+from venv import logger
+from core import Core
+from plugins.plugin import Plugin
 import talib
-from loguru import logger
-from .plugin import Plugin
 
 
 class CalculoAlavancagem(Plugin):
     """
-    Plugin para calcular a alavancagem ideal para as operações,
-    considerando a volatilidade e as Regras de Ouro.
+    Plugin para calcular a alavancagem ideal para cada operação.
     """
 
-    def __init__(self, config):
-        """
-        Inicializa o plugin.
-        """
-        super().__init__(config)
-        self.cache_volatilidade = {}  # Cache para evitar recalcular a volatilidade
+    def __init__(self, container: AppModule):
+        self.container = container
+        super().__init__(container.config())
 
     def calcular_alavancagem(self, data, par, timeframe):
         """

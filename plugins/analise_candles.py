@@ -1,9 +1,9 @@
-from loguru import logger
+from venv import logger
+from plugins.plugin import Plugin
 import psycopg2
-
-from utils.padroes_candles import PADROES_CANDLES
-from .plugin import Plugin
+from plugins import calculo_alavancagem
 import talib
+from utils.padroes_candles import PADROES_CANDLES
 
 
 class AnaliseCandles(Plugin):
@@ -11,8 +11,9 @@ class AnaliseCandles(Plugin):
     Plugin para analisar os candles e identificar padrões.
     """
 
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, core):  # Recebe o Core como argumento
+        self.core = core
+        self.padroes_candles = PADROES_CANDLES  # Mantém a referência aos padrões
 
     def identificar_padrao(self, candle):
         """
@@ -131,31 +132,16 @@ class AnaliseCandles(Plugin):
         else:
             return "baixa"
 
-    def gerar_sinal(
-        self, data, padrao, classificacao, calculo_alavancagem, par, timeframe
-    ):
+    def gerar_sinal(self, data, padrao, classificacao, par, timeframe):
         """
-        Gera um sinal de compra ou venda com base no padrão e na classificação do candle,
-        considerando a alavancagem dinâmica e as regras de ouro.
-
-        Args:
-            data (list): Dados do candle.
-            padrao (str): Nome do padrão identificado.
-            classificacao (str): Classificação do candle.
-            calculo_alavancagem (CalculoAlavancagem): Instância do plugin CalculoAlavancagem.
-            par (str): Par de moedas.
-            timeframe (str): Timeframe dos candles.
-
-        Returns:
-            dict: Um dicionário com o sinal, o stop loss e o take profit.
+        Gera um sinal de compra ou venda com base no padrão e na classificação do candle.
+        (alterações nesta função)
         """
         sinal = None
         stop_loss = None
         take_profit = None
 
-        # Constrói a chave do dicionário com base no padrão e na classificação
         chave_padrao = f"{padrao}_{classificacao}"
-
         # Verifica se a chave existe no dicionário de padrões
         if chave_padrao in PADROES_CANDLES:
             # Obtém a lógica para o padrão
@@ -178,35 +164,21 @@ class AnaliseCandles(Plugin):
     def executar(self, dados, par, timeframe):
         """
         Executa a análise dos candles, gera sinais de trading e salva os resultados no banco de dados.
-
-        Args:
-            dados (list): Lista de candles.
-            par (str): Par de moedas.
-            timeframe (str): Timeframe dos candles.
+        (alterações nesta função)
         """
         try:
-            conn = self.banco_dados.conn
+            # Usa a conexão com o banco de dados fornecida pelo Core
+            conn = self.core.banco_dados.conexao
             cursor = conn.cursor()
 
             for candle in dados:
-                # Identifica o padrão do candle
                 padrao = self.identificar_padrao(candle)
-
-                # Classifica o candle
                 classificacao = self.classificar_candle(candle)
 
-                # Gera o sinal de compra ou venda
-                sinal = self.gerar_sinal(
-                    candle,
-                    padrao,
-                    classificacao,
-                    self.calculo_alavancagem,
-                    par,
-                    timeframe,
-                )
+                sinal = self.gerar_sinal(candle, padrao, classificacao, par, timeframe)
 
-                # Salva os dados no banco de dados
-                timestamp = int(candle[0] / 1000)  # Converte o timestamp para segundos
+                timestamp = int(candle[0] / 1000)
+
                 cursor.execute(
                     """
                     INSERT INTO analise_candles (par, timeframe, timestamp, padrao, classificacao, sinal, stop_loss, take_profit)

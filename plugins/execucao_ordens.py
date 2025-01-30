@@ -1,16 +1,15 @@
-from .plugin import Plugin
+from core import Core
+from plugins.plugin import Plugin
 
 
 class ExecucaoOrdens(Plugin):
     """
-    Plugin para exibir os sinais de trading gerados pelos outros plugins.
+    Plugin para executar as ordens de compra e venda.
     """
 
-    def __init__(self, config):
-        """
-        Inicializa o plugin.
-        """
-        super().__init__(config)
+    def __init__(self, container: AppModule):
+        self.container = container
+        super().__init__(container.config())
 
 
 def exibir_sinal(self, sinal):

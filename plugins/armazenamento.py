@@ -1,49 +1,33 @@
+from venv import logger
+
 import psycopg2
-from loguru import logger
-import plugins
-from plugins.banco_dados import BancoDados
-from .plugin import Plugin
+from plugins.plugin import Plugin
 
 
 class Armazenamento(Plugin):
     """
-    Plugin para armazenar os dados das velas (klines) no banco de dados.
+    Plugin para armazenar os dados dos candles no banco de dados.
     """
 
-    def __init__(self, config):
-        super().__init__(config)
-        self.banco_dados = None  # Referência ao plugin BancoDados
+    def __init__(self, core):  # Recebe o Core como argumento
+        self.core = core
+        self.config = core.config  # Acessa as configurações através do Core
+        # self.banco_dados = core.banco_dados # Acesso direto não é mais necessário aqui
 
     def inicializar(self, plugins):
-        """
-        Obtém a referência ao plugin BancoDados.
-        """
-        # Procura o plugin BancoDados na lista de plugins
-        for plugin in plugins:
-            if isinstance(plugin, BancoDados):
-                self.banco_dados = plugin
-                # Remove a linha abaixo:
-                # self.banco_dados.inicializar(plugins)
-                break
-        if not self.banco_dados:
-            logger.error("Plugin BancoDados não encontrado!")
-            raise Exception("Plugin BancoDados não encontrado!")
+        pass
 
     def executar(self, dados, par, timeframe):
         """
         Insere os dados das velas no banco de dados.
-
-        Args:
-            dados (list): Lista de klines.
-            par (str): Par de criptomoedas.
-            timeframe (str): Timeframe dos dados.
         """
         try:
-            conn = self.banco_dados.conn
+            # Usa a conexão com o banco de dados fornecida pelo Core
+            conn = self.core.banco_dados.conexao
             cursor = conn.cursor()
 
             for kline in dados:
-                timestamp = int(kline[0] / 1000)  # Converte o timestamp para segundos
+                timestamp = int(kline[0] / 1000)
                 open = kline[1]
                 high = kline[2]
                 low = kline[3]
@@ -68,6 +52,3 @@ class Armazenamento(Plugin):
 
         except (Exception, psycopg2.Error) as error:
             logger.error(f"Erro ao inserir dados no PostgreSQL: {error}")
-        except psycopg2.OperationalError as e:
-            logger.error(f"Erro de conexão com o banco de dados: {e}")
-            self.banco_dados.inicializar(plugins)

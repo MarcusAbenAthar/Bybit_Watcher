@@ -1,7 +1,9 @@
 import configparser
+from venv import logger
+
 import psycopg2
-from loguru import logger
-from .plugin import Plugin
+from core import Core
+from plugins.plugin import Plugin
 
 
 class BancoDados(Plugin):
@@ -9,10 +11,9 @@ class BancoDados(Plugin):
     Plugin para gerenciar o banco de dados PostgreSQL.
     """
 
-    def __init__(self, config):
-        super().__init__(config)
-        self.conn = None
-        self.cursor = None
+    def __init__(self, container: AppModule):
+        self.container = container
+        super().__init__(container.config())
 
     def criar_tabela(self, nome_tabela, schema="public"):
         """
