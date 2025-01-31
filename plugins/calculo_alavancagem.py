@@ -1,17 +1,21 @@
-from venv import logger
-from core import Core
+from venv import logger  # Certifique-se de ter o logger configurado corretamente
+from trading_core import Core
 from plugins.plugin import Plugin
 import talib
 
 
 class CalculoAlavancagem(Plugin):
     """
-    Plugin para calcular a alavancagem ideal para cada operação.
+    Plugin para calcular a alavancagem ideal para cada operação, agora integrado com o Core.
     """
 
-    def __init__(self, container: AppModule):
-        self.container = container
-        super().__init__(container.config())
+    def __init__(self, core: Core):  # Agora recebe o Core na inicialização
+        self.core = core
+        super().__init__(
+            self.core.config
+        )  # Inicializa a classe Plugin com as configurações do Core
+        self.conexao = self.core.conexao  # Obtém a conexão com a exchange do Core
+        self.cache_volatilidade = {}  # Inicializa o cache de volatilidade
 
     def calcular_alavancagem(self, data, par, timeframe):
         """
@@ -28,7 +32,7 @@ class CalculoAlavancagem(Plugin):
         # Verifica se a volatilidade já foi calculada para o par e timeframe
         chave_cache = f"{par}-{timeframe}"
         if chave_cache not in self.cache_volatilidade:
-            # Obter o histórico de preços do ativo (agora, usando a conexão com a Bybit)
+            # Obter o histórico de preços do ativo (agora, usando a conexão com a Bybit do Core)
             historico = self.conexao.obter_exchange().fetch_ohlcv(
                 par, timeframe, limit=500
             )
@@ -40,7 +44,9 @@ class CalculoAlavancagem(Plugin):
         volatilidade = self.cache_volatilidade[chave_cache]
 
         # Definir a alavancagem máxima (Regra de Ouro: Seguro)
-        alavancagem_maxima = 20
+        alavancagem_maxima = self.core.config.getint(
+            "Geral", "NIVEL_ALAVANCAGEM"
+        )  # Obtém do config.ini
 
         # Calcular a alavancagem ideal com base na volatilidade (Regra de Ouro: Criterioso e Dinamismo)
         # Ajuste o fator 10 conforme necessário para sua estratégia e perfil de risco

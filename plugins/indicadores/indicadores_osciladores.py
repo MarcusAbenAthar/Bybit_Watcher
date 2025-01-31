@@ -1,4 +1,4 @@
-from core import Core
+from trading_core import Core
 from loguru import logger
 import psycopg2
 import talib
@@ -6,14 +6,13 @@ from plugins.plugin import Plugin
 
 
 class IndicadoresOsciladores(Plugin):
-    """
-    Plugin para calcular indicadores de osciladores.
-    """
-
-    def __init__(self, container: AppModule):
-        self.container = container
-        super().__init__(container.config())
-        self.calculo_alavancagem = container.calculo_alavancagem()
+    def __init__(self, core):  # Recebe o Core diretamente
+        self.core = core
+        super().__init__(core.config)  # Acessa as configurações do Core
+        self.calculo_alavancagem = (
+            core.calculo_alavancagem
+        )  # Acessa a função de cálculo de alavancagem
+        self.banco_dados = core.banco_dados  # Acesso ao banco de dados
 
     def calcular_rsi(self, dados, par, timeframe, periodo=14):
         """
@@ -51,7 +50,7 @@ class IndicadoresOsciladores(Plugin):
 
         # Calcula o RSI usando a função RSI do TA-Lib
         rsi = talib.RSI(fechamentos, timeperiod=periodo)
-
+        logger.debug(f"RSI calculado para {par} - {timeframe} - período {periodo}.")
         return rsi
 
     def calcular_estocastico(
@@ -260,7 +259,7 @@ def executar(self, dados, par, timeframe):
         timeframe (str): Timeframe dos candles.
     """
     try:
-        conn = self.banco_dados.conn
+        conn = self.core.banco_dados.conn
         cursor = conn.cursor()
 
         for candle in dados:

@@ -1,4 +1,4 @@
-from ...core import AppModule
+from ...trading_core import AppModule
 from loguru import logger
 import psycopg2
 import talib

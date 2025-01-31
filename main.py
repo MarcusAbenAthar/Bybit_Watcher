@@ -4,13 +4,14 @@ import time
 from dotenv import load_dotenv
 import ccxt
 from loguru import logger
-from core import Core  # Importa o Core
+import plugins
+from plugins.banco_dados import BancoDados
+from trading_core import Core
 from plugins import carregar_plugins
+from configparser import ConfigParser
 
-# Remova as importações diretas dos plugins de indicadores
-# Eles serão inicializados e acessados através do Core
 
-# 1. Configuração do Loguru (sem alterações)
+# 1. Configuração do Loguru
 logs_dir = "logs"
 if not os.path.exists(logs_dir):
     os.makedirs(logs_dir)
@@ -25,10 +26,10 @@ logger.add(
     format="{time:DD-MM-YYYY HH:mm:ss} | {level} | {module} | {function} | {line} | {message}",
 )
 
-# Carrega as variáveis de ambiente (sem alterações)
+# Carrega as variáveis de ambiente
 load_dotenv()
 
-# Configurações do bot (sem alterações)
+# Configurações do bot
 config = {
     "api_key": os.getenv("BYBIT_API_KEY"),
     "api_secret": os.getenv("BYBIT_API_SECRET"),
@@ -36,65 +37,97 @@ config = {
     "timeframes": ["1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d"],
 }
 
-# Cria o Core
-core = Core()
-core.carregar_configuracoes_dict(config)  # Carrega as configurações no Core
+# Bloco principal do script
+if __name__ == "__main__":
+    # Carrega as configurações
+    def load_config_from_file(filename):
+        config = ConfigParser()
+        config.read(filename)
+        return config
 
-# Carrega os plugins, injetando o Core
-plugins = carregar_plugins("plugins", core)
+    config = load_config_from_file("config.ini")
 
-# Inicializa os plugins, usando o Core para injeção
-for plugin in plugins:
-    try:
-        core.inject(plugin.inicializar)  # Injeção através do Core
-    except Exception as e:
-        logger.exception(
-            f"Erro ao inicializar o plugin {plugin.__class__.__name__}: {e}"
-        )
-        exit(1)
+    # Cria uma instância do Banco de Dados
+    banco_dados = BancoDados(None)
 
-# Inicializa os plugins de indicadores (agora através do Core)
-core.inject(
-    core.inicializar_indicadores
-)  # Método no Core para inicializar todos os indicadores
+    # Cria a instância do Core, passando a instância do Banco de Dados
+    core = Core(config, banco_dados)  # Passa as configurações para o Core
 
-# Loop principal do bot (sem alterações na estrutura geral)
-while True:
-    try:
-        exchange = core.obter_exchange()  # Obtém o exchange do Core
-
-        markets = exchange.load_markets()
-        pares_usdt = [par for par in markets.keys() if par.endswith("USDT")]
-
-        logger.info("Iniciando coleta de dados...")
-
-        for par in pares_usdt:
-            for timeframe in config["timeframes"]:
-                klines = exchange.fetch_ohlcv(par, timeframe)
-
-                core.armazenar_dados(
-                    klines, par, timeframe
-                )  # Armazenamento através do Core
-
-                for plugin in plugins:
-                    if (
-                        plugin != core.plugin_conexao
-                        and plugin != core.plugin_armazenamento
-                    ):  # Acesso aos plugins através do Core
-                        plugin.executar(klines, par, timeframe)
-
-        logger.debug(f"Aguardando {30} segundos para a próxima coleta...")
-        time.sleep(30)
-
-    except ccxt.NetworkError as e:
-        logger.error(f"Erro de rede: {e}")
-        time.sleep(60)
-    except ccxt.ExchangeError as e:
-        logger.error(f"Erro na exchange: {e}")
-        time.sleep(60)
-    except Exception as e:
-        logger.exception(f"Erro inesperado: {e}")
-
-    # Finaliza os plugins (sem alterações)
+    # Conecta ao banco de dados
+    core.conectar_banco_dados()
+    # Inicializa os plugins
     for plugin in plugins:
-        plugin.finalizar()
+        try:
+            core.inject(plugin.inicializar)
+        except Exception as e:
+            logger.exception(
+                f"Erro ao inicializar o plugin {plugin.__class__.__name__}: {e}"
+            )
+            exit(1)
+
+    # Inicializa os plugins de indicadores
+    core.inject(core.inicializar_indicadores)
+
+    # Loop principal do bot
+    while True:
+        try:
+            exchange = core.obter_exchange()
+
+            markets = exchange.load_markets()
+            pares_usdt = [par for par in markets.keys() if par.endswith("USDT")]
+
+            logger.info("Iniciando coleta de dados...")
+
+            for par in pares_usdt:
+                for timeframe in config["timeframes"]:
+                    try:
+                        klines = exchange.fetch_ohlcv(par, timeframe)
+                        dados = []
+                        for kline in klines:
+                            dados.append(
+                                {
+                                    "timestamp": kline[0],
+                                    "open": kline[1],
+                                    "high": kline[2],
+                                    "low": kline[3],
+                                    "close": kline[4],
+                                    "volume": kline[5],
+                                }
+                            )
+
+                        if not dados:
+                            logger.warning(
+                                f"Dados vazios para {par} - {timeframe}. Pulando análise."
+                            )
+                            continue  # Pula para o próximo par/timeframe
+
+                        core.armazenar_dados(dados, par, timeframe)
+
+                        for plugin in plugins:
+                            try:
+                                plugin.executar(dados, par, timeframe)
+                            except Exception as e:
+                                logger.error(
+                                    f"Erro ao executar plugin {plugin.__class__.__name__} para {par} - {timeframe}: {e}"
+                                )
+
+                    except Exception as e:
+                        logger.error(
+                            f"Erro ao coletar dados ou analisar {par} - {timeframe}: {e}"
+                        )
+
+            logger.debug(f"Aguardando {30} segundos para a próxima coleta...")
+            time.sleep(30)
+
+        except ccxt.NetworkError as e:
+            logger.error(f"Erro de rede: {e}")
+            time.sleep(60)
+        except ccxt.ExchangeError as e:
+            logger.error(f"Erro na exchange: {e}")
+            time.sleep(60)
+        except Exception as e:
+            logger.exception(f"Erro inesperado: {e}")
+
+        # Finaliza os plugins
+        for plugin in plugins:
+            plugin.finalizar()

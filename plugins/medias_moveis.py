@@ -1,18 +1,25 @@
-from venv import logger
-import psycopg2
-from core import Core
+from venv import logger  # Certifique-se de ter o logger configurado corretamente
+from trading_core import Core
 from plugins.plugin import Plugin
 import talib
 
 
 class MediasMoveis(Plugin):
     """
-    Plugin para calcular as médias móveis.
+    Plugin para calcular as médias móveis, agora integrado com o Core.
     """
 
-    def __init__(self, container: AppModule):
-        self.container = container
-        super().__init__(container.config())
+    def __init__(self, core: Core):  # Agora recebe o Core na inicialização
+        self.core = core
+        super().__init__(
+            self.core.config
+        )  # Inicializa a classe Plugin com as configurações do Core
+        self.calculo_alavancagem = (
+            self.core.calculo_alavancagem
+        )  # Obtém o plugin de cálculo de alavancagem do Core
+        self.banco_dados = (
+            self.core.banco_dados
+        )  # Obtém o plugin de banco de dados do Core
 
     def calcular_media_movel(self, dados, periodo, tipo="simples"):
         """
@@ -26,12 +33,17 @@ class MediasMoveis(Plugin):
         Returns:
             list: Lista com os valores da média móvel.
         """
+        # Extrai os valores de fechamento dos candles
+        fechamentos = [
+            candle[4] for candle in dados
+        ]  # Certifique-se de que o índice 4 corresponde ao fechamento
+
         if tipo == "simples":
-            return talib.SMA(dados, timeperiod=periodo)
+            return talib.SMA(fechamentos, timeperiod=periodo)
         elif tipo == "exponencial":
-            return talib.EMA(dados, timeperiod=periodo)
+            return talib.EMA(fechamentos, timeperiod=periodo)
         elif tipo == "ponderada":
-            return talib.WMA(dados, timeperiod=periodo)
+            return talib.WMA(fechamentos, timeperiod=periodo)
         else:
             raise ValueError("Tipo de média móvel inválido.")
 
@@ -94,52 +106,53 @@ class MediasMoveis(Plugin):
             "take_profit": take_profit,
         }
 
+    def executar(self, dados, par, timeframe):
+        """
+        Executa o cálculo das médias móveis, gera sinais de trading e salva os resultados no banco de dados.
 
-def executar(self, dados, par, timeframe):
-    """
-    Executa o cálculo das médias móveis, gera sinais de trading e salva os resultados no banco de dados.
+        Args:
+            dados (list): Lista de candles.
+            par (str): Par de moedas.
+            timeframe (str): Timeframe dos candles.
+        """
+        try:
+            # Calcula as médias móveis
+            media_movel_curta = self.calcular_media_movel(
+                dados, periodo=20, tipo="simples"
+            )
+            media_movel_longa = self.calcular_media_movel(
+                dados, periodo=50, tipo="simples"
+            )
 
-    Args:
-        dados (list): Lista de candles.
-        par (str): Par de moedas.
-        timeframe (str): Timeframe dos candles.
-    """
-    try:
-        conn = self.banco_dados.conn
-        cursor = conn.cursor()
+            # Gera o sinal de compra ou venda
+            sinal = self.gerar_sinal(
+                dados, [media_movel_curta, media_movel_longa], par, timeframe
+            )
 
-        # Calcula as médias móveis
-        media_movel_curta = self.calcular_media_movel(dados, periodo=20, tipo="simples")
-        media_movel_longa = self.calcular_media_movel(dados, periodo=50, tipo="simples")
+            if sinal[
+                "sinal"
+            ]:  # Verifica se o sinal é válido antes de salvar no banco de dados.
+                # Salva os dados no banco de dados
+                timestamp = int(
+                    dados[-1][0] / 1000
+                )  # Converte o timestamp para segundos
+                self.banco_dados.inserir_dados(
+                    "medias_moveis",
+                    {  # Usando a função inserir_dados do Core
+                        "par": par,
+                        "timeframe": timeframe,
+                        "timestamp": timestamp,
+                        "sinal": sinal["sinal"],
+                        "stop_loss": sinal["stop_loss"],
+                        "take_profit": sinal["take_profit"],
+                    },
+                )
 
-        # Gera o sinal de compra ou venda
-        sinal = self.gerar_sinal(
-            dados, [media_movel_curta, media_movel_longa], par, timeframe
-        )
+                logger.debug(
+                    f"Médias móveis calculadas e sinais gerados para {par} - {timeframe}."
+                )
+            else:
+                logger.debug(f"Nenhum sinal gerado para {par} - {timeframe}.")
 
-        # Salva os dados no banco de dados
-        timestamp = int(dados[-1][0] / 1000)  # Converte o timestamp para segundos
-        cursor.execute(
-            """
-            INSERT INTO medias_moveis (par, timeframe, timestamp, sinal, stop_loss, take_profit)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (par, timeframe, timestamp) DO UPDATE
-            SET sinal = EXCLUDED.sinal, stop_loss = EXCLUDED.stop_loss, take_profit = EXCLUDED.take_profit;
-            """,
-            (
-                par,
-                timeframe,
-                timestamp,
-                sinal["sinal"],
-                sinal["stop_loss"],
-                sinal["take_profit"],
-            ),
-        )
-
-        conn.commit()
-        logger.debug(
-            f"Médias móveis calculadas e sinais gerados para {par} - {timeframe}."
-        )
-
-    except (Exception, psycopg2.Error) as error:
-        logger.error(f"Erro ao calcular médias móveis: {error}")
+        except Exception as error:
+            logger.error(f"Erro ao calcular médias móveis: {error}")

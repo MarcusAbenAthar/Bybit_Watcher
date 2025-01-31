@@ -1,28 +1,32 @@
-from venv import logger
-from core import Core
+from venv import logger  # Certifique-se de ter o logger configurado corretamente
+from trading_core import Core
 import ccxt
 from plugins.plugin import Plugin
 
 
 class Conexao(Plugin):
     """
-    Plugin para gerenciar a conexão com a exchange.
+    Plugin para gerenciar a conexão com a exchange, agora integrado com o Core.
     """
 
-    def __init__(self, container: AppModule):
-        self.container = container
-        super().__init__(container.config())
+    def __init__(self, core: Core):  # Agora recebe o Core na inicialização
+        self.core = core
+        super().__init__(
+            self.core.config
+        )  # Inicializa a classe Plugin com as configurações do Core
 
     def inicializar(self):
         """
-        Estabelece a conexão com a Bybit usando o CCXT.
+        Estabelece a conexão com a Bybit usando o CCXT, utilizando configurações do Core.
         """
         try:
             logger.info("Inicializando a conexão com a Bybit...")
             self.exchange = ccxt.bybit(
                 {
-                    "apiKey": self.config["api_key"],
-                    "secret": self.config["api_secret"],
+                    "apiKey": self.config.get(
+                        "Bybit", "API_KEY"
+                    ),  # Obtém as credenciais do Core
+                    "secret": self.config.get("Bybit", "API_SECRET"),
                     "enableRateLimit": True,
                 }
             )
@@ -36,13 +40,13 @@ class Conexao(Plugin):
         Retorna o objeto exchange do CCXT.
 
         Returns:
-          O objeto exchange do CCXT.
+            O objeto exchange do CCXT.
         """
         return self.exchange
 
     def finalizar(self):
         """
-        Fecha a conexão com a Bybit.
+        Fecha a conexão com a Bybit, se ela foi estabelecida.
         """
         try:
             if self.exchange:

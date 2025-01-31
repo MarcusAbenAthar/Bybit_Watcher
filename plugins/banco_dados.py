@@ -2,18 +2,33 @@ import configparser
 from venv import logger
 
 import psycopg2
-from core import Core
+from trading_core import Core
 from plugins.plugin import Plugin
 
 
 class BancoDados(Plugin):
     """
-    Plugin para gerenciar o banco de dados PostgreSQL.
+    Plugin para gerenciar o banco de dados PostgreSQL, agora integrado com o Core.
     """
 
-    def __init__(self, container: AppModule):
-        self.container = container
-        super().__init__(container.config())
+    def __init__(self, core):
+        super().__init__(core)
+        self.conn = None  # Inicializa a conexão como None
+
+    def inicializar(self):
+        try:
+            db_host = self.core.config.get("database", "host")
+            db_name = self.core.config.get("database", "name")
+            db_user = self.core.config.get("database", "user")
+            db_password = self.core.config.get("database", "password")
+
+            self.conn = psycopg2.connect(
+                host=db_host, database=db_name, user=db_user, password=db_password
+            )
+            logger.info("Conexão com o banco de dados estabelecida com sucesso.")
+        except (Exception, psycopg2.Error) as error:
+            logger.error(f"Erro ao conectar ao banco de dados: {error}")
+            raise
 
     def criar_tabela(self, nome_tabela, schema="public"):
         """
@@ -111,41 +126,32 @@ class BancoDados(Plugin):
             logger.error(f"Erro genérico: {e}")
             raise
 
-    def inicializar(self, plugins):
+    def buscar_dados(self, tabela, condicao=""):
         """
-        Conecta ao banco de dados e cria as tabelas necessárias.
+        Busca dados em uma tabela do banco de dados.
+
+        Args:
+            tabela (str): O nome da tabela.
+            condicao (str, opcional): A condição para a busca (cláusula WHERE).
+
+        Returns:
+            list: Uma lista de tuplas com os resultados da busca.
         """
         try:
-            self.plugins = plugins  # Armazene a lista de plugins
-            logger.info("Conectando ao banco de dados PostgreSQL...")
-            config = configparser.ConfigParser()
-            config.read("config.ini")
-            db_config = config["database"]
-
-            self.conn = psycopg2.connect(
-                host=db_config["host"],
-                database=db_config["database"],
-                user=db_config["user"],
-                password=db_config["password"],
-                client_encoding="UTF8",
-            )
-            self.cursor = self.conn.cursor()
-
-            # Cria as tabelas
-            self.criar_tabela("klines")
-            self.criar_tabela("analise_candles")
-            self.criar_tabela("medias_moveis")
-            # ... (chamar a função criar_tabela para outras tabelas) ...
-
+            cursor = self.conn.cursor()
+            sql = f"SELECT * FROM {tabela}"
+            if condicao:
+                sql += f" WHERE {condicao}"
+            cursor.execute(sql)
+            resultados = cursor.fetchall()
+            cursor.close()
+            return resultados
         except (Exception, psycopg2.Error) as error:
-            logger.error(f"Erro ao inicializar o plugin BancoDados: {error}")
-            raise
+            logger.error(f"Erro ao buscar dados na tabela {tabela}: {error}")
+            return []
 
     def finalizar(self):
         """
         Fecha a conexão com o banco de dados.
         """
-        if self.conn:
-            self.cursor.close()
-            self.conn.close()
-            logger.info("Conexão com o PostgreSQL fechada.")
+        logger.info("Conexão com o PostgreSQL fechada.")

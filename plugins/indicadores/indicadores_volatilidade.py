@@ -1,5 +1,5 @@
 import psycopg2
-from core import Core
+from trading_core import Core
 from loguru import logger
 import talib
 from plugins.plugin import Plugin

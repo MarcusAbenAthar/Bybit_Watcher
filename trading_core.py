@@ -1,15 +1,21 @@
-# core.py
+# trading_core.py
 import configparser
 import os
 from datetime import datetime
-from plugins.banco_dados import BancoDados  # Importa a classe BancoDados
+from configparser import ConfigParser
+
+from loguru import logger
 
 
 class Core:
-    def __init__(self):
-        self.carregar_configuracoes()
-        self.conectar_banco_dados()
-        self.armazenar_logs()
+    def __init__(self, config):
+        self.config = config
+        self.plugin_conexao = None  # Atributos para os plugins
+        self.plugin_banco_dados = None
+        self.plugin_medias_moveis = None
+        self.plugin_calculo_alavancagem = None
+        self.plugin_price_action = None
+        self.plugin_execucao_ordens = None
 
     def carregar_configuracoes(self):
         """Carrega as configurações do arquivo config.ini."""
@@ -22,8 +28,12 @@ class Core:
         self.ativo = self.config.get("Geral", "ATIVO")
 
     def conectar_banco_dados(self):
-        """Conecta ao banco de dados usando o plugin banco_dados.py."""
-        self.banco_dados = BancoDados()  # Cria uma instância da classe BancoDados
+        """Conecta ao banco de dados usando a instância já existente."""
+        if not self.banco_dados.conn:
+            try:
+                self.banco_dados.inicializar()
+            except Exception as e:
+                logger.error(f"Erro ao conectar ao banco de dados: {e}")
 
     def armazenar_logs(self):
         """Configura o sistema de logs."""
@@ -47,7 +57,6 @@ class Core:
         except Exception as e:
             print(f"Erro ao registrar log: {e}")
 
-    # Métodos para interagir com o banco de dados
     def inserir_dados(self, tabela, dados):
         self.banco_dados.inserir_dados(tabela, dados)
 

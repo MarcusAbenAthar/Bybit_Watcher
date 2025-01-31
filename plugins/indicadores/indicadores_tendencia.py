@@ -1,4 +1,4 @@
-from core import Core
+from trading_core import Core
 from loguru import logger
 import psycopg2
 import talib
