@@ -1,8 +1,5 @@
-import configparser
 from venv import logger
-
 import psycopg2
-from trading_core import Core
 from plugins.plugin import Plugin
 
 
@@ -14,6 +11,8 @@ class BancoDados(Plugin):
     def __init__(self, core):
         super().__init__(core)
         self.conn = None  # Inicializa a conexão como None
+        if core is None:
+            raise ValueError("O objeto Core não pode ser None.")
 
     def inicializar(self):
         try:

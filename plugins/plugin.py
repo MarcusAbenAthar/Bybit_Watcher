@@ -16,7 +16,6 @@ class Plugin:
             core (Core): O objeto Core do bot.
         """
         self.core = core
-        self.config = core.config  # Acessa as configurações através do Core
 
     def inicializar(self):
         """

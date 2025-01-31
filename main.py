@@ -29,17 +29,13 @@ logger.add(
 # Carrega as variáveis de ambiente
 load_dotenv()
 
-# Configurações do bot
-config = {
-    "api_key": os.getenv("BYBIT_API_KEY"),
-    "api_secret": os.getenv("BYBIT_API_SECRET"),
-    "telegram_bot_token": os.getenv("TELEGRAM_BOT_TOKEN"),
-    "timeframes": ["1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d"],
-}
+# Configurações do bot (carregadas do arquivo config.ini)
+config = {}
+
 
 # Bloco principal do script
 if __name__ == "__main__":
-    # Carrega as configurações
+    # Carrega as configurações do arquivo config.ini
     def load_config_from_file(filename):
         config = ConfigParser()
         config.read(filename)
@@ -47,14 +43,21 @@ if __name__ == "__main__":
 
     config = load_config_from_file("config.ini")
 
+    # Cria a instância do Core, passando a configuração carregada
+    core = Core(config)
+
     # Cria uma instância do Banco de Dados
     banco_dados = BancoDados(None)
 
-    # Cria a instância do Core, passando a instância do Banco de Dados
-    core = Core(config, banco_dados)  # Passa as configurações para o Core
+    # Injeta a instância do Banco de Dados no Core
+    core.plugin_banco_dados = banco_dados
 
     # Conecta ao banco de dados
     core.conectar_banco_dados()
+
+    # Carrega os plugins
+    plugins = carregar_plugins()
+
     # Inicializa os plugins
     for plugin in plugins:
         try:
@@ -65,7 +68,7 @@ if __name__ == "__main__":
             )
             exit(1)
 
-    # Inicializa os plugins de indicadores
+    # Inicializa os plugins de indicadores (assumindo que existe um método `inicializar_indicadores` no Core)
     core.inject(core.inicializar_indicadores)
 
     # Loop principal do bot
@@ -101,6 +104,7 @@ if __name__ == "__main__":
                             )
                             continue  # Pula para o próximo par/timeframe
 
+                        # Armazena os dados (assumindo que existe um método `armazenar_dados` no Core)
                         core.armazenar_dados(dados, par, timeframe)
 
                         for plugin in plugins:
@@ -119,9 +123,6 @@ if __name__ == "__main__":
             logger.debug(f"Aguardando {30} segundos para a próxima coleta...")
             time.sleep(30)
 
-        except ccxt.NetworkError as e:
-            logger.error(f"Erro de rede: {e}")
-            time.sleep(60)
         except ccxt.ExchangeError as e:
             logger.error(f"Erro na exchange: {e}")
             time.sleep(60)
