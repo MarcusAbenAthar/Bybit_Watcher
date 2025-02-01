@@ -8,14 +8,11 @@ class Plugin:
     - finalizar(): Finaliza o plugin.
     """
 
-    def __init__(self, core):  # Agora recebe o Core diretamente
+    def __init__(self):
         """
         Inicializa o plugin.
-
-        Args:
-            core (Core): O objeto Core do bot.
         """
-        self.core = core
+        pass  # Implementação padrão (sem ação)
 
     def inicializar(self):
         """

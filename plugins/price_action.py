@@ -1,18 +1,20 @@
-from trading_core import Core
 from plugins.plugin import Plugin
-from venv import logger  # Certifique-se de ter o logger configurado corretamente
+from loguru import logger
 
 
 class PriceAction(Plugin):
     """
-    Plugin para analisar o price action, agora integrado com o Core.
+    Plugin para analisar o price action.
+
+    Este plugin é responsável por identificar padrões de price action nos dados
+    e gerar sinais de compra ou venda com base nesses padrões.
     """
 
-    def __init__(self, core: Core):  # Agora recebe o Core na inicialização
-        self.core = core
-        super().__init__(
-            self.core.config
-        )  # Inicializa a classe Plugin com as configurações do Core
+    def __init__(self):
+        """
+        Inicializa o plugin PriceAction.
+        """
+        super().__init__()
 
     def identificar_padrao(self, dados):
         """
@@ -26,7 +28,7 @@ class PriceAction(Plugin):
         """
         # Implementação da lógica para identificar o padrão
         # ... (seu código para identificar padrões de price action)
-        pass
+        raise NotImplementedError  # Lança uma exceção para indicar que o método ainda não foi implementado
 
     def gerar_sinal(self, dados, padrao):
         """
@@ -41,7 +43,7 @@ class PriceAction(Plugin):
         """
         # Implementação da lógica para gerar o sinal
         # ... (seu código para gerar sinais de compra/venda)
-        pass
+        raise NotImplementedError  # Lança uma exceção para indicar que o método ainda não foi implementado
 
     def executar(self, dados, par, timeframe):
         """
@@ -60,22 +62,8 @@ class PriceAction(Plugin):
 
                 if sinal:
                     # Salva os resultados no banco de dados (usando a conexão do Core)
-                    timestamp = int(dados[-1][0] / 1000)  # Timestamp do último candle
-                    self.core.banco_dados.inserir_dados(
-                        "analise_candles",
-                        {  # Adapte a tabela e os dados
-                            "par": par,
-                            "timeframe": timeframe,
-                            "timestamp": timestamp,
-                            "padrao": padrao,
-                            "classificacao": sinal[
-                                "tipo"
-                            ],  # Adapte conforme a estrutura do seu sinal
-                            "sinal": sinal["sinal"],
-                            "stop_loss": sinal["stop_loss"],
-                            "take_profit": sinal["take_profit"],
-                        },
-                    )
+                    timestamp = int(dados[-1] / 1000)  # Timestamp do último candle
+                    # ... (código para salvar os resultados no banco de dados)
 
                     logger.info(
                         f"Sinal de {sinal['sinal']} gerado para {par} - {timeframe} com padrão {padrao}"

@@ -1,26 +1,28 @@
-from trading_core import Core
 from plugins.plugin import Plugin
-from venv import logger  # Certifique-se de ter o logger configurado corretamente
+from plugins.gerente_plugin import obter_conexao
+from loguru import logger
 
 
 class ExecucaoOrdens(Plugin):
     """
-    Plugin para executar as ordens de compra e venda, agora integrado com o Core.
+    Plugin para exibir sinais de trading.
+
+    Este plugin é responsável por receber sinais de trading gerados por outros plugins
+    e exibi-los de forma organizada no console.
     """
 
-    def __init__(self, core: Core):  # Agora recebe o Core na inicialização
-        self.core = core
-        super().__init__(
-            self.core.config
-        )  # Inicializa a classe Plugin com as configurações do Core
-        self.conexao = self.core.conexao  # Obtém a conexão com a exchange do Core
+    def __init__(self):
+        """Inicializa o plugin ExecucaoOrdens."""
+        super().__init__()
+        self.conexao = obter_conexao()
 
     def exibir_sinal(self, sinal):
         """
         Exibe os detalhes do sinal de trading de forma organizada.
 
         Args:
-            sinal (dict): Um dicionário com os detalhes do sinal, incluindo o par de moedas, o timeframe, o tipo de sinal (compra ou venda), o stop loss e o take profit.
+            sinal (dict): Um dicionário com os detalhes do sinal, incluindo o par de moedas,
+                         o timeframe, o tipo de sinal (compra ou venda), o stop loss e o take profit.
         """
         if sinal["sinal"]:
             mensagem = f"""
@@ -30,46 +32,13 @@ class ExecucaoOrdens(Plugin):
             Stop Loss: {sinal['stop_loss']:.2f}
             Take Profit: {sinal['take_profit']:.2f}
             """
-            print(mensagem)
+            logger.info(mensagem)  # Usando logger para exibir o sinal
 
     def executar(self, sinal):
         """
-        Recebe e executa o sinal de trading, utilizando a conexão com a exchange do Core.
+        Recebe e exibe o sinal de trading.
 
         Args:
             sinal (dict): Um dicionário com os detalhes do sinal.
         """
         self.exibir_sinal(sinal)
-
-        if sinal["sinal"] == "COMPRA":  # Adapte conforme a estrutura do seu sinal
-            try:
-                order = self.conexao.obter_exchange().create_order(  # Utilize a conexão do Core
-                    symbol=sinal["par"],
-                    type="market",  # Ou o tipo de ordem desejado
-                    side="buy",
-                    amount=0.01,  # Ajuste a quantidade conforme necessário
-                    params={
-                        "stopLoss": sinal["stop_loss"],
-                        "takeProfit": sinal["take_profit"],
-                    },  # Adapte conforme a API da exchange
-                )
-                logger.info(f"Ordem de compra executada: {order}")
-            except Exception as e:
-                logger.error(f"Erro ao executar ordem de compra: {e}")
-        elif sinal["sinal"] == "VENDA":  # Adapte conforme a estrutura do seu sinal
-            try:
-                order = self.conexao.obter_exchange().create_order(  # Utilize a conexão do Core
-                    symbol=sinal["par"],
-                    type="market",  # Ou o tipo de ordem desejado
-                    side="sell",
-                    amount=0.01,  # Ajuste a quantidade conforme necessário
-                    params={
-                        "stopLoss": sinal["stop_loss"],
-                        "takeProfit": sinal["take_profit"],
-                    },  # Adapte conforme a API da exchange
-                )
-                logger.info(f"Ordem de venda executada: {order}")
-            except Exception as e:
-                logger.error(f"Erro ao executar ordem de venda: {e}")
-        else:
-            logger.warning(f"Sinal inválido: {sinal['sinal']}")

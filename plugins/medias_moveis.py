@@ -1,25 +1,19 @@
-from venv import logger  # Certifique-se de ter o logger configurado corretamente
-from trading_core import Core
+from venv import logger
 from plugins.plugin import Plugin
+from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
 import talib
 
 
 class MediasMoveis(Plugin):
-    """
-    Plugin para calcular as médias móveis, agora integrado com o Core.
-    """
+    """Plugin para calcular as médias móveis."""
 
-    def __init__(self, core: Core):  # Agora recebe o Core na inicialização
-        self.core = core
-        super().__init__(
-            self.core.config
-        )  # Inicializa a classe Plugin com as configurações do Core
-        self.calculo_alavancagem = (
-            self.core.calculo_alavancagem
-        )  # Obtém o plugin de cálculo de alavancagem do Core
-        self.banco_dados = (
-            self.core.banco_dados
-        )  # Obtém o plugin de banco de dados do Core
+    def __init__(self):
+        """Inicializa o plugin MediasMoveis."""
+        super().__init__()
+        # Obtém o plugin de cálculo de alavancagem
+        self.calculo_alavancagem = obter_calculo_alavancagem()
+        # Obtém o plugin de banco de dados
+        self.banco_dados = obter_banco_dados()
 
     def calcular_media_movel(self, dados, periodo, tipo="simples"):
         """
@@ -34,9 +28,7 @@ class MediasMoveis(Plugin):
             list: Lista com os valores da média móvel.
         """
         # Extrai os valores de fechamento dos candles
-        fechamentos = [
-            candle[4] for candle in dados
-        ]  # Certifique-se de que o índice 4 corresponde ao fechamento
+        fechamentos = [candle for candle in dados]
 
         if tipo == "simples":
             return talib.SMA(fechamentos, timeperiod=periodo)

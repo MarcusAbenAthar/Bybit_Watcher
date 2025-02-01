@@ -1,30 +1,28 @@
 from venv import logger  # Certifique-se de ter o logger configurado corretamente
-from trading_core import Core
+import ccxt
 from plugins.plugin import Plugin
 import talib
 
 
 class CalculoAlavancagem(Plugin):
     """
-    Plugin para calcular a alavancagem ideal para cada operação, agora integrado com o Core.
+    Plugin para calcular a alavancagem ideal para cada operação, considerando a volatilidade e as Regras de Ouro.
     """
 
-    def __init__(self, core: Core):  # Agora recebe o Core na inicialização
-        self.core = core
-        super().__init__(
-            self.core.config
-        )  # Inicializa a classe Plugin com as configurações do Core
-        self.conexao = self.core.conexao  # Obtém a conexão com a exchange do Core
+    def __init__(self):
+        """Inicializa o plugin CalculoAlavancagem."""
+        super().__init__()
         self.cache_volatilidade = {}  # Inicializa o cache de volatilidade
 
-    def calcular_alavancagem(self, data, par, timeframe):
+    def calcular_alavancagem(self, dados, par, timeframe, config):
         """
         Calcula a alavancagem ideal para a operação, considerando a volatilidade e as Regras de Ouro.
 
         Args:
-            data (dict): Dicionário com os dados do candle.
+            dados (list): Lista de candles.
             par (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
+            config (ConfigParser): Objeto com as configurações do bot.
 
         Returns:
             int: Alavancagem ideal para a operação.
@@ -32,8 +30,8 @@ class CalculoAlavancagem(Plugin):
         # Verifica se a volatilidade já foi calculada para o par e timeframe
         chave_cache = f"{par}-{timeframe}"
         if chave_cache not in self.cache_volatilidade:
-            # Obter o histórico de preços do ativo (agora, usando a conexão com a Bybit do Core)
-            historico = self.conexao.obter_exchange().fetch_ohlcv(
+            # Obter o histórico de preços do ativo
+            historico = self.obter_exchange(config).fetch_ohlcv(
                 par, timeframe, limit=500
             )
 
@@ -44,7 +42,7 @@ class CalculoAlavancagem(Plugin):
         volatilidade = self.cache_volatilidade[chave_cache]
 
         # Definir a alavancagem máxima (Regra de Ouro: Seguro)
-        alavancagem_maxima = self.core.config.getint(
+        alavancagem_maxima = config.getint(
             "Geral", "NIVEL_ALAVANCAGEM"
         )  # Obtém do config.ini
 
@@ -71,9 +69,9 @@ class CalculoAlavancagem(Plugin):
             float: Valor do ATR.
         """
         # Extrai os valores de high, low e close do histórico
-        high = [candle[2] for candle in historico]
-        low = [candle[3] for candle in historico]
-        close = [candle[4] for candle in historico]
+        high = [candle for candle in historico]
+        low = [candle for candle in historico]
+        close = [candle for candle in historico]
 
         # Calcula o ATR usando a função ATR do TA-Lib (Regra de Ouro: Eficiente)
         atr = talib.ATR(
@@ -82,3 +80,26 @@ class CalculoAlavancagem(Plugin):
 
         # Retorna o último valor do ATR
         return atr[-1]
+
+    def obter_exchange(self, config):
+        """
+        Retorna a instância da Exchange configurada.
+
+        Args:
+            config (ConfigParser): Objeto com as configurações do bot.
+
+        Returns:
+            ccxt.Exchange: Instância da Exchange.
+        """
+        try:
+            exchange = ccxt.bybit(
+                {
+                    "apiKey": config.get("Bybit", "API_KEY"),
+                    "secret": config.get("Bybit", "API_SECRET"),
+                    "enableRateLimit": True,
+                }
+            )
+            return exchange
+        except Exception as e:
+            logger.error(f"Erro ao conectar na Bybit: {e}")
+            raise

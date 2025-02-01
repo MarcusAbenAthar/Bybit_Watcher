@@ -1,5 +1,5 @@
 import psycopg2
-from trading_core import Core
+from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
 from loguru import logger
 import talib
 from plugins.plugin import Plugin
@@ -10,9 +10,13 @@ class IndicadoresVolatilidade(Plugin):
     Plugin para calcular indicadores de volatilidade.
     """
 
-    def __init__(self, core):  # Recebe o Core como argumento
-        self.core = core
-        self.config = core.config  # Acessa as configurações através do Core
+    def __init__(self):
+        """Inicializa o plugin IndicadoresVolatilidade."""
+        super().__init__()
+        # Obtém o plugin de cálculo de alavancagem
+        self.calculo_alavancagem = obter_calculo_alavancagem()
+        # Obtém o plugin de banco de dados
+        self.banco_dados = obter_banco_dados()
 
     def calcular_bandas_de_bollinger(self, dados, periodo=20, desvio_padrao=2):
         """
@@ -54,7 +58,7 @@ class IndicadoresVolatilidade(Plugin):
 
         return atr
 
-    def gerar_sinal(self, dados, indicador, tipo, par, timeframe):
+    def gerar_sinal(self, dados, indicador, tipo, par, timeframe, config):
         """
         Gera um sinal de compra ou venda com base no indicador de volatilidade fornecido.
 
@@ -64,6 +68,7 @@ class IndicadoresVolatilidade(Plugin):
             tipo (str): Tipo de sinal (depende do indicador).
             par (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
+            config (ConfigParser): Objeto com as configurações do bot.
 
         Returns:
             dict: Um dicionário com o sinal, o stop loss e o take profit.
@@ -73,48 +78,41 @@ class IndicadoresVolatilidade(Plugin):
             stop_loss = None
             take_profit = None
 
-            # Obtém o módulo de cálculo de alavancagem do Core
-            calculo_alavancagem = (
-                self.core.calculo_alavancagem
-            )  # Obtém o módulo do Core
-
             # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
-            alavancagem = calculo_alavancagem.calcular_alavancagem(
-                dados[-1], par, timeframe
+            alavancagem = self.calculo_alavancagem.calcular_alavancagem(
+                dados[-1], par, timeframe, config
             )
 
             if indicador == "bandas_de_bollinger":
                 upper, middle, lower = self.calcular_bandas_de_bollinger(dados)
-                if tipo == "rompimento_superior" and dados[-1][4] > upper[-1]:
+                if tipo == "rompimento_superior" and dados[-1] > upper[-1]:
                     sinal = "compra"
-                    stop_loss = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
+                    stop_loss = dados[-1] - (dados[-1] - dados[-1]) * (
                         0.1 / alavancagem
                     )
-                    take_profit = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
+                    take_profit = dados[-1] + (dados[-1] - dados[-1]) * (
                         2 / alavancagem
                     )
-                elif tipo == "rompimento_inferior" and dados[-1][4] < lower[-1]:
+                elif tipo == "rompimento_inferior" and dados[-1] < lower[-1]:
                     sinal = "venda"
-                    stop_loss = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
+                    stop_loss = dados[-1] + (dados[-1] - dados[-1]) * (
                         0.1 / alavancagem
                     )
-                    take_profit = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
+                    take_profit = dados[-1] - (dados[-1] - dados[-1]) * (
                         2 / alavancagem
                     )
 
             elif indicador == "atr":
                 atr = self.calcular_atr(dados)
                 # Lógica para gerar sinais com base no ATR (exemplo: rompimento do ATR)
-                if tipo == "rompimento_alta" and dados[-1][4] > dados[-2][4] + atr[-1]:
+                if tipo == "rompimento_alta" and dados[-1] > dados[-2] + atr[-1]:
                     sinal = "compra"
-                    stop_loss = dados[-1][3] - atr[-1] * (0.5 / alavancagem)
-                    take_profit = dados[-1][2] + atr[-1] * (1.5 / alavancagem)
-                elif (
-                    tipo == "rompimento_baixa" and dados[-1][4] < dados[-2][4] - atr[-1]
-                ):
+                    stop_loss = dados[-1] - atr[-1] * (0.5 / alavancagem)
+                    take_profit = dados[-1] + atr[-1] * (1.5 / alavancagem)
+                elif tipo == "rompimento_baixa" and dados[-1] < dados[-2] - atr[-1]:
                     sinal = "venda"
-                    stop_loss = dados[-1][2] + atr[-1] * (0.5 / alavancagem)
-                    take_profit = dados[-1][3] - atr[-1] * (1.5 / alavancagem)
+                    stop_loss = dados[-1] + atr[-1] * (0.5 / alavancagem)
+                    take_profit = dados[-1] - atr[-1] * (1.5 / alavancagem)
 
             return {
                 "sinal": sinal,
@@ -124,13 +122,13 @@ class IndicadoresVolatilidade(Plugin):
 
         except Exception as e:
             logger.error(f"Erro ao gerar sinal para {indicador} - {tipo}: {e}")
-        return {
-            "sinal": None,
-            "stop_loss": None,
-            "take_profit": None,
-        }
+            return {
+                "sinal": None,
+                "stop_loss": None,
+                "take_profit": None,
+            }
 
-    def executar(self, dados, par, timeframe):
+    def executar(self, dados, par, timeframe, config):
         """
         Executa o cálculo dos indicadores de volatilidade, gera sinais de trading e salva os resultados no banco de dados.
 
@@ -138,10 +136,11 @@ class IndicadoresVolatilidade(Plugin):
             dados (list): Lista de candles.
             par (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
+            config (ConfigParser): Objeto com as configurações do bot.
         """
 
         try:
-            conn = self.core.banco_dados.conexao  # Usa a conexão do Core
+            conn = obter_banco_dados().conn
             cursor = conn.cursor()
 
             for candle in dados:
@@ -158,6 +157,7 @@ class IndicadoresVolatilidade(Plugin):
                     "rompimento_superior",
                     par,
                     timeframe,
+                    config,
                 )
                 sinal_bandas_rompimento_inferior = self.gerar_sinal(
                     [candle],
@@ -165,16 +165,17 @@ class IndicadoresVolatilidade(Plugin):
                     "rompimento_inferior",
                     par,
                     timeframe,
+                    config,
                 )
                 sinal_atr_rompimento_alta = self.gerar_sinal(
-                    [candle], "atr", "rompimento_alta", par, timeframe
+                    [candle], "atr", "rompimento_alta", par, timeframe, config
                 )
                 sinal_atr_rompimento_baixa = self.gerar_sinal(
-                    [candle], "atr", "rompimento_baixa", par, timeframe
+                    [candle], "atr", "rompimento_baixa", par, timeframe, config
                 )
 
                 # Salva os resultados no banco de dados para o candle atual
-                timestamp = int(candle[0] / 1000)  # Converte o timestamp para segundos
+                timestamp = int(candle / 1000)  # Converte o timestamp para segundos
                 cursor.execute(
                     """
                     INSERT INTO indicadores_volatilidade (

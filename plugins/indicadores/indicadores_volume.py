@@ -1,5 +1,5 @@
 import psycopg2
-from trading_core import Core  # Importa o Core
+from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
 from loguru import logger
 import talib
 from plugins.plugin import Plugin
@@ -10,10 +10,13 @@ class IndicadoresVolume(Plugin):
     Plugin para calcular indicadores de volume.
     """
 
-    def __init__(self, core):  # Recebe o Core como argumento
-        self.core = core
-        self.config = core.config  # Acessa as configurações através do Core
-        # self.calculo_alavancagem = core.calculo_alavancagem # Acessa o plugin de cálculo de alavancagem através do Core
+    def __init__(self):
+        """Inicializa o plugin IndicadoresVolume."""
+        super().__init__()
+        # Obtém o plugin de cálculo de alavancagem
+        self.calculo_alavancagem = obter_calculo_alavancagem()
+        # Obtém o plugin de banco de dados
+        self.banco_dados = obter_banco_dados()
 
     def calcular_obv(self, dados):
         """
@@ -46,24 +49,29 @@ class IndicadoresVolume(Plugin):
         volume = [candle[5] for candle in dados]
         return talib.MFI(high, low, close, volume, timeperiod=periodo)
 
-    def gerar_sinal(self, dados, indicador, tipo, par, timeframe):
+    def gerar_sinal(self, dados, indicador, tipo, par, timeframe, config):
         """
-        Gera um sinal de compra ou venda.
-        (alterações nesta função)
+        Gera um sinal de compra ou venda com base no indicador de volume fornecido.
+
+        Args:
+            dados (list): Lista de candles.
+            indicador (str): Nome do indicador de volume ("obv", "cmf" ou "mfi").
+            tipo (str): Tipo de sinal (depende do indicador).
+            par (str): Par de moedas.
+            timeframe (str): Timeframe dos candles.
+            config (ConfigParser): Objeto com as configurações do bot.
+
+        Returns:
+            dict: Um dicionário com o sinal, o stop loss e o take profit.
         """
         try:
             sinal = None
             stop_loss = None
             take_profit = None
 
-            # Obtém o plugin de cálculo de alavancagem do Core
-            calculo_alavancagem = (
-                self.core.calculo_alavancagem
-            )  # Acesso através do Core
-
             # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
-            alavancagem = calculo_alavancagem.calcular_alavancagem(
-                dados[-1], par, timeframe
+            alavancagem = self.calculo_alavancagem.calcular_alavancagem(
+                dados[-1], par, timeframe, config
             )
 
             if indicador == "obv":
@@ -73,10 +81,10 @@ class IndicadoresVolume(Plugin):
                     dados, obv
                 ):
                     sinal = "compra"
-                    stop_loss = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
+                    stop_loss = dados[-1] - (dados[-1] - dados[-1]) * (
                         0.1 / alavancagem
                     )
-                    take_profit = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
+                    take_profit = dados[-1] + (dados[-1] - dados[-1]) * (
                         2 / alavancagem
                     )
                 elif (
@@ -84,10 +92,10 @@ class IndicadoresVolume(Plugin):
                     and self.detectar_divergencia_baixista(dados, obv)
                 ):
                     sinal = "venda"
-                    stop_loss = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
+                    stop_loss = dados[-1] + (dados[-1] - dados[-1]) * (
                         0.1 / alavancagem
                     )
-                    take_profit = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
+                    take_profit = dados[-1] - (dados[-1] - dados[-1]) * (
                         2 / alavancagem
                     )
 
@@ -96,18 +104,18 @@ class IndicadoresVolume(Plugin):
                 # Lógica para gerar sinais com base no CMF (exemplo: cruzamento do zero)
                 if tipo == "cruzamento_acima" and cmf[-1] > 0 and cmf[-2] < 0:
                     sinal = "compra"
-                    stop_loss = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
+                    stop_loss = dados[-1] - (dados[-1] - dados[-1]) * (
                         0.05 / alavancagem
                     )
-                    take_profit = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
+                    take_profit = dados[-1] + (dados[-1] - dados[-1]) * (
                         1.5 / alavancagem
                     )
                 elif tipo == "cruzamento_abaixo" and cmf[-1] < 0 and cmf[-2] > 0:
                     sinal = "venda"
-                    stop_loss = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
+                    stop_loss = dados[-1] + (dados[-1] - dados[-1]) * (
                         0.05 / alavancagem
                     )
-                    take_profit = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
+                    take_profit = dados[-1] - (dados[-1] - dados[-1]) * (
                         1.5 / alavancagem
                     )
 
@@ -116,18 +124,18 @@ class IndicadoresVolume(Plugin):
                 # Lógica para gerar sinais com base no MFI (exemplo: sobrecompra/sobrevenda)
                 if tipo == "sobrecompra" and mfi[-1] > 80:
                     sinal = "venda"
-                    stop_loss = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
+                    stop_loss = dados[-1] + (dados[-1] - dados[-1]) * (
                         0.05 / alavancagem
                     )
-                    take_profit = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
+                    take_profit = dados[-1] - (dados[-1] - dados[-1]) * (
                         1.5 / alavancagem
                     )
                 elif tipo == "sobrevenda" and mfi[-1] < 20:
                     sinal = "compra"
-                    stop_loss = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
+                    stop_loss = dados[-1] - (dados[-1] - dados[-1]) * (
                         0.05 / alavancagem
                     )
-                    take_profit = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
+                    take_profit = dados[-1] + (dados[-1] - dados[-1]) * (
                         1.5 / alavancagem
                     )
 
@@ -145,16 +153,19 @@ class IndicadoresVolume(Plugin):
                 "take_profit": None,
             }
 
-    def executar(self, dados, par, timeframe):
+    def executar(self, dados, par, timeframe, config):
         """
         Executa o cálculo dos indicadores de volume, gera sinais e salva no banco de dados.
-        (alterações nesta função)
+
+        Args:
+            dados (list): Lista de candles.
+            par (str): Par de moedas.
+            timeframe (str): Timeframe dos candles.
+            config (ConfigParser): Objeto com as configurações do bot.
         """
         try:
-            # Obtém a conexão com o banco de dados a partir do Core
-            conn = self.core.banco_dados.conexao
+            conn = obter_banco_dados().conn
             cursor = conn.cursor()
-
             for candle in dados:
                 # Calcula os indicadores de volume para o candle atual
                 obv = self.calcular_obv([candle])
@@ -163,8 +174,9 @@ class IndicadoresVolume(Plugin):
 
                 # Gera os sinais de compra e venda para o candle atual
                 sinal_obv_divergencia_altista = self.gerar_sinal(
-                    [candle], "obv", "divergencia_altista", par, timeframe
+                    [candle], "obv", "divergencia_altista", par, timeframe, config
                 )
+
                 sinal_obv_divergencia_baixista = self.gerar_sinal(
                     [candle], "obv", "divergencia_baixista", par, timeframe
                 )
@@ -182,7 +194,7 @@ class IndicadoresVolume(Plugin):
                 )
 
                 # Salva os resultados no banco de dados para o candle atual
-                timestamp = int(candle[0] / 1000)  # Converte o timestamp para segundos
+                timestamp = int(candle / 1000)  # Converte o timestamp para segundos
                 cursor.execute(
                     """
                     INSERT INTO indicadores_volume (

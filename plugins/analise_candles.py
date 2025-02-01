@@ -1,7 +1,8 @@
 from venv import logger
-from plugins.plugin import Plugin
+
 import psycopg2
-from plugins import calculo_alavancagem
+from plugins.plugin import Plugin
+from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
 import talib
 from utils.padroes_candles import PADROES_CANDLES
 
@@ -11,9 +12,9 @@ class AnaliseCandles(Plugin):
     Plugin para analisar os candles e identificar padrões.
     """
 
-    def __init__(self, core):  # Recebe o Core como argumento
-        self.core = core
-        self.padroes_candles = PADROES_CANDLES  # Mantém a referência aos padrões
+    def __init__(self):
+        super().__init__()
+        self.calculo_alavancagem = obter_calculo_alavancagem()
 
     def identificar_padrao(self, candle):
         """
@@ -108,7 +109,7 @@ class AnaliseCandles(Plugin):
 
     def classificar_candle(self, candle):
         """
-        Classifica o candle como alta, baixa ou indecisão.
+        Classifica o candle como alta, baixa ou indecisão, seguindo as Regras de Ouro.
 
         Args:
             candle (list): Lista com os dados do candle (abertura, fechamento, máximo, mínimo).
@@ -121,10 +122,10 @@ class AnaliseCandles(Plugin):
         # Calcula o tamanho do corpo do candle
         tamanho_corpo = abs(fechamento - abertura)
 
-        # Define um limite para considerar um candle como "pequeno"
+        # Define um limite para considerar um candle como "pequeno" (Regra de Ouro: Critério)
         limite_corpo_pequeno = 0.1 * (maximo - minimo)  # 10% da amplitude do candle
 
-        # Classifica o candle
+        # Classifica o candle (Regra de Ouro: Clareza)
         if tamanho_corpo <= limite_corpo_pequeno:
             return "indecisão"  # Doji ou candle com corpo muito pequeno
         elif fechamento > abertura:
@@ -132,10 +133,9 @@ class AnaliseCandles(Plugin):
         else:
             return "baixa"
 
-    def gerar_sinal(self, data, padrao, classificacao, par, timeframe):
+    def gerar_sinal(self, data, padrao, classificacao, par, timeframe, config):
         """
         Gera um sinal de compra ou venda com base no padrão e na classificação do candle.
-        (alterações nesta função)
         """
         sinal = None
         stop_loss = None
@@ -149,7 +149,9 @@ class AnaliseCandles(Plugin):
             sinal = logica["sinal"]
 
             # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
-            alavancagem = calculo_alavancagem.calcular_alavancagem(data, par, timeframe)
+            alavancagem = self.calculo_alavancagem.calcular_alavancagem(
+                data, par, timeframe, config
+            )
 
             # Calcula o stop loss e o take profit, passando a alavancagem como argumento
             stop_loss = logica["stop_loss"](data, alavancagem)
@@ -161,23 +163,24 @@ class AnaliseCandles(Plugin):
             "take_profit": take_profit,
         }
 
-    def executar(self, dados, par, timeframe):
+    def executar(self, dados, par, timeframe, config):
         """
         Executa a análise dos candles, gera sinais de trading e salva os resultados no banco de dados.
-        (alterações nesta função)
         """
         try:
             # Usa a conexão com o banco de dados fornecida pelo Core
-            conn = self.core.banco_dados.conexao
+            conn = obter_banco_dados().conn
             cursor = conn.cursor()
 
             for candle in dados:
                 padrao = self.identificar_padrao(candle)
                 classificacao = self.classificar_candle(candle)
 
-                sinal = self.gerar_sinal(candle, padrao, classificacao, par, timeframe)
+                sinal = self.gerar_sinal(
+                    candle, padrao, classificacao, par, timeframe, config
+                )
 
-                timestamp = int(candle[0] / 1000)
+                timestamp = int(candle / 1000)
 
                 cursor.execute(
                     """

@@ -5,24 +5,37 @@ from plugins.plugin import Plugin
 
 class BancoDados(Plugin):
     """
-    Plugin para gerenciar o banco de dados PostgreSQL, agora integrado com o Core.
+    Plugin para gerenciar o banco de dados PostgreSQL.
+
+    Este plugin é responsável por estabelecer a conexão com o banco de dados,
+    criar as tabelas necessárias e executar operações de busca e inserção de dados.
     """
 
-    def __init__(self, core):
-        super().__init__(core)
+    def __init__(self):
+        """
+        Inicializa o plugin BancoDados.
+        """
+        super().__init__()
         self.conn = None  # Inicializa a conexão como None
-        if core is None:
-            raise ValueError("O objeto Core não pode ser None.")
 
-    def inicializar(self):
+    def inicializar(self, config):
+        """
+        Estabelece a conexão com o banco de dados PostgreSQL.
+        Args:
+            config (ConfigParser): Objeto com as configurações do bot.
+        """
         try:
-            db_host = self.core.config.get("database", "host")
-            db_name = self.core.config.get("database", "name")
-            db_user = self.core.config.get("database", "user")
-            db_password = self.core.config.get("database", "password")
+            # Obtém as configurações do objeto config
+            db_host = config.get("database", "host")
+            db_name = config.get("database", "database")
+            db_user = config.get("database", "user")
+            db_password = config.get("database", "password")
 
             self.conn = psycopg2.connect(
-                host=db_host, database=db_name, user=db_user, password=db_password
+                host=db_host,
+                database=db_name,
+                user=db_user,
+                password=db_password,
             )
             logger.info("Conexão com o banco de dados estabelecida com sucesso.")
         except (Exception, psycopg2.Error) as error:
@@ -32,17 +45,18 @@ class BancoDados(Plugin):
     def criar_tabela(self, nome_tabela, schema="public"):
         """
         Cria uma tabela no banco de dados, caso ela não exista.
-
         Args:
             nome_tabela (str): Nome da tabela a ser criada.
             schema (str): Nome do schema onde a tabela será criada (padrão: "public").
         """
         try:
+            cursor = self.conn.cursor()  # Obtém o cursor da conexão
+
             # Verifica se a tabela já existe
             logger.info(
                 f"Verificando se a tabela '{schema}.{nome_tabela}' já existe..."
             )
-            self.cursor.execute(
+            cursor.execute(
                 f"""
                 SELECT EXISTS (
                     SELECT 1
@@ -52,13 +66,13 @@ class BancoDados(Plugin):
                 );
                 """
             )
-            tabela_existe = self.cursor.fetchone()[0]
+            tabela_existe = cursor.fetchone()
 
             if not tabela_existe:
                 # Cria a tabela
                 logger.info(f"Criando a tabela '{schema}.{nome_tabela}'...")
                 if nome_tabela == "klines":
-                    self.cursor.execute(
+                    cursor.execute(
                         f"""
                         CREATE TABLE {schema}.{nome_tabela} (
                             id SERIAL PRIMARY KEY,
@@ -75,7 +89,7 @@ class BancoDados(Plugin):
                         """
                     )
                 elif nome_tabela == "analise_candles":
-                    self.cursor.execute(
+                    cursor.execute(
                         f"""
                         CREATE TABLE {schema}.{nome_tabela} (
                             id SERIAL PRIMARY KEY,
@@ -92,7 +106,7 @@ class BancoDados(Plugin):
                         """
                     )
                 elif nome_tabela == "medias_moveis":
-                    self.cursor.execute(
+                    cursor.execute(
                         f"""
                         CREATE TABLE {schema}.{nome_tabela} (
                             id SERIAL PRIMARY KEY,
@@ -106,7 +120,7 @@ class BancoDados(Plugin):
                         );
                         """
                     )
-                # ... (adicionar código para criar outras tabelas) ...
+                # ... (adicionar código para criar outras tabelas)...
 
                 self.conn.commit()
                 logger.info(f"Tabela '{schema}.{nome_tabela}' criada com sucesso!")
@@ -128,11 +142,9 @@ class BancoDados(Plugin):
     def buscar_dados(self, tabela, condicao=""):
         """
         Busca dados em uma tabela do banco de dados.
-
         Args:
             tabela (str): O nome da tabela.
             condicao (str, opcional): A condição para a busca (cláusula WHERE).
-
         Returns:
             list: Uma lista de tuplas com os resultados da busca.
         """
@@ -147,10 +159,30 @@ class BancoDados(Plugin):
             return resultados
         except (Exception, psycopg2.Error) as error:
             logger.error(f"Erro ao buscar dados na tabela {tabela}: {error}")
-            return []
+            return
+
+    def inserir_dados(self, tabela, dados):
+        """
+        Insere dados em uma tabela do banco de dados.
+        Args:
+            tabela (str): O nome da tabela.
+            dados (dict): Os dados a serem inseridos.
+        """
+        try:
+            cursor = self.conn.cursor()
+            colunas = ", ".join(dados.keys())
+            valores = ", ".join(["%s"] * len(dados))
+            sql = f"INSERT INTO {tabela} ({colunas}) VALUES ({valores})"
+            cursor.execute(sql, tuple(dados.values()))
+            self.conn.commit()
+            cursor.close()
+        except (Exception, psycopg2.Error) as error:
+            logger.error(f"Erro ao inserir dados na tabela {tabela}: {error}")
 
     def finalizar(self):
         """
         Fecha a conexão com o banco de dados.
         """
-        logger.info("Conexão com o PostgreSQL fechada.")
+        if self.conn:  # Verifica se a conexão existe antes de tentar fechá-la
+            self.conn.close()
+            logger.info("Conexão com o PostgreSQL fechada.")

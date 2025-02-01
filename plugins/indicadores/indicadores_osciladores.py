@@ -1,4 +1,4 @@
-from trading_core import Core
+from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
 from loguru import logger
 import psycopg2
 import talib
@@ -6,13 +6,13 @@ from plugins.plugin import Plugin
 
 
 class IndicadoresOsciladores(Plugin):
-    def __init__(self, core):  # Recebe o Core diretamente
-        self.core = core
-        super().__init__(core.config)  # Acessa as configurações do Core
-        self.calculo_alavancagem = (
-            core.calculo_alavancagem
-        )  # Acessa a função de cálculo de alavancagem
-        self.banco_dados = core.banco_dados  # Acesso ao banco de dados
+    def __init__(self):
+        """Inicializa o plugin IndicadoresOsciladores."""
+        super().__init__()
+        # Acessa a função de cálculo de alavancagem
+        self.calculo_alavancagem = obter_calculo_alavancagem()
+        # Acesso ao banco de dados
+        self.banco_dados = obter_banco_dados()
 
     def calcular_rsi(self, dados, par, timeframe, periodo=14):
         """
@@ -46,7 +46,7 @@ class IndicadoresOsciladores(Plugin):
         periodo = max(7, min(28, periodo + ajuste_volatilidade))
 
         # Extrai os valores de fechamento dos candles
-        fechamentos = [candle[4] for candle in dados]
+        fechamentos = [candle for candle in dados]
 
         # Calcula o RSI usando a função RSI do TA-Lib
         rsi = talib.RSI(fechamentos, timeperiod=periodo)
@@ -149,7 +149,7 @@ class IndicadoresOsciladores(Plugin):
         return mfi
 
 
-def gerar_sinal(self, dados, indicador, tipo, par, timeframe):
+def gerar_sinal(self, dados, indicador, tipo, par, timeframe, config):
     """
     Gera um sinal de compra ou venda com base no indicador oscilador fornecido,
     seguindo as Regras de Ouro, incluindo o Dinamismo.
@@ -160,6 +160,7 @@ def gerar_sinal(self, dados, indicador, tipo, par, timeframe):
         tipo (str): Tipo de sinal (depende do indicador).
         par (str): Par de moedas.
         timeframe (str): Timeframe dos candles.
+        config (ConfigParser): Objeto com as configurações do bot.
 
     Returns:
         dict: Um dicionário com o sinal, o stop loss e o take profit.
@@ -171,7 +172,7 @@ def gerar_sinal(self, dados, indicador, tipo, par, timeframe):
 
         # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
         alavancagem = self.calculo_alavancagem.calcular_alavancagem(
-            dados[-1], par, timeframe
+            dados[-1], par, timeframe, config
         )
 
         # ----- Lógica para o RSI -----
@@ -179,60 +180,36 @@ def gerar_sinal(self, dados, indicador, tipo, par, timeframe):
             rsi = self.calcular_rsi(dados, par, timeframe)
             if tipo == "sobrecompra" and rsi[-1] > 70:
                 sinal = "venda"
-                stop_loss = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
-                    0.05 / alavancagem
-                )
-                take_profit = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
-                    1.5 / alavancagem
-                )
+                stop_loss = dados[-1] + (dados[-1] - dados[-1]) * (0.05 / alavancagem)
+                take_profit = dados[-1] - (dados[-1] - dados[-1]) * (1.5 / alavancagem)
             elif tipo == "sobrevenda" and rsi[-1] < 30:
                 sinal = "compra"
-                stop_loss = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
-                    0.05 / alavancagem
-                )
-                take_profit = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
-                    1.5 / alavancagem
-                )
+                stop_loss = dados[-1] - (dados[-1] - dados[-1]) * (0.05 / alavancagem)
+                take_profit = dados[-1] + (dados[-1] - dados[-1]) * (1.5 / alavancagem)
 
         # ----- Lógica para o Estocástico -----
         elif indicador == "estocastico":
             slowk, slowd = self.calcular_estocastico(dados, timeframe)
             if tipo == "sobrecompra" and slowk[-1] > 80 and slowd[-1] > 80:
                 sinal = "venda"
-                stop_loss = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
-                    0.05 / alavancagem
-                )
-                take_profit = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
-                    1.5 / alavancagem
-                )
+                stop_loss = dados[-1] + (dados[-1] - dados[-1]) * (0.05 / alavancagem)
+                take_profit = dados[-1] - (dados[-1] - dados[-1]) * (1.5 / alavancagem)
             elif tipo == "sobrevenda" and slowk[-1] < 20 and slowd[-1] < 20:
                 sinal = "compra"
-                stop_loss = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
-                    0.05 / alavancagem
-                )
-                take_profit = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
-                    1.5 / alavancagem
-                )
+                stop_loss = dados[-1] - (dados[-1] - dados[-1]) * (0.05 / alavancagem)
+                take_profit = dados[-1] + (dados[-1] - dados[-1]) * (1.5 / alavancagem)
 
         # ----- Lógica para o MFI -----
         elif indicador == "mfi":
             mfi = self.calcular_mfi(dados)
             if tipo == "sobrecompra" and mfi[-1] > 80:
                 sinal = "venda"
-                stop_loss = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
-                    0.05 / alavancagem
-                )
-                take_profit = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
-                    1.5 / alavancagem
-                )
+                stop_loss = dados[-1] + (dados[-1] - dados[-1]) * (0.05 / alavancagem)
+                take_profit = dados[-1] - (dados[-1] - dados[-1]) * (1.5 / alavancagem)
             elif tipo == "sobrevenda" and mfi[-1] < 20:
                 sinal = "compra"
-                stop_loss = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
-                    0.05 / alavancagem
-                )
-                take_profit = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
-                    1.5 / alavancagem
-                )
+                stop_loss = dados[-1] - (dados[-1] - dados[-1]) * (0.05 / alavancagem)
+                take_profit = dados[-1] + (dados[-1] - dados[-1]) * (1.5 / alavancagem)
 
         return {
             "sinal": sinal,
@@ -249,7 +226,7 @@ def gerar_sinal(self, dados, indicador, tipo, par, timeframe):
         }
 
 
-def executar(self, dados, par, timeframe):
+def executar(self, dados, par, timeframe, config):
     """
     Executa o cálculo dos indicadores osciladores, gera sinais de trading e salva os resultados no banco de dados.
 
@@ -257,9 +234,10 @@ def executar(self, dados, par, timeframe):
         dados (list): Lista de candles.
         par (str): Par de moedas.
         timeframe (str): Timeframe dos candles.
+        config (ConfigParser): Objeto com as configurações do bot.
     """
     try:
-        conn = self.core.banco_dados.conn
+        conn = obter_banco_dados().conn
         cursor = conn.cursor()
 
         for candle in dados:
@@ -272,26 +250,26 @@ def executar(self, dados, par, timeframe):
 
             # Gera os sinais de compra e venda para o candle atual
             sinal_rsi_sobrecompra = self.gerar_sinal(
-                [candle], "rsi", "sobrecompra", par, timeframe
+                [candle], "rsi", "sobrecompra", par, timeframe, config
             )
             sinal_rsi_sobrevenda = self.gerar_sinal(
-                [candle], "rsi", "sobrevenda", par, timeframe
+                [candle], "rsi", "sobrevenda", par, timeframe, config
             )
             sinal_estocastico_sobrecompra = self.gerar_sinal(
-                [candle], "estocastico", "sobrecompra", par, timeframe
+                [candle], "estocastico", "sobrecompra", par, timeframe, config
             )
             sinal_estocastico_sobrevenda = self.gerar_sinal(
-                [candle], "estocastico", "sobrevenda", par, timeframe
+                [candle], "estocastico", "sobrevenda", par, timeframe, config
             )
             sinal_mfi_sobrecompra = self.gerar_sinal(
-                [candle], "mfi", "sobrecompra", par, timeframe
+                [candle], "mfi", "sobrecompra", par, timeframe, config
             )
             sinal_mfi_sobrevenda = self.gerar_sinal(
-                [candle], "mfi", "sobrevenda", par, timeframe
+                [candle], "mfi", "sobrevenda", par, timeframe, config
             )
 
             # Salva os resultados no banco de dados para o candle atual
-            timestamp = int(candle[0] / 1000)  # Converte o timestamp para segundos
+            timestamp = int(candle / 1000)  # Converte o timestamp para segundos
             cursor.execute(
                 """
                 INSERT INTO indicadores_osciladores (

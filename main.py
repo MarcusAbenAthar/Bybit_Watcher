@@ -1,15 +1,22 @@
+"""
+Módulo principal do bot de trading.
+
+Este módulo é responsável por iniciar o bot, carregar as configurações,
+conectar ao banco de dados, carregar os plugins e executar o loop principal.
+"""
+
 import datetime
 import os
 import time
 from dotenv import load_dotenv
 import ccxt
 from loguru import logger
-import plugins
-from plugins.banco_dados import BancoDados
-from trading_core import Core
-from plugins import carregar_plugins
+from plugins.gerente_plugin import (
+    carregar_plugins,
+    conectar_banco_dados,
+    armazenar_dados,
+)
 from configparser import ConfigParser
-
 
 # 1. Configuração do Loguru
 logs_dir = "logs"
@@ -29,10 +36,6 @@ logger.add(
 # Carrega as variáveis de ambiente
 load_dotenv()
 
-# Configurações do bot (carregadas do arquivo config.ini)
-config = {}
-
-
 # Bloco principal do script
 if __name__ == "__main__":
     # Carrega as configurações do arquivo config.ini
@@ -43,39 +46,24 @@ if __name__ == "__main__":
 
     config = load_config_from_file("config.ini")
 
-    # Cria a instância do Core, passando a configuração carregada
-    core = Core(config)
-
-    # Cria uma instância do Banco de Dados
-    banco_dados = BancoDados(None)
-
-    # Injeta a instância do Banco de Dados no Core
-    core.plugin_banco_dados = banco_dados
-
     # Conecta ao banco de dados
-    core.conectar_banco_dados()
+    conectar_banco_dados(
+        config
+    )  # Passa as configurações para a função conectar_banco_dados
 
     # Carrega os plugins
-    plugins = carregar_plugins()
-
-    # Inicializa os plugins
-    for plugin in plugins:
-        try:
-            core.inject(plugin.inicializar)
-        except Exception as e:
-            logger.exception(
-                f"Erro ao inicializar o plugin {plugin.__class__.__name__}: {e}"
-            )
-            exit(1)
-
-    # Inicializa os plugins de indicadores (assumindo que existe um método `inicializar_indicadores` no Core)
-    core.inject(core.inicializar_indicadores)
+    plugins = carregar_plugins("plugins")
 
     # Loop principal do bot
     while True:
         try:
-            exchange = core.obter_exchange()
-
+            exchange = ccxt.bybit(
+                {  # Inicializa a exchange bybit aqui
+                    "apiKey": config.get("Bybit", "API_KEY"),
+                    "secret": config.get("Bybit", "API_SECRET"),
+                    "enableRateLimit": True,
+                }
+            )
             markets = exchange.load_markets()
             pares_usdt = [par for par in markets.keys() if par.endswith("USDT")]
 
@@ -89,12 +77,12 @@ if __name__ == "__main__":
                         for kline in klines:
                             dados.append(
                                 {
-                                    "timestamp": kline[0],
-                                    "open": kline[1],
-                                    "high": kline[2],
-                                    "low": kline[3],
-                                    "close": kline[4],
-                                    "volume": kline[5],
+                                    "timestamp": kline,  # Corrigido o acesso aos dados do kline
+                                    "open": kline,
+                                    "high": kline,
+                                    "low": kline,
+                                    "close": kline,
+                                    "volume": kline,
                                 }
                             )
 
@@ -102,10 +90,12 @@ if __name__ == "__main__":
                             logger.warning(
                                 f"Dados vazios para {par} - {timeframe}. Pulando análise."
                             )
-                            continue  # Pula para o próximo par/timeframe
+                            continue
 
-                        # Armazena os dados (assumindo que existe um método `armazenar_dados` no Core)
-                        core.armazenar_dados(dados, par, timeframe)
+                        # Armazena os dados
+                        armazenar_dados(
+                            config, dados, par, timeframe
+                        )  # Passa as configurações para a função armazenar_dados
 
                         for plugin in plugins:
                             try:
@@ -128,7 +118,3 @@ if __name__ == "__main__":
             time.sleep(60)
         except Exception as e:
             logger.exception(f"Erro inesperado: {e}")
-
-        # Finaliza os plugins
-        for plugin in plugins:
-            plugin.finalizar()

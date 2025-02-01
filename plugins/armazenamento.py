@@ -2,6 +2,7 @@ from venv import logger
 
 import psycopg2
 from plugins.plugin import Plugin
+from plugins.gerente_plugin import obter_banco_dados
 
 
 class Armazenamento(Plugin):
@@ -9,12 +10,10 @@ class Armazenamento(Plugin):
     Plugin para armazenar os dados dos candles no banco de dados.
     """
 
-    def __init__(self, core):  # Recebe o Core como argumento
-        self.core = core
-        self.config = core.config  # Acessa as configurações através do Core
-        # self.banco_dados = core.banco_dados # Acesso direto não é mais necessário aqui
+    def __init__(self):
+        super().__init__()
 
-    def inicializar(self, plugins):
+    def inicializar(self, config):
         pass
 
     def executar(self, dados, par, timeframe):
@@ -23,16 +22,16 @@ class Armazenamento(Plugin):
         """
         try:
             # Usa a conexão com o banco de dados fornecida pelo Core
-            conn = self.core.banco_dados.conexao
+            conn = obter_banco_dados().conn  # Obtém a conexão do banco de dados
             cursor = conn.cursor()
 
             for kline in dados:
-                timestamp = int(kline[0] / 1000)
-                open = kline[1]
-                high = kline[2]
-                low = kline[3]
-                close = kline[4]
-                volume = kline[5]
+                timestamp = int(kline / 1000)
+                open = kline
+                high = kline
+                low = kline
+                close = kline
+                volume = kline
 
                 try:
                     cursor.execute(

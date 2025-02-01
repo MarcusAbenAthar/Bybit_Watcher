@@ -1,4 +1,4 @@
-from trading_core import Core
+from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
 from loguru import logger
 import psycopg2
 import talib
@@ -10,9 +10,13 @@ class IndicadoresTendencia(Plugin):
     Plugin para calcular indicadores de tendência.
     """
 
-    def __init__(self, core):  # Recebe o Core como argumento
-        self.core = core
-        self.config = core.config  # Acessa as configurações através do Core
+    def __init__(self):
+        """Inicializa o plugin Indicadores de Tendencia."""
+        super().__init__()
+        # Obtém o plugin de cálculo de alavancagem
+        self.calculo_alavancagem = obter_calculo_alavancagem()
+        # Obtém o plugin de banco de dados
+        self.banco_dados = obter_banco_dados()
 
     def calcular_tema(self, dados, periodo=30):
         """
@@ -243,7 +247,7 @@ class IndicadoresTendencia(Plugin):
         low = [candle[3] for candle in dados]
         return talib.SAR(high, low, acceleration=acceleration, maximum=maximum)
 
-    def gerar_sinal(self, dados, indicador, tipo, par, timeframe):
+    def gerar_sinal(self, dados, indicador, tipo, par, timeframe, config):
         """
         Gera um sinal de compra ou venda com base no indicador de tendência fornecido,
         seguindo as Regras de Ouro.
@@ -254,6 +258,7 @@ class IndicadoresTendencia(Plugin):
             tipo (str): Tipo de sinal (depende do indicador).
             par (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
+            config (ConfigParser): Objeto com as configurações do bot.
 
         Returns:
             dict: Um dicionário com o sinal, o stop loss e o take profit.
@@ -262,11 +267,10 @@ class IndicadoresTendencia(Plugin):
             sinal = None
             stop_loss = None
             take_profit = None
-            calculo_alavancagem = (
-                self.core.calculo_alavancagem
-            )  # Obtém o módulo do Core
-            alavancagem = calculo_alavancagem.calcular_alavancagem(
-                dados[-1], par, timeframe
+
+            # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
+            alavancagem = self.calculo_alavancagem.calcular_alavancagem(
+                dados[-1], par, timeframe, config
             )
 
             # ----- Lógica para o RSI -----
@@ -284,7 +288,6 @@ class IndicadoresTendencia(Plugin):
                     sinal = "compra"
                 elif tipo == "cruzamento_abaixo" and macd[-1] < signal[-1]:
                     sinal = "venda"
-
             # ----- Lógica para o ADX -----
             elif indicador == "adx":
                 adx = self.calcular_adx(dados)
@@ -335,19 +338,11 @@ class IndicadoresTendencia(Plugin):
 
             # Calcula o stop loss e o take profit, considerando a alavancagem
             if sinal == "compra":
-                stop_loss = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
-                    0.1 / alavancagem
-                )
-                take_profit = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
-                    2 / alavancagem
-                )
+                stop_loss = dados[-1] - (dados[-1] - dados[-1]) * (0.1 / alavancagem)
+                take_profit = dados[-1] + (dados[-1] - dados[-1]) * (2 / alavancagem)
             elif sinal == "venda":
-                stop_loss = dados[-1][2] + (dados[-1][2] - dados[-1][3]) * (
-                    0.1 / alavancagem
-                )
-                take_profit = dados[-1][3] - (dados[-1][2] - dados[-1][3]) * (
-                    2 / alavancagem
-                )
+                stop_loss = dados[-1] + (dados[-1] - dados[-1]) * (0.1 / alavancagem)
+                take_profit = dados[-1] - (dados[-1] - dados[-1]) * (2 / alavancagem)
 
             return {
                 "sinal": sinal,
@@ -363,7 +358,7 @@ class IndicadoresTendencia(Plugin):
                 "take_profit": None,
             }
 
-    def executar(self, dados, par, timeframe):
+    def executar(self, dados, par, timeframe, config):
         """
         Executa o cálculo dos indicadores de tendência, gera sinais de trading e salva os resultados no banco de dados.
 
@@ -373,9 +368,7 @@ class IndicadoresTendencia(Plugin):
             timeframe (str): Timeframe dos candles.
         """
         try:
-            conn = (
-                self.core.db.connection
-            )  # Assumindo que 'db' seja o objeto para o banco de dados no Core
+            conn = obter_banco_dados().conn
             cursor = conn.cursor()
 
             for candle in dados:
@@ -393,8 +386,9 @@ class IndicadoresTendencia(Plugin):
 
                 # Gera os sinais de compra e venda para o candle atual
                 sinal_rsi_sobrecompra = self.gerar_sinal(
-                    [candle], "rsi", "sobrecompra", par, timeframe
+                    [candle], "rsi", "sobrecompra", par, timeframe, config
                 )
+
                 sinal_rsi_sobrevenda = self.gerar_sinal(
                     [candle], "rsi", "sobrevenda", par, timeframe
                 )
@@ -442,7 +436,7 @@ class IndicadoresTendencia(Plugin):
                 )
 
                 # Salva os resultados no banco de dados para o candle atual
-                timestamp = int(candle[0] / 1000)  # Converte o timestamp para segundos
+                timestamp = int(candle / 1000)  # Converte o timestamp para segundos
                 cursor.execute(
                     """
                     INSERT INTO indicadores_tendencia (
@@ -467,132 +461,134 @@ class IndicadoresTendencia(Plugin):
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
-                    ON CONFLICT (par, timeframe, timestamp) DO UPDATE SET 
-                        rsi = EXCLUDED.rsi, 
-                        macd = EXCLUDED.macd, 
-                        macd_signal = EXCLUDED.macd_signal, 
-                        macd_hist = EXCLUDED.macd_hist, 
-                        adx = EXCLUDED.adx, 
-                        aroon_up = EXCLUDED.aroon_up, 
-                        aroon_down = EXCLUDED.aroon_down, 
-                        sar = EXCLUDED.sar, 
-                        tema = EXCLUDED.tema, 
-                        kama = EXCLUDED.kama, 
-                        macd_histograma = EXCLUDED.macd_histograma, 
-                        sinal_rsi_sobrecompra = EXCLUDED.sinal_rsi_sobrecompra, 
-                        stop_loss_rsi_sobrecompra = EXCLUDED.stop_loss_rsi_sobrecompra, 
-                        take_profit_rsi_sobrecompra = EXCLUDED.take_profit_rsi_sobrecompra, 
-                        sinal_rsi_sobrevenda = EXCLUDED.sinal_rsi_sobrevenda, 
-                        stop_loss_rsi_sobrevenda = EXCLUDED.stop_loss_rsi_sobrevenda, 
-                        take_profit_rsi_sobrevenda = EXCLUDED.take_profit_rsi_sobrevenda, 
-                        sinal_macd_cruzamento_acima = EXCLUDED.sinal_macd_cruzamento_acima, 
-                        stop_loss_macd_cruzamento_acima = EXCLUDED.stop_loss_macd_cruzamento_acima, 
-                        take_profit_macd_cruzamento_acima = EXCLUDED.take_profit_macd_cruzamento_acima, 
-                        sinal_macd_cruzamento_abaixo = EXCLUDED.sinal_macd_cruzamento_abaixo, 
-                        stop_loss_macd_cruzamento_abaixo = EXCLUDED.stop_loss_macd_cruzamento_abaixo, 
-                        take_profit_macd_cruzamento_abaixo = EXCLUDED.take_profit_macd_cruzamento_abaixo, 
-                        sinal_adx_forte_alta = EXCLUDED.sinal_adx_forte_alta, 
-                        stop_loss_adx_forte_alta = EXCLUDED.stop_loss_adx_forte_alta, 
-                        take_profit_adx_forte_alta = EXCLUDED.take_profit_adx_forte_alta, 
-                        sinal_adx_forte_baixa = EXCLUDED.sinal_adx_forte_baixa, 
-                        stop_loss_adx_forte_baixa = EXCLUDED.stop_loss_adx_forte_baixa, 
-                        take_profit_adx_forte_baixa = EXCLUDED.take_profit_adx_forte_baixa, 
-                        sinal_aroon_cruzamento_acima = EXCLUDED.sinal_aroon_cruzamento_acima, 
-                        stop_loss_aroon_cruzamento_acima = EXCLUDED.stop_loss_aroon_cruzamento_acima, 
-                        take_profit_aroon_cruzamento_acima = EXCLUDED.take_profit_aroon_cruzamento_acima, 
-                        sinal_aroon_cruzamento_abaixo = EXCLUDED.sinal_aroon_cruzamento_abaixo, 
-                        stop_loss_aroon_cruzamento_abaixo = EXCLUDED.stop_loss_aroon_cruzamento_abaixo, 
-                        take_profit_aroon_cruzamento_abaixo = EXCLUDED.take_profit_aroon_cruzamento_abaixo, 
-                        sinal_sar_reversao_alta = EXCLUDED.sinal_sar_reversao_alta, 
-                        stop_loss_sar_reversao_alta = EXCLUDED.stop_loss_sar_reversao_alta, 
-                        take_profit_sar_reversao_alta = EXCLUDED.take_profit_sar_reversao_alta, 
-                        sinal_sar_reversao_baixa = EXCLUDED.sinal_sar_reversao_baixa, 
-                        stop_loss_sar_reversao_baixa = EXCLUDED.stop_loss_sar_reversao_baixa, 
-                        take_profit_sar_reversao_baixa = EXCLUDED.take_profit_sar_reversao_baixa, 
-                        sinal_tema_cruzamento_acima = EXCLUDED.sinal_tema_cruzamento_acima, 
-                        stop_loss_tema_cruzamento_acima = EXCLUDED.stop_loss_tema_cruzamento_acima, 
-                        take_profit_tema_cruzamento_acima = EXCLUDED.take_profit_tema_cruzamento_acima, 
-                        sinal_tema_cruzamento_abaixo = EXCLUDED.sinal_tema_cruzamento_abaixo, 
-                        stop_loss_tema_cruzamento_abaixo = EXCLUDED.stop_loss_tema_cruzamento_abaixo, 
-                        take_profit_tema_cruzamento_abaixo = EXCLUDED.take_profit_tema_cruzamento_abaixo, 
-                        sinal_kama_cruzamento_acima = EXCLUDED.sinal_kama_cruzamento_acima, 
-                        stop_loss_kama_cruzamento_acima = EXCLUDED.stop_loss_kama_cruzamento_acima, 
-                        take_profit_kama_cruzamento_acima = EXCLUDED.take_profit_kama_cruzamento_acima, 
-                        sinal_kama_cruzamento_abaixo = EXCLUDED.sinal_kama_cruzamento_abaixo, 
-                        stop_loss_kama_cruzamento_abaixo = EXCLUDED.stop_loss_kama_cruzamento_abaixo, 
-                        take_profit_kama_cruzamento_abaixo = EXCLUDED.take_profit_kama_cruzamento_abaixo, 
-                        sinal_macd_histograma_cruzamento_acima = EXCLUDED.sinal_macd_histograma_cruzamento_acima, 
-                        stop_loss_macd_histograma_cruzamento_acima = EXCLUDED.stop_loss_macd_histograma_cruzamento_acima, 
-                        take_profit_macd_histograma_cruzamento_acima = EXCLUDED.take_profit_macd_histograma_cruzamento_acima, 
-                        sinal_macd_histograma_cruzamento_abaixo = EXCLUDED.sinal_macd_histograma_cruzamento_abaixo, 
-                        stop_loss_macd_histograma_cruzamento_abaixo = EXCLUDED.stop_loss_macd_histograma_cruzamento_abaixo, 
-                        take_profit_macd_histograma_cruzamento_abaixo = EXCLUDED.take_profit_macd_histograma_cruzamento_abaixo
-                    )""",
+                    ON CONFLICT (par, timeframe, timestamp) DO UPDATE SET
+                    rsi = EXCLUDED.rsi,
+                    macd = EXCLUDED.macd,
+                    macd_signal = EXCLUDED.macd_signal,
+                    macd_hist = EXCLUDED.macd_hist,
+                    adx = EXCLUDED.adx,
+                    aroon_up = EXCLUDED.aroon_up,
+                    aroon_down = EXCLUDED.aroon_down,
+                    sar = EXCLUDED.sar,
+                    tema = EXCLUDED.tema,
+                    kama = EXCLUDED.kama,
+                    macd_histograma = EXCLUDED.macd_histograma,
+                    sinal_rsi_sobrecompra = EXCLUDED.sinal_rsi_sobrecompra,
+                    stop_loss_rsi_sobrecompra = EXCLUDED.stop_loss_rsi_sobrecompra,
+                    take_profit_rsi_sobrecompra = EXCLUDED.take_profit_rsi_sobrecompra,
+                    sinal_rsi_sobrevenda = EXCLUDED.sinal_rsi_sobrevenda,
+                    stop_loss_rsi_sobrevenda = EXCLUDED.stop_loss_rsi_sobrevenda,
+                    take_profit_rsi_sobrevenda = EXCLUDED.take_profit_rsi_sobrevenda,
+                    sinal_macd_cruzamento_acima = EXCLUDED.sinal_macd_cruzamento_acima,
+                    stop_loss_macd_cruzamento_acima = EXCLUDED.stop_loss_macd_cruzamento_acima,
+                    take_profit_macd_cruzamento_acima = EXCLUDED.take_profit_macd_cruzamento_acima,
+                    sinal_macd_cruzamento_abaixo = EXCLUDED.sinal_macd_cruzamento_abaixo,
+                    stop_loss_macd_cruzamento_abaixo = EXCLUDED.stop_loss_macd_cruzamento_abaixo,
+                    take_profit_macd_cruzamento_abaixo = EXCLUDED.take_profit_macd_cruzamento_abaixo,
+                    sinal_adx_forte_alta = EXCLUDED.sinal_adx_forte_alta,
+                    stop_loss_adx_forte_alta = EXCLUDED.stop_loss_adx_forte_alta,
+                    take_profit_adx_forte_alta = EXCLUDED.take_profit_adx_forte_alta,
+                    sinal_adx_forte_baixa = EXCLUDED.sinal_adx_forte_baixa,
+                    stop_loss_adx_forte_baixa = EXCLUDED.stop_loss_adx_forte_baixa,
+                    take_profit_adx_forte_baixa = EXCLUDED.take_profit_adx_forte_baixa,
+                    sinal_aroon_cruzamento_acima = EXCLUDED.sinal_aroon_cruzamento_acima,
+                    stop_loss_aroon_cruzamento_acima = EXCLUDED.stop_loss_aroon_cruzamento_acima,
+                    take_profit_aroon_cruzamento_acima = EXCLUDED.take_profit_aroon_cruzamento_acima,
+                    sinal_aroon_cruzamento_abaixo = EXCLUDED.sinal_aroon_cruzamento_abaixo,
+                    stop_loss_aroon_cruzamento_abaixo = EXCLUDED.stop_loss_aroon_cruzamento_abaixo,
+                    take_profit_aroon_cruzamento_abaixo = EXCLUDED.take_profit_aroon_cruzamento_abaixo,
+                    sinal_sar_reversao_alta = EXCLUDED.sinal_sar_reversao_alta,
+                    stop_loss_sar_reversao_alta = EXCLUDED.stop_loss_sar_reversao_alta,
+                    take_profit_sar_reversao_alta = EXCLUDED.take_profit_sar_reversao_alta,
+                    sinal_sar_reversao_baixa = EXCLUDED.sinal_sar_reversao_baixa,
+                    stop_loss_sar_reversao_baixa = EXCLUDED.stop_loss_sar_reversao_baixa,
+                    take_profit_sar_reversao_baixa = EXCLUDED.take_profit_sar_reversao_baixa,
+                    sinal_tema_cruzamento_acima = EXCLUDED.sinal_tema_cruzamento_acima,
+                    stop_loss_tema_cruzamento_acima = EXCLUDED.stop_loss_tema_cruzamento_acima,
+                    take_profit_tema_cruzamento_acima = EXCLUDED.take_profit_tema_cruzamento_acima,
+                    sinal_tema_cruzamento_abaixo = EXCLUDED.sinal_tema_cruzamento_abaixo,
+                    stop_loss_tema_cruzamento_abaixo = EXCLUDED.stop_loss_tema_cruzamento_abaixo,
+                    take_profit_tema_cruzamento_abaixo = EXCLUDED.take_profit_tema_cruzamento_abaixo,
+                    sinal_kama_cruzamento_acima = EXCLUDED.sinal_kama_cruzamento_acima,
+                    stop_loss_kama_cruzamento_acima = EXCLUDED.stop_loss_kama_cruzamento_acima,
+                    take_profit_kama_cruzamento_acima = EXCLUDED.take_profit_kama_cruzamento_acima,
+                    sinal_kama_cruzamento_abaixo = EXCLUDED.sinal_kama_cruzamento_abaixo,
+                    stop_loss_kama_cruzamento_abaixo = EXCLUDED.stop_loss_kama_cruzamento_abaixo,
+                    take_profit_kama_cruzamento_abaixo = EXCLUDED.take_profit_kama_cruzamento_abaixo,
+                    sinal_macd_histograma_cruzamento_acima = EXCLUDED.sinal_macd_histograma_cruzamento_acima,
+                    stop_loss_macd_histograma_cruzamento_acima = EXCLUDED.stop_loss_macd_histograma_cruzamento_acima,
+                    take_profit_macd_histograma_cruzamento_acima = EXCLUDED.take_profit_macd_histograma_cruzamento_acima,
+                    sinal_macd_histograma_cruzamento_abaixo = EXCLUDED.sinal_macd_histograma_cruzamento_abaixo,
+                    stop_loss_macd_histograma_cruzamento_abaixo = EXCLUDED.stop_loss_macd_histograma_cruzamento_abaixo,
+                    take_profit_macd_histograma_cruzamento_abaixo = EXCLUDED.take_profit_macd_histograma_cruzamento_abaixo
+                )""",
+                    (
+                        par,
+                        timeframe,
+                        timestamp,
+                        rsi[-1],
+                        macd[-1],
+                        macd_signal[-1],
+                        macd_hist[-1],
+                        adx[-1],
+                        aroon_up[-1],
+                        aroon_down[-1],
+                        sar[-1],
+                        tema[-1],
+                        kama[-1],
+                        macd_histograma[-1],
+                        sinal_rsi_sobrecompra["sinal"],
+                        sinal_rsi_sobrecompra["stop_loss"],
+                        sinal_rsi_sobrecompra["take_profit"],
+                        sinal_rsi_sobrevenda["sinal"],
+                        sinal_rsi_sobrevenda["stop_loss"],
+                        sinal_rsi_sobrevenda["take_profit"],
+                        sinal_macd_cruzamento_acima["sinal"],
+                        sinal_macd_cruzamento_acima["stop_loss"],
+                        sinal_macd_cruzamento_acima["take_profit"],
+                        sinal_macd_cruzamento_abaixo["sinal"],
+                        sinal_macd_cruzamento_abaixo["stop_loss"],
+                        sinal_macd_cruzamento_abaixo["take_profit"],
+                        sinal_adx_forte_alta["sinal"],
+                        sinal_adx_forte_alta["stop_loss"],
+                        sinal_adx_forte_alta["take_profit"],
+                        sinal_adx_forte_baixa["sinal"],
+                        sinal_adx_forte_baixa["stop_loss"],
+                        sinal_adx_forte_baixa["take_profit"],
+                        sinal_aroon_cruzamento_acima["sinal"],
+                        sinal_aroon_cruzamento_acima["stop_loss"],
+                        sinal_aroon_cruzamento_acima["take_profit"],
+                        sinal_aroon_cruzamento_abaixo["sinal"],
+                        sinal_aroon_cruzamento_abaixo["stop_loss"],
+                        sinal_aroon_cruzamento_abaixo["take_profit"],
+                        sinal_sar_reversao_alta["sinal"],
+                        sinal_sar_reversao_alta["stop_loss"],
+                        sinal_sar_reversao_alta["take_profit"],
+                        sinal_sar_reversao_baixa["sinal"],
+                        sinal_sar_reversao_baixa["stop_loss"],
+                        sinal_sar_reversao_baixa["take_profit"],
+                        sinal_tema_cruzamento_acima["sinal"],
+                        sinal_tema_cruzamento_acima["stop_loss"],
+                        sinal_tema_cruzamento_acima["take_profit"],
+                        sinal_tema_cruzamento_abaixo["sinal"],
+                        sinal_tema_cruzamento_abaixo["stop_loss"],
+                        sinal_tema_cruzamento_abaixo["take_profit"],
+                        sinal_kama_cruzamento_acima["sinal"],
+                        sinal_kama_cruzamento_acima["stop_loss"],
+                        sinal_kama_cruzamento_acima["take_profit"],
+                        sinal_kama_cruzamento_abaixo["sinal"],
+                        sinal_kama_cruzamento_abaixo["stop_loss"],
+                        sinal_kama_cruzamento_abaixo["take_profit"],
+                        sinal_macd_histograma_cruzamento_acima["sinal"],
+                        sinal_macd_histograma_cruzamento_acima["stop_loss"],
+                        sinal_macd_histograma_cruzamento_acima["take_profit"],
+                        sinal_macd_histograma_cruzamento_abaixo["sinal"],
+                        sinal_macd_histograma_cruzamento_abaixo["stop_loss"],
+                        sinal_macd_histograma_cruzamento_abaixo["take_profit"],
+                    ),
                 )
-                (
-                    par,
-                    timeframe,
-                    timestamp,
-                    rsi[-1],
-                    macd[-1],
-                    macd_signal[-1],
-                    macd_hist[-1],
-                    adx[-1],
-                    aroon_up[-1],
-                    aroon_down[-1],
-                    sar[-1],
-                    tema[-1],
-                    kama[-1],
-                    macd_histograma[-1],
-                    sinal_rsi_sobrecompra["sinal"],
-                    sinal_rsi_sobrecompra["stop_loss"],
-                    sinal_rsi_sobrecompra["take_profit"],
-                    sinal_rsi_sobrevenda["sinal"],
-                    sinal_rsi_sobrevenda["stop_loss"],
-                    sinal_rsi_sobrevenda["take_profit"],
-                    sinal_macd_cruzamento_acima["sinal"],
-                    sinal_macd_cruzamento_acima["stop_loss"],
-                    sinal_macd_cruzamento_acima["take_profit"],
-                    sinal_macd_cruzamento_abaixo["sinal"],
-                    sinal_macd_cruzamento_abaixo["stop_loss"],
-                    sinal_macd_cruzamento_abaixo["take_profit"],
-                    sinal_adx_forte_alta["sinal"],
-                    sinal_adx_forte_alta["stop_loss"],
-                    sinal_adx_forte_alta["take_profit"],
-                    sinal_adx_forte_baixa["sinal"],
-                    sinal_adx_forte_baixa["stop_loss"],
-                    sinal_adx_forte_baixa["take_profit"],
-                    sinal_aroon_cruzamento_acima["sinal"],
-                    sinal_aroon_cruzamento_acima["stop_loss"],
-                    sinal_aroon_cruzamento_acima["take_profit"],
-                    sinal_aroon_cruzamento_abaixo["sinal"],
-                    sinal_aroon_cruzamento_abaixo["stop_loss"],
-                    sinal_aroon_cruzamento_abaixo["take_profit"],
-                    sinal_sar_reversao_alta["sinal"],
-                    sinal_sar_reversao_alta["stop_loss"],
-                    sinal_sar_reversao_alta["take_profit"],
-                    sinal_sar_reversao_baixa["sinal"],
-                    sinal_sar_reversao_baixa["stop_loss"],
-                    sinal_sar_reversao_baixa["take_profit"],
-                    sinal_tema_cruzamento_acima["sinal"],
-                    sinal_tema_cruzamento_acima["stop_loss"],
-                    sinal_tema_cruzamento_acima["take_profit"],
-                    sinal_tema_cruzamento_abaixo["sinal"],
-                    sinal_tema_cruzamento_abaixo["stop_loss"],
-                    sinal_tema_cruzamento_abaixo["take_profit"],
-                    sinal_kama_cruzamento_acima["sinal"],
-                    sinal_kama_cruzamento_acima["stop_loss"],
-                    sinal_kama_cruzamento_acima["take_profit"],
-                    sinal_kama_cruzamento_abaixo["sinal"],
-                    sinal_kama_cruzamento_abaixo["stop_loss"],
-                    sinal_kama_cruzamento_abaixo["take_profit"],
-                    sinal_macd_histograma_cruzamento_acima["sinal"],
-                    sinal_macd_histograma_cruzamento_acima["stop_loss"],
-                    sinal_macd_histograma_cruzamento_acima["take_profit"],
-                    sinal_macd_histograma_cruzamento_abaixo["sinal"],
-                    sinal_macd_histograma_cruzamento_abaixo["stop_loss"],
-                    sinal_macd_histograma_cruzamento_abaixo["take_profit"],
-                ), conn.commit()
+
+            conn.commit()
             logger.debug(
                 f"Indicadores de tendência calculados e sinais gerados para {par} - {timeframe}."
             )
