@@ -4,7 +4,9 @@
 Gerenciador de plugins para o bot de trading.
 
 Este módulo é responsável por carregar e fornecer acesso aos plugins do bot,
-seguindo as Regras de Ouro para garantir a clareza, modularidade e testabilidade do código.
+seguindo as Regras de Ouro para garantir a clareza, modularidade e 
+testabilidade do código.
+
 """
 
 from plugins.plugin import Plugin
@@ -13,32 +15,89 @@ import os
 import importlib
 
 
-def carregar_plugins(diretorio):
+def carregar_plugins(diretorio, config):
     """
-    Carrega todos os plugins de um determinado diretório.
-
-    Args:
-        diretorio (str): Caminho para o diretório onde os plugins estão localizados.
-
-    Returns:
-        list: Uma lista com os plugins carregados.
+    Carrega todos os plugins de um determinado diretório,
+    cria o banco de dados e as tabelas necessárias.
     """
     plugins = []
+    conectar_banco_dados(config)
+    banco_dados = obter_banco_dados()
+
+    # Cria o banco de dados
+    banco_dados.criar_banco_dados(
+        config.get("database", "database"),
+        config.get("database", "user"),
+        config.get("database", "password"),
+    )
+
+    # Conecta ao banco de dados
+    banco_dados.conectar(
+        config.get("database", "database"),
+        config.get("database", "user"),
+        config.get("database", "password"),
+        config.get("database", "host"),
+    )
+
+    # Cria as tabelas
+
+    banco_dados.criar_tabela("klines")
+    banco_dados.criar_tabela("analise_candles")
+    banco_dados.criar_tabela("medias_moveis")
+    banco_dados.criar_tabela("indicadores_osciladores")
+    banco_dados.criar_tabela("indicadores_tendencia")
+    banco_dados.criar_tabela("indicadores_volatilidade")
+    banco_dados.criar_tabela("indicadores_volume")
+    banco_dados.criar_tabela("outros_indicadores")
+
     for nome_arquivo in os.listdir(diretorio):
         if nome_arquivo.endswith(".py") and not nome_arquivo.startswith("_"):
             nome_modulo = nome_arquivo[:-3]
             try:
-                modulo = importlib.import_module(f"{diretorio}.{nome_modulo}")
+                if nome_modulo == "analise_candles":
+                    from plugins.analise_candles import AnaliseCandles
+
+                    modulo = AnaliseCandles  # Importa a classe diretamente
+                else:
+                    modulo = importlib.import_module(f"{diretorio}.{nome_modulo}")
+
                 for nome_classe in dir(modulo):
                     if nome_classe != "Plugin" and nome_classe.isupper():
                         classe_plugin = getattr(modulo, nome_classe)
                         if issubclass(classe_plugin, Plugin):
-                            plugin = classe_plugin()
+                            if nome_modulo == "armazenamento":
+                                # Passar a conexão para o construtor
+                                plugin = classe_plugin(banco_dados)
+                            else:
+                                plugin = classe_plugin()
                             plugins.append(plugin)
                             logger.debug(f"Plugin {nome_classe} carregado com sucesso.")
+
+                            # Define a conexão no plugin
+                            plugin.banco_dados = banco_dados  # Define a conexão aqui
+
+                            # Cria a tabela correspondente ao plugin no banco de dados
+                            if nome_modulo == "analise_candles":
+                                banco_dados.criar_tabela_analise_candles()
+                            elif nome_modulo == "medias_moveis":
+                                banco_dados.criar_tabela_medias_moveis()
+                            elif nome_modulo == "armazenamento":
+                                banco_dados.criar_tabela_klines()
+                            elif nome_modulo == "indicadores_osciladores":
+                                banco_dados.criar_tabela_indicadores_osciladores()
+                            elif nome_modulo == "indicadores_tendencia":
+                                banco_dados.criar_tabela_indicadores_tendencia()
+                            elif nome_modulo == "indicadores_volatilidade":
+                                banco_dados.criar_tabela_indicadores_volatilidade()
+                            elif nome_modulo == "indicadores_volume":
+                                banco_dados.criar_tabela_indicadores_volume()
+                            elif nome_modulo == "outros_indicadores":
+                                banco_dados.criar_tabela_outros_indicadores()
+                            # ... (chamar funções para criar outras tabelas)
+
             except Exception as e:
                 logger.error(f"Erro ao carregar plugin {nome_modulo}: {e}")
-    return plugins
+    return plugins, banco_dados
 
 
 def conectar_banco_dados(config):
@@ -47,10 +106,17 @@ def conectar_banco_dados(config):
 
     Args:
         config (ConfigParser): Objeto com as configurações do bot.
+
+    Returns:
+        psycopg2.connection: A conexão com o banco de dados.
     """
     try:
+        # Chama inicializar() e armazena a conexão
         banco_dados = obter_banco_dados()
-        banco_dados.inicializar(config)
+        conn = banco_dados.inicializar(config)
+        # Retorna a conexão
+        return conn
+
     except Exception as e:
         logger.error(f"Erro ao conectar ao banco de dados: {e}")
         raise

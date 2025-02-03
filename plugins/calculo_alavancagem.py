@@ -1,4 +1,4 @@
-from venv import logger  # Certifique-se de ter o logger configurado corretamente
+from loguru import logger  # Certifique-se de ter o logger configurado corretamente
 import ccxt
 from plugins.plugin import Plugin
 import talib

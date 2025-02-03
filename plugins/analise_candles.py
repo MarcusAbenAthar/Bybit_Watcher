@@ -1,4 +1,4 @@
-from venv import logger
+from loguru import logger
 
 import psycopg2
 from plugins.plugin import Plugin
@@ -133,7 +133,7 @@ class AnaliseCandles(Plugin):
         else:
             return "baixa"
 
-    def gerar_sinal(self, data, padrao, classificacao, par, timeframe, config):
+    def gerar_sinal(self, dados, padrao, classificacao, par, timeframe, config):
         """
         Gera um sinal de compra ou venda com base no padrão e na classificação do candle.
         """
@@ -150,12 +150,12 @@ class AnaliseCandles(Plugin):
 
             # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
             alavancagem = self.calculo_alavancagem.calcular_alavancagem(
-                data, par, timeframe, config
+                dados[-1], par, timeframe, config
             )
 
             # Calcula o stop loss e o take profit, passando a alavancagem como argumento
-            stop_loss = logica["stop_loss"](data, alavancagem)
-            take_profit = logica["take_profit"](data, alavancagem)
+            stop_loss = logica["stop_loss"](dados, alavancagem)
+            take_profit = logica["take_profit"](dados, alavancagem)
 
         return {
             "sinal": sinal,

@@ -1,4 +1,4 @@
-from venv import logger
+from loguru import logger
 from plugins.plugin import Plugin
 from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
 import talib
@@ -39,7 +39,7 @@ class MediasMoveis(Plugin):
         else:
             raise ValueError("Tipo de média móvel inválido.")
 
-    def gerar_sinal(self, dados, medias_moveis, par, timeframe):
+    def gerar_sinal(self, dados, medias_moveis, par, timeframe, config):
         """
         Gera um sinal de compra ou venda com base nos cruzamentos de médias móveis.
 
@@ -71,10 +71,10 @@ class MediasMoveis(Plugin):
         ):
             sinal = "venda"
 
-        # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
-        alavancagem = self.calculo_alavancagem.calcular_alavancagem(
-            dados, par, timeframe
-        )
+            # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
+            alavancagem = self.calculo_alavancagem.calcular_alavancagem(
+                dados[-1], par, timeframe, config
+            )
 
         # Calcula o stop loss e o take profit, considerando a alavancagem
         if sinal == "compra":

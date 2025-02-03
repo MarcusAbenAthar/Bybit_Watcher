@@ -1,4 +1,4 @@
-from venv import logger
+from loguru import logger
 
 import psycopg2
 from plugins.plugin import Plugin
@@ -10,11 +10,11 @@ class Armazenamento(Plugin):
     Plugin para armazenar os dados dos candles no banco de dados.
     """
 
-    def __init__(self):
+    def __init__(self, banco_dados):  # Adicionar banco_dados como argumento
         super().__init__()
-
-    def inicializar(self, config):
-        pass
+        self.banco_dados = (
+            banco_dados  # Armazenar a conexão    def inicializar(self, config):
+        )
 
     def executar(self, dados, par, timeframe):
         """

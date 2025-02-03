@@ -8,13 +8,14 @@ conectar ao banco de dados, carregar os plugins e executar o loop principal.
 import datetime
 import os
 import time
-from dotenv import load_dotenv
 import ccxt
+from dotenv import load_dotenv
+
 from loguru import logger
 from plugins.gerente_plugin import (
     carregar_plugins,
     conectar_banco_dados,
-    armazenar_dados,
+    obter_conexao,
 )
 from configparser import ConfigParser
 
@@ -33,8 +34,14 @@ logger.add(
     format="{time:DD-MM-YYYY HH:mm:ss} | {level} | {module} | {function} | {line} | {message}",
 )
 
+# Define os timeframes diretamente
+timeframes = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+
 # Carrega as variáveis de ambiente
 load_dotenv()
+
+# Inicializa um conjunto vazio
+pares_processados = set()
 
 # Bloco principal do script
 if __name__ == "__main__":
@@ -47,44 +54,49 @@ if __name__ == "__main__":
     config = load_config_from_file("config.ini")
 
     # Conecta ao banco de dados
-    conectar_banco_dados(
-        config
-    )  # Passa as configurações para a função conectar_banco_dados
+    conectar_banco_dados(config)
 
-    # Carrega os plugins
-    plugins = carregar_plugins("plugins")
+    # Carrega os plugins e recebe a conexão
+    plugins, banco_dados = carregar_plugins("plugins", config)
 
+    # Inicializa o plugin Conexao
+    obter_conexao().inicializar(config)
+
+    # Obtém a exchange do plugin Conexao
+    exchange = obter_conexao().exchange
+    print(f"exchange: {exchange}")
     # Loop principal do bot
     while True:
         try:
-            exchange = ccxt.bybit(
-                {  # Inicializa a exchange bybit aqui
-                    "apiKey": config.get("Bybit", "API_KEY"),
-                    "secret": config.get("Bybit", "API_SECRET"),
-                    "enableRateLimit": True,
-                }
-            )
-            markets = exchange.load_markets()
-            pares_usdt = [par for par in markets.keys() if par.endswith("USDT")]
-
             logger.info("Iniciando coleta de dados...")
+            pares_usdt = exchange.pares_usdt
+            print(f"exchange: {exchange}")
+            print(f"pares_usdt: {pares_usdt}")
 
             for par in pares_usdt:
-                for timeframe in config["timeframes"]:
+                if par not in pares_processados:
+                    logger.info(f"Coletando dados para o par {par}...")
+                    pares_processados.add(par)
+                for timeframe in timeframes:
                     try:
-                        klines = exchange.fetch_ohlcv(par, timeframe)
-                        dados = []
-                        for kline in klines:
-                            dados.append(
-                                {
-                                    "timestamp": kline,  # Corrigido o acesso aos dados do kline
-                                    "open": kline,
-                                    "high": kline,
-                                    "low": kline,
-                                    "close": kline,
-                                    "volume": kline,
-                                }
+                        # Coleta os dados
+                        klines = exchange.fetch_ohlcv(
+                            par, timeframe, params={"category": "linear"}
+                        )
+                        # Formata os dados como uma lista de tuplas
+                        dados = [
+                            (
+                                par,
+                                timeframe,
+                                kline,
+                                kline,
+                                kline,
+                                kline,
+                                kline,
+                                kline,
                             )
+                            for kline in klines
+                        ]
 
                         if not dados:
                             logger.warning(
@@ -92,17 +104,17 @@ if __name__ == "__main__":
                             )
                             continue
 
-                        # Armazena os dados
-                        armazenar_dados(
-                            config, dados, par, timeframe
-                        )  # Passa as configurações para a função armazenar_dados
+                        # Armazena os dados no banco de dados
+                        banco_dados.inserir_dados_klines(dados)
 
+                        # Executa os plugins
                         for plugin in plugins:
                             try:
-                                plugin.executar(dados, par, timeframe)
+                                plugin.executar(dados, par, timeframe, config)
                             except Exception as e:
                                 logger.error(
-                                    f"Erro ao executar plugin {plugin.__class__.__name__} para {par} - {timeframe}: {e}"
+                                    f"Erro ao executar plugin {plugin.__class__.__name__} "
+                                    f"para {par} - {timeframe}: {e}"
                                 )
 
                     except Exception as e:
