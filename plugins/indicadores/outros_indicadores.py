@@ -116,7 +116,7 @@ class OutrosIndicadores(Plugin):
             "S3": s3,
         }
 
-    def gerar_sinal(self, dados, indicador, tipo, par, timeframe, config):
+    def gerar_sinal(self, dados, indicador, tipo, symbol, timeframe, config):
         """
         Gera um sinal de compra ou venda com base no indicador fornecido,
         seguindo as Regras de Ouro.
@@ -125,7 +125,7 @@ class OutrosIndicadores(Plugin):
             dados (list): Lista de candles.
             indicador (str): Nome do indicador ("ichimoku", "fibonacci_retracement" ou "pivot_points").
             tipo (str): Tipo de sinal (depende do indicador).
-            par (str): Par de moedas.
+            symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
             config (ConfigParser): Objeto com as configurações do bot.
 
@@ -139,7 +139,7 @@ class OutrosIndicadores(Plugin):
 
             # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
             alavancagem = self.calculo_alavancagem.calcular_alavancagem(
-                dados[-1], par, timeframe, config
+                dados[-1], symbol, timeframe, config
             )
 
             if indicador == "ichimoku":
@@ -251,13 +251,13 @@ class OutrosIndicadores(Plugin):
                 "take_profit": None,
             }
 
-    def executar(self, dados, par, timeframe, config):
+    def executar(self, dados, symbol, timeframe, config):
         """
         Executa o cálculo dos indicadores, gera sinais de trading e salva os resultados no banco de dados.
 
         Args:
             dados (list): Lista de candles.
-            par (str): Par de moedas.
+            symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
         """
         try:
@@ -272,22 +272,22 @@ class OutrosIndicadores(Plugin):
 
                 # Gera os sinais de compra e venda para o candle atual
                 sinal_ichimoku_compra = self.gerar_sinal(
-                    [candle], "ichimoku", "compra", par, timeframe, config
+                    [candle], "ichimoku", "compra", symbol, timeframe, config
                 )
                 sinal_ichimoku_venda = self.gerar_sinal(
-                    [candle], "ichimoku", "venda", par, timeframe
+                    [candle], "ichimoku", "venda", symbol, timeframe
                 )
                 sinal_fibonacci_suporte = self.gerar_sinal(
-                    [candle], "fibonacci_retracement", "suporte", par, timeframe
+                    [candle], "fibonacci_retracement", "suporte", symbol, timeframe
                 )
                 sinal_fibonacci_resistencia = self.gerar_sinal(
-                    [candle], "fibonacci_retracement", "resistencia", par, timeframe
+                    [candle], "fibonacci_retracement", "resistencia", symbol, timeframe
                 )
                 sinal_pivot_points_suporte = self.gerar_sinal(
-                    [candle], "pivot_points", "suporte", par, timeframe
+                    [candle], "pivot_points", "suporte", symbol, timeframe
                 )
                 sinal_pivot_points_resistencia = self.gerar_sinal(
-                    [candle], "pivot_points", "resistencia", par, timeframe
+                    [candle], "pivot_points", "resistencia", symbol, timeframe
                 )
 
                 # Salva os resultados no banco de dados para o candle atual
@@ -295,7 +295,7 @@ class OutrosIndicadores(Plugin):
                 cursor.execute(
                     """
                     INSERT INTO outros_indicadores (
-                        par, timeframe, timestamp,
+                        symbol, timeframe, timestamp,
                         tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b, chikou_span,
                         fibonacci_23_6, fibonacci_38_2, fibonacci_50, fibonacci_61_8,
                         pivot_point, r1, s1, r2, s2, r3, s3,
@@ -309,7 +309,7 @@ class OutrosIndicadores(Plugin):
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
-                    ON CONFLICT (par, timeframe, timestamp) DO UPDATE
+                    ON CONFLICT (symbol, timeframe, timestamp) DO UPDATE
                     SET tenkan_sen = EXCLUDED.tenkan_sen, kijun_sen = EXCLUDED.kijun_sen, senkou_span_a = EXCLUDED.senkou_span_a,
                         senkou_span_b = EXCLUDED.senkou_span_b, chikou_span = EXCLUDED.chikou_span,
                         fibonacci_23_6 = EXCLUDED.fibonacci_23_6, fibonacci_38_2 = EXCLUDED.fibonacci_38_2,
@@ -323,7 +323,7 @@ class OutrosIndicadores(Plugin):
                         sinal_pivot_points_resistencia = EXCLUDED.sinal_pivot_points_resistencia, stop_loss_pivot_points_resistencia = EXCLUDED.stop_loss_pivot_points_resistencia, take_profit_pivot_points_resistencia = EXCLUDED.take_profit_pivot_points_resistencia;
                     """,
                     (
-                        par,
+                        symbol,
                         timeframe,
                         timestamp,
                         ichimoku["tenkan_sen"][-1],
@@ -365,7 +365,7 @@ class OutrosIndicadores(Plugin):
 
             conn.commit()
             logger.debug(
-                f"Outros indicadores calculados e sinais gerados para {par} - {timeframe}."
+                f"Outros indicadores calculados e sinais gerados para {symbol} - {timeframe}."
             )
 
         except (Exception, psycopg2.Error) as error:

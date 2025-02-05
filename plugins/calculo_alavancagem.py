@@ -14,25 +14,25 @@ class CalculoAlavancagem(Plugin):
         super().__init__()
         self.cache_volatilidade = {}  # Inicializa o cache de volatilidade
 
-    def calcular_alavancagem(self, dados, par, timeframe, config):
+    def calcular_alavancagem(self, dados, symbol, timeframe, config):
         """
         Calcula a alavancagem ideal para a operação, considerando a volatilidade e as Regras de Ouro.
 
         Args:
             dados (list): Lista de candles.
-            par (str): Par de moedas.
+            symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
             config (ConfigParser): Objeto com as configurações do bot.
 
         Returns:
             int: Alavancagem ideal para a operação.
         """
-        # Verifica se a volatilidade já foi calculada para o par e timeframe
-        chave_cache = f"{par}-{timeframe}"
+        # Verifica se a volatilidade já foi calculada para o symbol e timeframe
+        chave_cache = f"{symbol}-{timeframe}"
         if chave_cache not in self.cache_volatilidade:
             # Obter o histórico de preços do ativo
             historico = self.obter_exchange(config).fetch_ohlcv(
-                par, timeframe, limit=500
+                symbol, timeframe, limit=500
             )
 
             # Calcular a volatilidade do ativo (exemplo com ATR)
@@ -54,7 +54,9 @@ class CalculoAlavancagem(Plugin):
         alavancagem = max(1, alavancagem)
 
         # Log da alavancagem calculada (Regra de Ouro: Clareza)
-        logger.debug(f"Alavancagem calculada para {par} - {timeframe}: {alavancagem}")
+        logger.debug(
+            f"Alavancagem calculada para {symbol} - {timeframe}: {alavancagem}"
+        )
 
         return alavancagem
 

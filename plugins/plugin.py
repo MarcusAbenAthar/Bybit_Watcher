@@ -24,7 +24,7 @@ class Plugin:
         """
         pass  # Implementação padrão (sem ação)
 
-    def executar(self, dados, par, timeframe):
+    def executar(self, dados, symbol, timeframe):
         """
         Executa a lógica principal do plugin.
 
@@ -34,7 +34,7 @@ class Plugin:
 
         Args:
             dados (list): Os dados de mercado (klines).
-            par (str): O par de criptomoedas.
+            symbol (str): O symbol de criptomoedas.
             timeframe (str): O timeframe dos dados.
         """
         pass  # Implementação padrão (sem ação)

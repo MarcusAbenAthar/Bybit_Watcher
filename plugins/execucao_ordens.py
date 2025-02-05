@@ -21,13 +21,13 @@ class ExecucaoOrdens(Plugin):
         Exibe os detalhes do sinal de trading de forma organizada.
 
         Args:
-            sinal (dict): Um dicionário com os detalhes do sinal, incluindo o par de moedas,
+            sinal (dict): Um dicionário com os detalhes do sinal, incluindo o symbol de moedas,
                          o timeframe, o tipo de sinal (compra ou venda), o stop loss e o take profit.
         """
         if sinal["sinal"]:
             mensagem = f"""
             Sinal: {sinal['sinal']}
-            Par: {sinal['par']}
+            Par: {sinal['symbol']}
             Timeframe: {sinal['timeframe']}
             Stop Loss: {sinal['stop_loss']:.2f}
             Take Profit: {sinal['take_profit']:.2f}

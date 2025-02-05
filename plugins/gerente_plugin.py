@@ -15,14 +15,14 @@ import os
 import importlib
 
 
-def carregar_plugins(diretorio, config):
+def inicializar_banco_dados(config):
     """
-    Carrega todos os plugins de um determinado diretório,
-    cria o banco de dados e as tabelas necessárias.
+    Inicializa o banco de dados e cria as tabelas.
     """
-    plugins = []
+    logger.debug("Inicializando banco de dados...")
+
     conectar_banco_dados(config)
-    banco_dados = obter_banco_dados()
+    banco_dados = obter_banco_dados(config)
 
     # Cria o banco de dados
     banco_dados.criar_banco_dados(
@@ -38,9 +38,7 @@ def carregar_plugins(diretorio, config):
         config.get("database", "password"),
         config.get("database", "host"),
     )
-
     # Cria as tabelas
-
     banco_dados.criar_tabela("klines")
     banco_dados.criar_tabela("analise_candles")
     banco_dados.criar_tabela("medias_moveis")
@@ -50,6 +48,17 @@ def carregar_plugins(diretorio, config):
     banco_dados.criar_tabela("indicadores_volume")
     banco_dados.criar_tabela("outros_indicadores")
 
+    logger.debug(
+        "Banco de dados inicializado com sucesso!"
+    )  # Adiciona um log no final da função
+
+
+def carregar_plugins(diretorio):
+    """
+    Carrega todos os plugins de um determinado diretório.
+    """
+    plugins = []
+
     for nome_arquivo in os.listdir(diretorio):
         if nome_arquivo.endswith(".py") and not nome_arquivo.startswith("_"):
             nome_modulo = nome_arquivo[:-3]
@@ -57,7 +66,7 @@ def carregar_plugins(diretorio, config):
                 if nome_modulo == "analise_candles":
                     from plugins.analise_candles import AnaliseCandles
 
-                    modulo = AnaliseCandles  # Importa a classe diretamente
+                    modulo = AnaliseCandles
                 else:
                     modulo = importlib.import_module(f"{diretorio}.{nome_modulo}")
 
@@ -65,39 +74,13 @@ def carregar_plugins(diretorio, config):
                     if nome_classe != "Plugin" and nome_classe.isupper():
                         classe_plugin = getattr(modulo, nome_classe)
                         if issubclass(classe_plugin, Plugin):
-                            if nome_modulo == "armazenamento":
-                                # Passar a conexão para o construtor
-                                plugin = classe_plugin(banco_dados)
-                            else:
-                                plugin = classe_plugin()
+                            plugin = classe_plugin()
                             plugins.append(plugin)
                             logger.debug(f"Plugin {nome_classe} carregado com sucesso.")
 
-                            # Define a conexão no plugin
-                            plugin.banco_dados = banco_dados  # Define a conexão aqui
-
-                            # Cria a tabela correspondente ao plugin no banco de dados
-                            if nome_modulo == "analise_candles":
-                                banco_dados.criar_tabela_analise_candles()
-                            elif nome_modulo == "medias_moveis":
-                                banco_dados.criar_tabela_medias_moveis()
-                            elif nome_modulo == "armazenamento":
-                                banco_dados.criar_tabela_klines()
-                            elif nome_modulo == "indicadores_osciladores":
-                                banco_dados.criar_tabela_indicadores_osciladores()
-                            elif nome_modulo == "indicadores_tendencia":
-                                banco_dados.criar_tabela_indicadores_tendencia()
-                            elif nome_modulo == "indicadores_volatilidade":
-                                banco_dados.criar_tabela_indicadores_volatilidade()
-                            elif nome_modulo == "indicadores_volume":
-                                banco_dados.criar_tabela_indicadores_volume()
-                            elif nome_modulo == "outros_indicadores":
-                                banco_dados.criar_tabela_outros_indicadores()
-                            # ... (chamar funções para criar outras tabelas)
-
             except Exception as e:
                 logger.error(f"Erro ao carregar plugin {nome_modulo}: {e}")
-    return plugins, banco_dados
+    return plugins
 
 
 def conectar_banco_dados(config):
@@ -106,30 +89,33 @@ def conectar_banco_dados(config):
 
     Args:
         config (ConfigParser): Objeto com as configurações do bot.
-
-    Returns:
-        psycopg2.connection: A conexão com o banco de dados.
     """
     try:
-        # Chama inicializar() e armazena a conexão
-        banco_dados = obter_banco_dados()
-        conn = banco_dados.inicializar(config)
-        # Retorna a conexão
-        return conn
+        # Obtém a instância da classe BancoDados
+        banco_dados = obter_banco_dados(config)
+
+        # Obtém as configurações do objeto config
+        db_host = config.get("database", "host")
+        db_name = config.get("database", "database")
+        db_user = config.get("database", "user")
+        db_password = config.get("database", "password")
+
+        # Conecta ao banco de dados
+        banco_dados.conectar(db_name, db_user, db_password, db_host)
 
     except Exception as e:
         logger.error(f"Erro ao conectar ao banco de dados: {e}")
         raise
 
 
-def armazenar_dados(config, dados, par, timeframe):
+def armazenar_dados(config, dados, symbol, timeframe):
     """
     Armazena os dados no banco de dados usando o plugin BancoDados.
 
     Args:
         config (ConfigParser): Objeto com as configurações do bot.
         dados (list): Lista de dados a serem armazenados.
-        par (str): Par de moedas.
+        symbol (str): Par de moedas.
         timeframe (str): Timeframe dos dados.
     """
     try:
@@ -137,7 +123,7 @@ def armazenar_dados(config, dados, par, timeframe):
         banco_dados.inserir_dados(
             "klines",
             {
-                "par": par,
+                "symbol": symbol,
                 "timeframe": timeframe,
                 "dados": dados,
             },
@@ -155,10 +141,11 @@ def obter_conexao():
     """
     from plugins.conexao import Conexao
 
-    return Conexao()
+    conexao = Conexao()
+    return conexao
 
 
-def obter_banco_dados():
+def obter_banco_dados(config):
     """
     Fornece acesso ao plugin de Banco de Dados.
 
@@ -167,7 +154,10 @@ def obter_banco_dados():
     """
     from plugins.banco_dados import BancoDados
 
-    return BancoDados()
+    # Cria a instância da classe BancoDados
+    banco_dados = BancoDados(config)
+
+    return banco_dados
 
 
 def obter_analise_candles():
@@ -179,7 +169,8 @@ def obter_analise_candles():
     """
     from plugins.analise_candles import AnaliseCandles
 
-    return AnaliseCandles()
+    analise_candles = AnaliseCandles()
+    return analise_candles
 
 
 def obter_armazenamento():
@@ -191,7 +182,8 @@ def obter_armazenamento():
     """
     from plugins.armazenamento import Armazenamento
 
-    return Armazenamento()
+    armazenamento = Armazenamento()  # Cria a instância da classe Armazenamento
+    return armazenamento  # Retorna a instância da classe Armazenamento
 
 
 def obter_calculo_alavancagem():
@@ -203,7 +195,8 @@ def obter_calculo_alavancagem():
     """
     from plugins.calculo_alavancagem import CalculoAlavancagem
 
-    return CalculoAlavancagem()
+    calculo_alavancagem = CalculoAlavancagem()
+    return calculo_alavancagem  # Retorna a instância da classe CalculoAlavancagem
 
 
 def obter_execucao_ordens():
@@ -215,7 +208,8 @@ def obter_execucao_ordens():
     """
     from plugins.execucao_ordens import ExecucaoOrdens
 
-    return ExecucaoOrdens()
+    execucao_ordens = ExecucaoOrdens()
+    return execucao_ordens
 
 
 def obter_medias_moveis():
@@ -227,7 +221,8 @@ def obter_medias_moveis():
     """
     from plugins.medias_moveis import MediasMoveis
 
-    return MediasMoveis()
+    medias_moveis = MediasMoveis()
+    return medias_moveis
 
 
 def obter_price_action():
@@ -251,7 +246,8 @@ def obter_indicadores_osciladores():
     """
     from plugins.indicadores.indicadores_osciladores import IndicadoresOsciladores
 
-    return IndicadoresOsciladores()
+    indicadores_osciladores = IndicadoresOsciladores()
+    return indicadores_osciladores
 
 
 def obter_indicadores_tendencia():
@@ -263,7 +259,8 @@ def obter_indicadores_tendencia():
     """
     from plugins.indicadores.indicadores_tendencia import IndicadoresTendencia
 
-    return IndicadoresTendencia()
+    indicadores_tendencia = IndicadoresTendencia()
+    return indicadores_tendencia
 
 
 def obter_indicadores_volatilidade():
@@ -275,7 +272,8 @@ def obter_indicadores_volatilidade():
     """
     from plugins.indicadores.indicadores_volatilidade import IndicadoresVolatilidade
 
-    return IndicadoresVolatilidade()
+    indicadores_volatilidade = IndicadoresVolatilidade()
+    return indicadores_volatilidade
 
 
 def obter_indicadores_volume():
@@ -287,7 +285,8 @@ def obter_indicadores_volume():
     """
     from plugins.indicadores.indicadores_volume import IndicadoresVolume
 
-    return IndicadoresVolume()
+    indicadores_volume = IndicadoresVolume()
+    return indicadores_volume
 
 
 def obter_outros_indicadores():
@@ -299,4 +298,5 @@ def obter_outros_indicadores():
     """
     from plugins.indicadores.outros_indicadores import OutrosIndicadores
 
-    return OutrosIndicadores()
+    outros_indicadores = OutrosIndicadores()
+    return outros_indicadores

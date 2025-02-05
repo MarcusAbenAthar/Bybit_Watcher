@@ -16,7 +16,7 @@ class Armazenamento(Plugin):
             banco_dados  # Armazenar a conexão    def inicializar(self, config):
         )
 
-    def executar(self, dados, par, timeframe):
+    def executar(self, dados, symbol, timeframe):
         """
         Insere os dados das velas no banco de dados.
         """
@@ -36,18 +36,20 @@ class Armazenamento(Plugin):
                 try:
                     cursor.execute(
                         """
-                        INSERT INTO klines (par, timeframe, timestamp, open, high, low, close, volume)
+                        INSERT INTO klines (symbol, timeframe, timestamp, open, high, low, close, volume)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (par, timeframe, timestamp) DO NOTHING;  -- Evita duplicatas
+                        ON CONFLICT (symbol, timeframe, timestamp) DO NOTHING;  -- Evita duplicatas
                         """,
-                        (par, timeframe, timestamp, open, high, low, close, volume),
+                        (symbol, timeframe, timestamp, open, high, low, close, volume),
                     )
                 except Exception as e:
                     logger.error(f"Erro ao inserir kline: {e}")
                     conn.rollback()  # Faz o rollback da transação em caso de erro
 
             conn.commit()
-            logger.debug(f"Dados de {par} - {timeframe} inseridos no banco de dados.")
+            logger.debug(
+                f"Dados de {symbol} - {timeframe} inseridos no banco de dados."
+            )
 
         except (Exception, psycopg2.Error) as error:
             logger.error(f"Erro ao inserir dados no PostgreSQL: {error}")

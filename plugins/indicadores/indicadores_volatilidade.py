@@ -58,7 +58,7 @@ class IndicadoresVolatilidade(Plugin):
 
         return atr
 
-    def gerar_sinal(self, dados, indicador, tipo, par, timeframe, config):
+    def gerar_sinal(self, dados, indicador, tipo, symbol, timeframe, config):
         """
         Gera um sinal de compra ou venda com base no indicador de volatilidade fornecido.
 
@@ -66,7 +66,7 @@ class IndicadoresVolatilidade(Plugin):
             dados (list): Lista de candles.
             indicador (str): Nome do indicador de volatilidade ("bandas_de_bollinger" ou "atr").
             tipo (str): Tipo de sinal (depende do indicador).
-            par (str): Par de moedas.
+            symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
             config (ConfigParser): Objeto com as configurações do bot.
 
@@ -80,7 +80,7 @@ class IndicadoresVolatilidade(Plugin):
 
             # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
             alavancagem = self.calculo_alavancagem.calcular_alavancagem(
-                dados[-1], par, timeframe, config
+                dados[-1], symbol, timeframe, config
             )
 
             if indicador == "bandas_de_bollinger":
@@ -128,13 +128,13 @@ class IndicadoresVolatilidade(Plugin):
                 "take_profit": None,
             }
 
-    def executar(self, dados, par, timeframe, config):
+    def executar(self, dados, symbol, timeframe, config):
         """
         Executa o cálculo dos indicadores de volatilidade, gera sinais de trading e salva os resultados no banco de dados.
 
         Args:
             dados (list): Lista de candles.
-            par (str): Par de moedas.
+            symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
             config (ConfigParser): Objeto com as configurações do bot.
         """
@@ -155,7 +155,7 @@ class IndicadoresVolatilidade(Plugin):
                     [candle],
                     "bandas_de_bollinger",
                     "rompimento_superior",
-                    par,
+                    symbol,
                     timeframe,
                     config,
                 )
@@ -163,15 +163,15 @@ class IndicadoresVolatilidade(Plugin):
                     [candle],
                     "bandas_de_bollinger",
                     "rompimento_inferior",
-                    par,
+                    symbol,
                     timeframe,
                     config,
                 )
                 sinal_atr_rompimento_alta = self.gerar_sinal(
-                    [candle], "atr", "rompimento_alta", par, timeframe, config
+                    [candle], "atr", "rompimento_alta", symbol, timeframe, config
                 )
                 sinal_atr_rompimento_baixa = self.gerar_sinal(
-                    [candle], "atr", "rompimento_baixa", par, timeframe, config
+                    [candle], "atr", "rompimento_baixa", symbol, timeframe, config
                 )
 
                 # Salva os resultados no banco de dados para o candle atual
@@ -179,7 +179,7 @@ class IndicadoresVolatilidade(Plugin):
                 cursor.execute(
                     """
                     INSERT INTO indicadores_volatilidade (
-                        par, timeframe, timestamp, bandas_superior, bandas_media, bandas_inferior, atr,
+                        symbol, timeframe, timestamp, bandas_superior, bandas_media, bandas_inferior, atr,
                         sinal_bandas_rompimento_superior, stop_loss_bandas_rompimento_superior, take_profit_bandas_rompimento_superior,
                         sinal_bandas_rompimento_inferior, stop_loss_bandas_rompimento_inferior, take_profit_bandas_rompimento_inferior,
                         sinal_atr_rompimento_alta, stop_loss_atr_rompimento_alta, take_profit_atr_rompimento_alta,
@@ -188,7 +188,7 @@ class IndicadoresVolatilidade(Plugin):
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
-                    ON CONFLICT (par, timeframe, timestamp) DO UPDATE
+                    ON CONFLICT (symbol, timeframe, timestamp) DO UPDATE
                     SET bandas_superior = EXCLUDED.bandas_superior, bandas_media = EXCLUDED.bandas_media, bandas_inferior = EXCLUDED.bandas_inferior, atr = EXCLUDED.atr,
                         sinal_bandas_rompimento_superior = EXCLUDED.sinal_bandas_rompimento_superior, stop_loss_bandas_rompimento_superior = EXCLUDED.stop_loss_bandas_rompimento_superior, take_profit_bandas_rompimento_superior = EXCLUDED.take_profit_bandas_rompimento_superior,
                         sinal_bandas_rompimento_inferior = EXCLUDED.sinal_bandas_rompimento_inferior, stop_loss_bandas_rompimento_inferior = EXCLUDED.stop_loss_bandas_rompimento_inferior, take_profit_bandas_rompimento_inferior = EXCLUDED.take_profit_bandas_rompimento_inferior,
@@ -196,7 +196,7 @@ class IndicadoresVolatilidade(Plugin):
                         sinal_atr_rompimento_baixa = EXCLUDED.sinal_atr_rompimento_baixa, stop_loss_atr_rompimento_baixa = EXCLUDED.stop_loss_atr_rompimento_baixa, take_profit_atr_rompimento_baixa = EXCLUDED.take_profit_atr_rompimento_baixa;
                     """,
                     (
-                        par,
+                        symbol,
                         timeframe,
                         timestamp,
                         bandas_superior[-1],
@@ -220,7 +220,7 @@ class IndicadoresVolatilidade(Plugin):
 
             conn.commit()
             logger.debug(
-                f"Indicadores de volatilidade calculados e sinais gerados para {par} - {timeframe}."
+                f"Indicadores de volatilidade calculados e sinais gerados para {symbol} - {timeframe}."
             )
 
         except (Exception, psycopg2.Error) as error:

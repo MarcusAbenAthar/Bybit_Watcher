@@ -45,13 +45,13 @@ class PriceAction(Plugin):
         # ... (seu código para gerar sinais de compra/venda)
         raise NotImplementedError  # Lança uma exceção para indicar que o método ainda não foi implementado
 
-    def executar(self, dados, par, timeframe):
+    def executar(self, dados, symbol, timeframe):
         """
         Executa a análise de price action e salva os resultados no banco de dados.
 
         Args:
             dados (list): Lista de candles.
-            par (str): Par de moedas.
+            symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
         """
         try:
@@ -66,15 +66,15 @@ class PriceAction(Plugin):
                     # ... (código para salvar os resultados no banco de dados)
 
                     logger.info(
-                        f"Sinal de {sinal['sinal']} gerado para {par} - {timeframe} com padrão {padrao}"
+                        f"Sinal de {sinal['sinal']} gerado para {symbol} - {timeframe} com padrão {padrao}"
                     )
                 else:
                     logger.info(
-                        f"Nenhum sinal gerado para {par} - {timeframe} com padrão {padrao}"
+                        f"Nenhum sinal gerado symbola {symbol} - {timeframe} com padrão {padrao}"
                     )
             else:
                 logger.info(
-                    f"Nenhum padrão de price action identificado para {par} - {timeframe}"
+                    f"Nenhum padrão de price action identificado para {symbol} - {timeframe}"
                 )
 
         except Exception as e:

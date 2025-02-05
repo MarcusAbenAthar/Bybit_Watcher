@@ -39,14 +39,14 @@ class MediasMoveis(Plugin):
         else:
             raise ValueError("Tipo de média móvel inválido.")
 
-    def gerar_sinal(self, dados, medias_moveis, par, timeframe, config):
+    def gerar_sinal(self, dados, medias_moveis, symbol, timeframe, config):
         """
         Gera um sinal de compra ou venda com base nos cruzamentos de médias móveis.
 
         Args:
             dados (list): Lista de candles.
             medias_moveis (list): Lista de médias móveis.
-            par (str): Par de moedas.
+            symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
 
         Returns:
@@ -73,7 +73,7 @@ class MediasMoveis(Plugin):
 
             # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
             alavancagem = self.calculo_alavancagem.calcular_alavancagem(
-                dados[-1], par, timeframe, config
+                dados[-1], symbol, timeframe, config
             )
 
         # Calcula o stop loss e o take profit, considerando a alavancagem
@@ -98,13 +98,13 @@ class MediasMoveis(Plugin):
             "take_profit": take_profit,
         }
 
-    def executar(self, dados, par, timeframe):
+    def executar(self, dados, symbol, timeframe):
         """
         Executa o cálculo das médias móveis, gera sinais de trading e salva os resultados no banco de dados.
 
         Args:
             dados (list): Lista de candles.
-            par (str): Par de moedas.
+            symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
         """
         try:
@@ -118,7 +118,7 @@ class MediasMoveis(Plugin):
 
             # Gera o sinal de compra ou venda
             sinal = self.gerar_sinal(
-                dados, [media_movel_curta, media_movel_longa], par, timeframe
+                dados, [media_movel_curta, media_movel_longa], symbol, timeframe
             )
 
             if sinal[
@@ -127,11 +127,11 @@ class MediasMoveis(Plugin):
                 # Salva os dados no banco de dados
                 timestamp = int(
                     dados[-1][0] / 1000
-                )  # Converte o timestamp para segundos
+                )  # Converte o timestamp symbola segundos
                 self.banco_dados.inserir_dados(
                     "medias_moveis",
                     {  # Usando a função inserir_dados do Core
-                        "par": par,
+                        "symbol": symbol,
                         "timeframe": timeframe,
                         "timestamp": timestamp,
                         "sinal": sinal["sinal"],
@@ -141,10 +141,10 @@ class MediasMoveis(Plugin):
                 )
 
                 logger.debug(
-                    f"Médias móveis calculadas e sinais gerados para {par} - {timeframe}."
+                    f"Médias móveis calculadas e sinais gerados para {symbol} - {timeframe}."
                 )
             else:
-                logger.debug(f"Nenhum sinal gerado para {par} - {timeframe}.")
+                logger.debug(f"Nenhum sinal gerado para {symbol} - {timeframe}.")
 
         except Exception as error:
             logger.error(f"Erro ao calcular médias móveis: {error}")

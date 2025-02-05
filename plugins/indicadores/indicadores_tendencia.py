@@ -103,7 +103,7 @@ class IndicadoresTendencia(Plugin):
         low = [candle[3] for candle in dados]
         return talib.AROON(high, low, timeperiod=periodo)
 
-    def calcular_rsi(self, dados, par, timeframe, periodo=14):
+    def calcular_rsi(self, dados, symbol, timeframe, periodo=14):
         """
         Calcula o RSI (Relative Strength Index) para os dados fornecidos, usando a biblioteca TA-Lib.
         Considera diferentes períodos de RSI para diferentes timeframes e ajusta o período dinamicamente
@@ -111,7 +111,7 @@ class IndicadoresTendencia(Plugin):
 
         Args:
             dados (list): Lista de candles.
-            par (str): Par de moedas.
+            symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
             periodo (int): Período base do RSI.
 
@@ -143,7 +143,7 @@ class IndicadoresTendencia(Plugin):
         return rsi
 
     def calcular_macd(
-        self, dados, par, timeframe, fastperiod=12, slowperiod=26, signalperiod=9
+        self, dados, symbol, timeframe, fastperiod=12, slowperiod=26, signalperiod=9
     ):
         """
         Calcula o MACD (Moving Average Convergence Divergence) para os dados fornecidos,
@@ -152,7 +152,7 @@ class IndicadoresTendencia(Plugin):
 
         Args:
             dados (list): Lista de candles.
-            par (str): Par de moedas.
+            symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
             fastperiod (int): Período base da média móvel rápida.
             slowperiod (int): Período base da média móvel lenta.
@@ -247,7 +247,7 @@ class IndicadoresTendencia(Plugin):
         low = [candle[3] for candle in dados]
         return talib.SAR(high, low, acceleration=acceleration, maximum=maximum)
 
-    def gerar_sinal(self, dados, indicador, tipo, par, timeframe, config):
+    def gerar_sinal(self, dados, indicador, tipo, symbol, timeframe, config):
         """
         Gera um sinal de compra ou venda com base no indicador de tendência fornecido,
         seguindo as Regras de Ouro.
@@ -256,7 +256,7 @@ class IndicadoresTendencia(Plugin):
             dados (list): Lista de candles.
             indicador (str): Nome do indicador de tendência.
             tipo (str): Tipo de sinal (depende do indicador).
-            par (str): Par de moedas.
+            symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
             config (ConfigParser): Objeto com as configurações do bot.
 
@@ -270,12 +270,12 @@ class IndicadoresTendencia(Plugin):
 
             # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
             alavancagem = self.calculo_alavancagem.calcular_alavancagem(
-                dados[-1], par, timeframe, config
+                dados[-1], symbol, timeframe, config
             )
 
             # ----- Lógica para o RSI -----
             if indicador == "rsi":
-                rsi = self.calcular_rsi(dados, par, timeframe)
+                rsi = self.calcular_rsi(dados, symbol, timeframe)
                 if tipo == "sobrecompra" and rsi[-1] > 70:
                     sinal = "venda"
                 elif tipo == "sobrevenda" and rsi[-1] < 30:
@@ -283,7 +283,7 @@ class IndicadoresTendencia(Plugin):
 
             # ----- Lógica para o MACD -----
             elif indicador == "macd":
-                macd, signal, hist = self.calcular_macd(dados, par, timeframe)
+                macd, signal, hist = self.calcular_macd(dados, symbol, timeframe)
                 if tipo == "cruzamento_acima" and macd[-1] > signal[-1]:
                     sinal = "compra"
                 elif tipo == "cruzamento_abaixo" and macd[-1] < signal[-1]:
@@ -358,13 +358,13 @@ class IndicadoresTendencia(Plugin):
                 "take_profit": None,
             }
 
-    def executar(self, dados, par, timeframe, config):
+    def executar(self, dados, symbol, timeframe, config):
         """
         Executa o cálculo dos indicadores de tendência, gera sinais de trading e salva os resultados no banco de dados.
 
         Args:
             dados (list): Lista de candles.
-            par (str): Par de moedas.
+            symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
         """
         try:
@@ -373,9 +373,9 @@ class IndicadoresTendencia(Plugin):
 
             for candle in dados:
                 # Calcula os indicadores de tendência para o candle atual
-                rsi = self.calcular_rsi([candle], par, timeframe)
+                rsi = self.calcular_rsi([candle], symbol, timeframe)
                 macd, macd_signal, macd_hist = self.calcular_macd(
-                    [candle], par, timeframe
+                    [candle], symbol, timeframe
                 )
                 adx = self.calcular_adx([candle])
                 aroon_up, aroon_down = self.calcular_aroon([candle])
@@ -386,53 +386,53 @@ class IndicadoresTendencia(Plugin):
 
                 # Gera os sinais de compra e venda para o candle atual
                 sinal_rsi_sobrecompra = self.gerar_sinal(
-                    [candle], "rsi", "sobrecompra", par, timeframe, config
+                    [candle], "rsi", "sobrecompra", symbol, timeframe, config
                 )
 
                 sinal_rsi_sobrevenda = self.gerar_sinal(
-                    [candle], "rsi", "sobrevenda", par, timeframe
+                    [candle], "rsi", "sobrevenda", symbol, timeframe
                 )
                 sinal_macd_cruzamento_acima = self.gerar_sinal(
-                    [candle], "macd", "cruzamento_acima", par, timeframe
+                    [candle], "macd", "cruzamento_acima", symbol, timeframe
                 )
                 sinal_macd_cruzamento_abaixo = self.gerar_sinal(
-                    [candle], "macd", "cruzamento_abaixo", par, timeframe
+                    [candle], "macd", "cruzamento_abaixo", symbol, timeframe
                 )
                 sinal_adx_forte_alta = self.gerar_sinal(
-                    [candle], "adx", "forte_alta", par, timeframe
+                    [candle], "adx", "forte_alta", symbol, timeframe
                 )
                 sinal_adx_forte_baixa = self.gerar_sinal(
-                    [candle], "adx", "forte_baixa", par, timeframe
+                    [candle], "adx", "forte_baixa", symbol, timeframe
                 )
                 sinal_aroon_cruzamento_acima = self.gerar_sinal(
-                    [candle], "aroon", "cruzamento_acima", par, timeframe
+                    [candle], "aroon", "cruzamento_acima", symbol, timeframe
                 )
                 sinal_aroon_cruzamento_abaixo = self.gerar_sinal(
-                    [candle], "aroon", "cruzamento_abaixo", par, timeframe
+                    [candle], "aroon", "cruzamento_abaixo", symbol, timeframe
                 )
                 sinal_sar_reversao_alta = self.gerar_sinal(
-                    [candle], "sar_parabolico", "reversao_alta", par, timeframe
+                    [candle], "sar_parabolico", "reversao_alta", symbol, timeframe
                 )
                 sinal_sar_reversao_baixa = self.gerar_sinal(
-                    [candle], "sar_parabolico", "reversao_baixa", par, timeframe
+                    [candle], "sar_parabolico", "reversao_baixa", symbol, timeframe
                 )
                 sinal_tema_cruzamento_acima = self.gerar_sinal(
-                    [candle], "tema", "cruzamento_acima", par, timeframe
+                    [candle], "tema", "cruzamento_acima", symbol, timeframe
                 )
                 sinal_tema_cruzamento_abaixo = self.gerar_sinal(
-                    [candle], "tema", "cruzamento_abaixo", par, timeframe
+                    [candle], "tema", "cruzamento_abaixo", symbol, timeframe
                 )
                 sinal_kama_cruzamento_acima = self.gerar_sinal(
-                    [candle], "kama", "cruzamento_acima", par, timeframe
+                    [candle], "kama", "cruzamento_acima", symbol, timeframe
                 )
                 sinal_kama_cruzamento_abaixo = self.gerar_sinal(
-                    [candle], "kama", "cruzamento_abaixo", par, timeframe
+                    [candle], "kama", "cruzamento_abaixo", symbol, timeframe
                 )
                 sinal_macd_histograma_cruzamento_acima = self.gerar_sinal(
-                    [candle], "macd_histograma", "cruzamento_acima", par, timeframe
+                    [candle], "macd_histograma", "cruzamento_acima", symbol, timeframe
                 )
                 sinal_macd_histograma_cruzamento_abaixo = self.gerar_sinal(
-                    [candle], "macd_histograma", "cruzamento_abaixo", par, timeframe
+                    [candle], "macd_histograma", "cruzamento_abaixo", symbol, timeframe
                 )
 
                 # Salva os resultados no banco de dados para o candle atual
@@ -440,7 +440,7 @@ class IndicadoresTendencia(Plugin):
                 cursor.execute(
                     """
                     INSERT INTO indicadores_tendencia (
-                        par, timeframe, timestamp, rsi, macd, macd_signal, macd_hist, adx, aroon_up, aroon_down, sar, tema, kama, macd_histograma,
+                        symbol, timeframe, timestamp, rsi, macd, macd_signal, macd_hist, adx, aroon_up, aroon_down, sar, tema, kama, macd_histograma,
                         sinal_rsi_sobrecompra, stop_loss_rsi_sobrecompra, take_profit_rsi_sobrecompra,
                         sinal_rsi_sobrevenda, stop_loss_rsi_sobrevenda, take_profit_rsi_sobrevenda,
                         sinal_macd_cruzamento_acima, stop_loss_macd_cruzamento_acima, take_profit_macd_cruzamento_acima,
@@ -461,7 +461,7 @@ class IndicadoresTendencia(Plugin):
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
-                    ON CONFLICT (par, timeframe, timestamp) DO UPDATE SET
+                    ON CONFLICT (symbol, timeframe, timestamp) DO UPDATE SET
                     rsi = EXCLUDED.rsi,
                     macd = EXCLUDED.macd,
                     macd_signal = EXCLUDED.macd_signal,
@@ -523,7 +523,7 @@ class IndicadoresTendencia(Plugin):
                     take_profit_macd_histograma_cruzamento_abaixo = EXCLUDED.take_profit_macd_histograma_cruzamento_abaixo
                 )""",
                     (
-                        par,
+                        symbol,
                         timeframe,
                         timestamp,
                         rsi[-1],
@@ -590,7 +590,7 @@ class IndicadoresTendencia(Plugin):
 
             conn.commit()
             logger.debug(
-                f"Indicadores de tendência calculados e sinais gerados para {par} - {timeframe}."
+                f"Indicadores de tendência calculados e sinais gerados para {symbol} - {timeframe}."
             )
 
         except (Exception, psycopg2.Error) as error:

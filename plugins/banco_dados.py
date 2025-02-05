@@ -11,10 +11,15 @@ class BancoDados(Plugin):
     criar as tabelas necessárias e executar operações de busca e inserção de dados.
     """
 
-    def __init__(self):
+    def __init__(self, config):
         """Inicializa o plugin BancoDados."""
         super().__init__()
-        # self.conn = None
+        self.conectar(
+            config.get("database", "database"),
+            config.get("database", "user"),
+            config.get("database", "password"),
+            config.get("database", "host"),
+        )
 
     def conectar(self, db_name, db_user, db_password, db_host="localhost"):
         """
@@ -84,9 +89,7 @@ class BancoDados(Plugin):
         """
         try:
             # Conecta ao banco de dados padrão (postgres)
-            conn = self.conectar(
-                "postgres", db_user, db_password
-            )  # Reutiliza a função conectar
+            conn = self.conectar("postgres", db_user, db_password)
             conn.autocommit = True
             cursor = conn.cursor()
 
@@ -99,11 +102,7 @@ class BancoDados(Plugin):
                 logger.info(f"Criando o banco de dados '{db_name}'...")
                 cursor.execute(f"CREATE DATABASE {db_name}")
                 logger.info(f"Banco de dados '{db_name}' criado com sucesso!")
-            else:
-                logger.info(f"Banco de dados '{db_name}' já existe.")
-
             cursor.close()
-            conn.close()
 
         except (Exception, psycopg2.Error) as error:
             logger.error(f"Erro ao criar banco de dados '{db_name}': {error}")
@@ -117,7 +116,7 @@ class BancoDados(Plugin):
                 f"""
                 CREATE TABLE {schema}.klines (
                     id SERIAL PRIMARY KEY,
-                    par TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
                     timeframe TEXT NOT NULL,
                     timestamp BIGINT NOT NULL,
                     open REAL NOT NULL,
@@ -125,7 +124,7 @@ class BancoDados(Plugin):
                     low REAL NOT NULL,
                     close REAL NOT NULL,
                     volume REAL NOT NULL,
-                    UNIQUE (par, timeframe, timestamp)
+                    UNIQUE (symbol, timeframe, timestamp)
                 );
                 """
             )
@@ -143,7 +142,7 @@ class BancoDados(Plugin):
                 f"""
                 CREATE TABLE {schema}.analise_candles (
                     id SERIAL PRIMARY KEY,
-                    par TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
                     timeframe TEXT NOT NULL,
                     timestamp BIGINT NOT NULL,
                     padrao TEXT,
@@ -151,7 +150,7 @@ class BancoDados(Plugin):
                     sinal TEXT,
                     stop_loss REAL,
                     take_profit REAL,
-                    UNIQUE (par, timeframe, timestamp)
+                    UNIQUE (symbol timeframe, timestamp)
                 );
                 """
             )
@@ -169,13 +168,13 @@ class BancoDados(Plugin):
                 f"""
                 CREATE TABLE {schema}.medias_moveis (
                     id SERIAL PRIMARY KEY,
-                    par TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
                     timeframe TEXT NOT NULL,
                     timestamp BIGINT NOT NULL,
                     sinal TEXT,
                     stop_loss REAL,
                     take_profit REAL,
-                    UNIQUE (par, timeframe, timestamp)
+                    UNIQUE (symbol timeframe, timestamp)
                 );
                 """
             )
@@ -193,13 +192,13 @@ class BancoDados(Plugin):
                 f"""
                 CREATE TABLE {schema}.indicadores_osciladores (
                     id SERIAL PRIMARY KEY,
-                    par TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
                     timeframe TEXT NOT NULL,
                     timestamp BIGINT NOT NULL,
                     nome_indicador TEXT NOT NULL,
                     valor REAL,
                     sinal TEXT,
-                    UNIQUE (par, timeframe, timestamp, nome_indicador)
+                    UNIQUE (symbol timeframe, timestamp, nome_indicador)
                 );
                 """
             )
@@ -219,13 +218,13 @@ class BancoDados(Plugin):
                 f"""
                 CREATE TABLE {schema}.indicadores_tendencia (
                     id SERIAL PRIMARY KEY,
-                    par TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
                     timeframe TEXT NOT NULL,
                     timestamp BIGINT NOT NULL,
                     nome_indicador TEXT NOT NULL,
                     valor REAL,
                     sinal TEXT,
-                    UNIQUE (par, timeframe, timestamp, nome_indicador)
+                    UNIQUE (symbol timeframe, timestamp, nome_indicador)
                 );
                 """
             )
@@ -243,12 +242,12 @@ class BancoDados(Plugin):
                 f"""
                 CREATE TABLE {schema}.indicadores_volatilidade (
                     id SERIAL PRIMARY KEY,
-                    par TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
                     timeframe TEXT NOT NULL,
                     timestamp BIGINT NOT NULL,
                     nome_indicador TEXT NOT NULL,
                     valor REAL,
-                    UNIQUE (par, timeframe, timestamp, nome_indicador)
+                    UNIQUE (symbol timeframe, timestamp, nome_indicador)
                 );
                 """
             )
@@ -268,12 +267,12 @@ class BancoDados(Plugin):
                 f"""
                 CREATE TABLE {schema}.indicadores_volume (
                     id SERIAL PRIMARY KEY,
-                    par TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
                     timeframe TEXT NOT NULL,
                     timestamp BIGINT NOT NULL,
                     nome_indicador TEXT NOT NULL,
                     valor REAL,
-                    UNIQUE (par, timeframe, timestamp, nome_indicador)
+                    UNIQUE (symbol timeframe, timestamp, nome_indicador)
                 );
                 """
             )
@@ -291,12 +290,12 @@ class BancoDados(Plugin):
                 f"""
                 CREATE TABLE {schema}.outros_indicadores (
                     id SERIAL PRIMARY KEY,
-                    par TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
                     timeframe TEXT NOT NULL,
                     timestamp BIGINT NOT NULL,
                     nome_indicador TEXT NOT NULL,
                     valor REAL,
-                    UNIQUE (par, timeframe, timestamp, nome_indicador)
+                    UNIQUE (symbol timeframe, timestamp, nome_indicador)
                 );
                 """
             )
@@ -357,9 +356,6 @@ class BancoDados(Plugin):
                     logger.error(f"Nome de tabela inválido: {nome_tabela}")
                     raise ValueError(f"Nome de tabela inválido: {nome_tabela}")
 
-            else:
-                logger.info(f"Tabela '{schema}.{nome_tabela}' já existe.")
-
         except psycopg2.Error as e:
             logger.error(f"Erro ao criar tabela '{schema}.{nome_tabela}': {e}")
             self.conn.rollback()  # Correção: Garante que a transação não fique em estado inválido
@@ -394,39 +390,69 @@ class BancoDados(Plugin):
 
     def inserir_dados_klines(self, dados):
         """Insere dados na tabela klines, evitando duplicidades."""
+        cursor = None
         try:
             cursor = self.conn.cursor()
-            sql = f"""
-                INSERT INTO klines (par, timeframe, timestamp, open, high, low, close, volume)
+
+            # SQL para inserção
+            sql = """
+                INSERT INTO klines (symbol timeframe, timestamp, open, high, low, close, volume)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (par, timeframe, timestamp) DO NOTHING;
+                ON CONFLICT (symbol timeframe, timestamp) DO NOTHING;
             """
 
-            for par, timeframe, timestamp, open_, high, low, close, volume in dados:
-                cursor.execute(
-                    sql, (par, timeframe, timestamp, open_, high, low, close, volume)
-                )
+            for dado in dados:
+                # O primeiro e o segundo elementos são o symbol e o timeframe
+                symbol, timeframe = dado[0], dado[1]
 
+                # Itera sobre os dados de candles (que são as listas no terceiro elemento)
+                for candle in dado[2:]:  # dado[2:] pega tudo após o symbol e timeframe
+                    if len(candle) != 6:
+                        logger.error(
+                            f"Dado inválido para o symbol {symbol}, esperado 6 valores no candle, mas recebido {len(candle)}: {candle}"
+                        )
+                        continue  # Ignora o candle inválido
+
+                    # Extrai os dados do candle
+                    timestamp, open_, high, low, close, volume = candle
+                    timestamp = int(
+                        timestamp / 1000
+                    )  # Converte timestamp para segundos
+
+                    # Executa a inserção
+                    cursor.execute(
+                        sql,
+                        (symbol, timeframe, timestamp, open_, high, low, close, volume),
+                    )
+
+            # Commit da transação
             self.conn.commit()
-            cursor.close()
+
         except (Exception, psycopg2.Error) as error:
+            if self.conn:
+                self.conn.rollback()  # Rollback da transação em caso de erro
             logger.error(f"Erro ao inserir dados na tabela klines: {error}")
+
+        finally:
+            # Garantir que o cursor seja fechado
+            if cursor:
+                cursor.close()
 
     def inserir_dados_analise_candles(self, dados):
         """Insere dados na tabela analise_candles."""
         try:
             cursor = self.conn.cursor()
             sql = f"""
-                INSERT INTO analise_candles (par, timeframe, timestamp, padrao, classificacao, sinal, stop_loss, take_profit)
+                INSERT INTO analise_candles (symbol timeframe, timestamp, padrao, classificacao, sinal, stop_loss, take_profit)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (par, timeframe, timestamp) DO UPDATE
+                ON CONFLICT (symbol timeframe, timestamp) DO UPDATE
                 SET padrao = EXCLUDED.padrao, classificacao = EXCLUDED.classificacao,
                     sinal = EXCLUDED.sinal, stop_loss = EXCLUDED.stop_loss, take_profit = EXCLUDED.take_profit;
             """
             cursor.execute(
                 sql,
                 (
-                    dados["par"],
+                    dados["symbol"],
                     dados["timeframe"],
                     dados["timestamp"],
                     dados["padrao"],
@@ -446,15 +472,15 @@ class BancoDados(Plugin):
         try:
             cursor = self.conn.cursor()
             sql = f"""
-                INSERT INTO medias_moveis (par, timeframe, timestamp, sinal, stop_loss, take_profit)
+                INSERT INTO medias_moveis (symbol timeframe, timestamp, sinal, stop_loss, take_profit)
                 VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (par, timeframe, timestamp) DO UPDATE
+                ON CONFLICT (symbol timeframe, timestamp) DO UPDATE
                 SET sinal = EXCLUDED.sinal, stop_loss = EXCLUDED.stop_loss, take_profit = EXCLUDED.take_profit;
             """
             cursor.execute(
                 sql,
                 (
-                    dados["par"],
+                    dados["symbol"],
                     dados["timeframe"],
                     dados["timestamp"],
                     dados["sinal"],
@@ -472,15 +498,15 @@ class BancoDados(Plugin):
         try:
             cursor = self.conn.cursor()
             sql = f"""
-                INSERT INTO indicadores_osciladores (par, timeframe, timestamp, nome_indicador, valor, sinal)
+                INSERT INTO indicadores_osciladores (symbol timeframe, timestamp, nome_indicador, valor, sinal)
                 VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (par, timeframe, timestamp, nome_indicador) DO UPDATE
+                ON CONFLICT (symbol timeframe, timestamp, nome_indicador) DO UPDATE
                 SET valor = EXCLUDED.valor, sinal = EXCLUDED.sinal;
             """
             cursor.execute(
                 sql,
                 (
-                    dados["par"],
+                    dados["symbol"],
                     dados["timeframe"],
                     dados["timestamp"],
                     dados["nome_indicador"],
@@ -500,15 +526,15 @@ class BancoDados(Plugin):
         try:
             cursor = self.conn.cursor()
             sql = f"""
-                INSERT INTO indicadores_tendencia (par, timeframe, timestamp, nome_indicador, valor, sinal)
+                INSERT INTO indicadores_tendencia (symbol timeframe, timestamp, nome_indicador, valor, sinal)
                 VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (par, timeframe, timestamp, nome_indicador) DO UPDATE
+                ON CONFLICT (symbol timeframe, timestamp, nome_indicador) DO UPDATE
                 SET valor = EXCLUDED.valor, sinal = EXCLUDED.sinal;
             """
             cursor.execute(
                 sql,
                 (
-                    dados["par"],
+                    dados["symbol"],
                     dados["timeframe"],
                     dados["timestamp"],
                     dados["nome_indicador"],
@@ -528,15 +554,15 @@ class BancoDados(Plugin):
         try:
             cursor = self.conn.cursor()
             sql = f"""
-                INSERT INTO indicadores_volatilidade (par, timeframe, timestamp, nome_indicador, valor)
+                INSERT INTO indicadores_volatilidade (symbol timeframe, timestamp, nome_indicador, valor)
                 VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (par, timeframe, timestamp, nome_indicador) DO UPDATE
+                ON CONFLICT (symbol timeframe, timestamp, nome_indicador) DO UPDATE
                 SET valor = EXCLUDED.valor;
             """
             cursor.execute(
                 sql,
                 (
-                    dados["par"],
+                    dados["symbol"],
                     dados["timeframe"],
                     dados["timestamp"],
                     dados["nome_indicador"],
@@ -555,15 +581,15 @@ class BancoDados(Plugin):
         try:
             cursor = self.conn.cursor()
             sql = f"""
-                INSERT INTO indicadores_volume (par, timeframe, timestamp, nome_indicador, valor)
+                INSERT INTO indicadores_volume (symbol timeframe, timestamp, nome_indicador, valor)
                 VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (par, timeframe, timestamp, nome_indicador) DO UPDATE
+                ON CONFLICT (symbol timeframe, timestamp, nome_indicador) DO UPDATE
                 SET valor = EXCLUDED.valor;
             """
             cursor.execute(
                 sql,
                 (
-                    dados["par"],
+                    dados["symbol"],
                     dados["timeframe"],
                     dados["timestamp"],
                     dados["nome_indicador"],
@@ -580,15 +606,15 @@ class BancoDados(Plugin):
         try:
             cursor = self.conn.cursor()
             sql = f"""
-                INSERT INTO outros_indicadores (par, timeframe, timestamp, nome_indicador, valor)
+                INSERT INTO outros_indicadores (symbol timeframe, timestamp, nome_indicador, valor)
                 VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (par, timeframe, timestamp, nome_indicador) DO UPDATE
+                ON CONFLICT (symbol timeframe, timestamp, nome_indicador) DO UPDATE
                 SET valor = EXCLUDED.valor;
             """
             cursor.execute(
                 sql,
                 (
-                    dados["par"],
+                    dados["symbol"],
                     dados["timeframe"],
                     dados["timestamp"],
                     dados["nome_indicador"],

@@ -133,7 +133,7 @@ class AnaliseCandles(Plugin):
         else:
             return "baixa"
 
-    def gerar_sinal(self, dados, padrao, classificacao, par, timeframe, config):
+    def gerar_sinal(self, dados, padrao, classificacao, symbol, timeframe, config):
         """
         Gera um sinal de compra ou venda com base no padrão e na classificação do candle.
         """
@@ -150,7 +150,7 @@ class AnaliseCandles(Plugin):
 
             # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
             alavancagem = self.calculo_alavancagem.calcular_alavancagem(
-                dados[-1], par, timeframe, config
+                dados[-1], symbol, timeframe, config
             )
 
             # Calcula o stop loss e o take profit, passando a alavancagem como argumento
@@ -163,7 +163,7 @@ class AnaliseCandles(Plugin):
             "take_profit": take_profit,
         }
 
-    def executar(self, dados, par, timeframe, config):
+    def executar(self, dados, symbol, timeframe, config):
         """
         Executa a análise dos candles, gera sinais de trading e salva os resultados no banco de dados.
         """
@@ -177,21 +177,21 @@ class AnaliseCandles(Plugin):
                 classificacao = self.classificar_candle(candle)
 
                 sinal = self.gerar_sinal(
-                    candle, padrao, classificacao, par, timeframe, config
+                    candle, padrao, classificacao, symbol, timeframe, config
                 )
 
                 timestamp = int(candle / 1000)
 
                 cursor.execute(
                     """
-                    INSERT INTO analise_candles (par, timeframe, timestamp, padrao, classificacao, sinal, stop_loss, take_profit)
+                    INSERT INTO analise_candles (symbol, timeframe, timestamp, padrao, classificacao, sinal, stop_loss, take_profit)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (par, timeframe, timestamp) DO UPDATE
+                    ON CONFLICT (symbol, timeframe, timestamp) DO UPDATE
                     SET padrao = EXCLUDED.padrao, classificacao = EXCLUDED.classificacao,
                         sinal = EXCLUDED.sinal, stop_loss = EXCLUDED.stop_loss, take_profit = EXCLUDED.take_profit;
                     """,
                     (
-                        par,
+                        symbol,
                         timeframe,
                         timestamp,
                         padrao,
@@ -203,7 +203,7 @@ class AnaliseCandles(Plugin):
                 )
 
             conn.commit()
-            logger.debug(f"Análise de candles para {par} - {timeframe} concluída.")
+            logger.debug(f"Análise de candles para {symbol} - {timeframe} concluída.")
 
         except (Exception, psycopg2.Error) as error:
             logger.error(f"Erro ao analisar candles: {error}")

@@ -49,7 +49,7 @@ class IndicadoresVolume(Plugin):
         volume = [candle[5] for candle in dados]
         return talib.MFI(high, low, close, volume, timeperiod=periodo)
 
-    def gerar_sinal(self, dados, indicador, tipo, par, timeframe, config):
+    def gerar_sinal(self, dados, indicador, tipo, symbol, timeframe, config):
         """
         Gera um sinal de compra ou venda com base no indicador de volume fornecido.
 
@@ -57,7 +57,7 @@ class IndicadoresVolume(Plugin):
             dados (list): Lista de candles.
             indicador (str): Nome do indicador de volume ("obv", "cmf" ou "mfi").
             tipo (str): Tipo de sinal (depende do indicador).
-            par (str): Par de moedas.
+            symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
             config (ConfigParser): Objeto com as configurações do bot.
 
@@ -71,7 +71,7 @@ class IndicadoresVolume(Plugin):
 
             # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
             alavancagem = self.calculo_alavancagem.calcular_alavancagem(
-                dados[-1], par, timeframe, config
+                dados[-1], symbol, timeframe, config
             )
 
             if indicador == "obv":
@@ -153,13 +153,13 @@ class IndicadoresVolume(Plugin):
                 "take_profit": None,
             }
 
-    def executar(self, dados, par, timeframe, config):
+    def executar(self, dados, symbol, timeframe, config):
         """
         Executa o cálculo dos indicadores de volume, gera sinais e salva no banco de dados.
 
         Args:
             dados (list): Lista de candles.
-            par (str): Par de moedas.
+            symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
             config (ConfigParser): Objeto com as configurações do bot.
         """
@@ -174,23 +174,23 @@ class IndicadoresVolume(Plugin):
 
                 # Gera os sinais de compra e venda para o candle atual
                 sinal_obv_divergencia_altista = self.gerar_sinal(
-                    [candle], "obv", "divergencia_altista", par, timeframe, config
+                    [candle], "obv", "divergencia_altista", symbol, timeframe, config
                 )
 
                 sinal_obv_divergencia_baixista = self.gerar_sinal(
-                    [candle], "obv", "divergencia_baixista", par, timeframe
+                    [candle], "obv", "divergencia_baixista", symbol, timeframe
                 )
                 sinal_cmf_cruzamento_acima = self.gerar_sinal(
-                    [candle], "cmf", "cruzamento_acima", par, timeframe
+                    [candle], "cmf", "cruzamento_acima", symbol, timeframe
                 )
                 sinal_cmf_cruzamento_abaixo = self.gerar_sinal(
-                    [candle], "cmf", "cruzamento_abaixo", par, timeframe
+                    [candle], "cmf", "cruzamento_abaixo", symbol, timeframe
                 )
                 sinal_mfi_sobrecompra = self.gerar_sinal(
-                    [candle], "mfi", "sobrecompra", par, timeframe
+                    [candle], "mfi", "sobrecompra", symbol, timeframe
                 )
                 sinal_mfi_sobrevenda = self.gerar_sinal(
-                    [candle], "mfi", "sobrevenda", par, timeframe
+                    [candle], "mfi", "sobrevenda", symbol, timeframe
                 )
 
                 # Salva os resultados no banco de dados para o candle atual
@@ -198,7 +198,7 @@ class IndicadoresVolume(Plugin):
                 cursor.execute(
                     """
                     INSERT INTO indicadores_volume (
-                        par, timeframe, timestamp, obv, cmf, mfi,
+                        symbol, timeframe, timestamp, obv, cmf, mfi,
                         sinal_obv_divergencia_altista, stop_loss_obv_divergencia_altista, take_profit_obv_divergencia_altista,
                         sinal_obv_divergencia_baixista, stop_loss_obv_divergencia_baixista, take_profit_obv_divergencia_baixista,
                         sinal_cmf_cruzamento_acima, stop_loss_cmf_cruzamento_acima, take_profit_cmf_cruzamento_acima,
@@ -209,7 +209,7 @@ class IndicadoresVolume(Plugin):
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
-                    ON CONFLICT (par, timeframe, timestamp) DO UPDATE
+                    ON CONFLICT (symbol, timeframe, timestamp) DO UPDATE
                     SET obv = EXCLUDED.obv, cmf = EXCLUDED.cmf, mfi = EXCLUDED.mfi,
                         sinal_obv_divergencia_altista = EXCLUDED.sinal_obv_divergencia_altista, stop_loss_obv_divergencia_altista = EXCLUDED.stop_loss_obv_divergencia_altista, take_profit_obv_divergencia_altista = EXCLUDED.take_profit_obv_divergencia_altista,
                         sinal_obv_divergencia_baixista = EXCLUDED.sinal_obv_divergencia_baixista, stop_loss_obv_divergencia_baixista = EXCLUDED.stop_loss_obv_divergencia_baixista, take_profit_obv_divergencia_baixista = EXCLUDED.take_profit_obv_divergencia_baixista,
@@ -219,7 +219,7 @@ class IndicadoresVolume(Plugin):
                         sinal_mfi_sobrevenda = EXCLUDED.sinal_mfi_sobrevenda, stop_loss_mfi_sobrevenda = EXCLUDED.stop_loss_mfi_sobrevenda, take_profit_mfi_sobrevenda = EXCLUDED.take_profit_mfi_sobrevenda;
                     """,
                     (
-                        par,
+                        symbol,
                         timeframe,
                         timestamp,
                         obv[-1],
@@ -248,7 +248,7 @@ class IndicadoresVolume(Plugin):
 
             conn.commit()
             logger.debug(
-                f"Indicadores de volume calculados e sinais gerados para {par} - {timeframe}."
+                f"Indicadores de volume calculados e sinais gerados para {symbol} - {timeframe}."
             )
 
         except (Exception, psycopg2.Error) as error:

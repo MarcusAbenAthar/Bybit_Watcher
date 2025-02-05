@@ -14,7 +14,7 @@ class IndicadoresOsciladores(Plugin):
         # Acesso ao banco de dados
         self.banco_dados = obter_banco_dados()
 
-    def calcular_rsi(self, dados, par, timeframe, periodo=14):
+    def calcular_rsi(self, dados, symbol, timeframe, periodo=14):
         """
         Calcula o RSI (Relative Strength Index) para os dados fornecidos, usando a biblioteca TA-Lib.
         Considera diferentes períodos de RSI para diferentes timeframes e ajusta o período dinamicamente
@@ -22,7 +22,7 @@ class IndicadoresOsciladores(Plugin):
 
         Args:
             dados (list): Lista de candles.
-            par (str): Par de moedas.
+            symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
             periodo (int): Período base do RSI.
 
@@ -50,7 +50,7 @@ class IndicadoresOsciladores(Plugin):
 
         # Calcula o RSI usando a função RSI do TA-Lib
         rsi = talib.RSI(fechamentos, timeperiod=periodo)
-        logger.debug(f"RSI calculado para {par} - {timeframe} - período {periodo}.")
+        logger.debug(f"RSI calculado para {symbol} - {timeframe} - período {periodo}.")
         return rsi
 
     def calcular_estocastico(
@@ -149,7 +149,7 @@ class IndicadoresOsciladores(Plugin):
         return mfi
 
 
-def gerar_sinal(self, dados, indicador, tipo, par, timeframe, config):
+def gerar_sinal(self, dados, indicador, tipo, symbol, timeframe, config):
     """
     Gera um sinal de compra ou venda com base no indicador oscilador fornecido,
     seguindo as Regras de Ouro, incluindo o Dinamismo.
@@ -158,7 +158,7 @@ def gerar_sinal(self, dados, indicador, tipo, par, timeframe, config):
         dados (list): Lista de candles.
         indicador (str): Nome do indicador oscilador ("rsi", "estocastico" ou "mfi").
         tipo (str): Tipo de sinal (depende do indicador).
-        par (str): Par de moedas.
+        symbol (str): Par de moedas.
         timeframe (str): Timeframe dos candles.
         config (ConfigParser): Objeto com as configurações do bot.
 
@@ -172,12 +172,12 @@ def gerar_sinal(self, dados, indicador, tipo, par, timeframe, config):
 
         # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
         alavancagem = self.calculo_alavancagem.calcular_alavancagem(
-            dados[-1], par, timeframe, config
+            dados[-1], symbol, timeframe, config
         )
 
         # ----- Lógica para o RSI -----
         if indicador == "rsi":
-            rsi = self.calcular_rsi(dados, par, timeframe)
+            rsi = self.calcular_rsi(dados, symbol, timeframe)
             if tipo == "sobrecompra" and rsi[-1] > 70:
                 sinal = "venda"
                 stop_loss = dados[-1] + (dados[-1] - dados[-1]) * (0.05 / alavancagem)
@@ -226,13 +226,13 @@ def gerar_sinal(self, dados, indicador, tipo, par, timeframe, config):
         }
 
 
-def executar(self, dados, par, timeframe, config):
+def executar(self, dados, symbol, timeframe, config):
     """
     Executa o cálculo dos indicadores osciladores, gera sinais de trading e salva os resultados no banco de dados.
 
     Args:
         dados (list): Lista de candles.
-        par (str): Par de moedas.
+        symbol (str): Par de moedas.
         timeframe (str): Timeframe dos candles.
         config (ConfigParser): Objeto com as configurações do bot.
     """
@@ -242,7 +242,7 @@ def executar(self, dados, par, timeframe, config):
 
         for candle in dados:
             # Calcula os indicadores de osciladores para o candle atual
-            rsi = self.calcular_rsi([candle], par, timeframe)
+            rsi = self.calcular_rsi([candle], symbol, timeframe)
             estocastico_lento, estocastico_rapido = self.calcular_estocastico(
                 [candle], timeframe
             )
@@ -250,22 +250,22 @@ def executar(self, dados, par, timeframe, config):
 
             # Gera os sinais de compra e venda para o candle atual
             sinal_rsi_sobrecompra = self.gerar_sinal(
-                [candle], "rsi", "sobrecompra", par, timeframe, config
+                [candle], "rsi", "sobrecompra", symbol, timeframe, config
             )
             sinal_rsi_sobrevenda = self.gerar_sinal(
-                [candle], "rsi", "sobrevenda", par, timeframe, config
+                [candle], "rsi", "sobrevenda", symbol, timeframe, config
             )
             sinal_estocastico_sobrecompra = self.gerar_sinal(
-                [candle], "estocastico", "sobrecompra", par, timeframe, config
+                [candle], "estocastico", "sobrecompra", symbol, timeframe, config
             )
             sinal_estocastico_sobrevenda = self.gerar_sinal(
-                [candle], "estocastico", "sobrevenda", par, timeframe, config
+                [candle], "estocastico", "sobrevenda", symbol, timeframe, config
             )
             sinal_mfi_sobrecompra = self.gerar_sinal(
-                [candle], "mfi", "sobrecompra", par, timeframe, config
+                [candle], "mfi", "sobrecompra", symbol, timeframe, config
             )
             sinal_mfi_sobrevenda = self.gerar_sinal(
-                [candle], "mfi", "sobrevenda", par, timeframe, config
+                [candle], "mfi", "sobrevenda", symbol, timeframe, config
             )
 
             # Salva os resultados no banco de dados para o candle atual
@@ -273,7 +273,7 @@ def executar(self, dados, par, timeframe, config):
             cursor.execute(
                 """
                 INSERT INTO indicadores_osciladores (
-                    par, timeframe, timestamp, rsi, estocastico_lento, estocastico_rapido, mfi,
+                    symbol, timeframe, timestamp, rsi, estocastico_lento, estocastico_rapido, mfi,
                     sinal_rsi_sobrecompra, stop_loss_rsi_sobrecompra, take_profit_rsi_sobrecompra,
                     sinal_rsi_sobrevenda, stop_loss_rsi_sobrevenda, take_profit_rsi_sobrevenda,
                     sinal_estocastico_sobrecompra, stop_loss_estocastico_sobrecompra, take_profit_estocastico_sobrecompra,
@@ -284,7 +284,7 @@ def executar(self, dados, par, timeframe, config):
                 VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
-                ON CONFLICT (par, timeframe, timestamp) DO UPDATE
+                ON CONFLICT (symbol, timeframe, timestamp) DO UPDATE
                 SET rsi = EXCLUDED.rsi, estocastico_lento = EXCLUDED.estocastico_lento, estocastico_rapido = EXCLUDED.estocastico_rapido, mfi = EXCLUDED.mfi,
                     sinal_rsi_sobrecompra = EXCLUDED.sinal_rsi_sobrecompra, stop_loss_rsi_sobrecompra = EXCLUDED.stop_loss_rsi_sobrecompra, take_profit_rsi_sobrecompra = EXCLUDED.take_profit_rsi_sobrecompra,
                     sinal_rsi_sobrevenda = EXCLUDED.sinal_rsi_sobrevenda, stop_loss_rsi_sobrevenda = EXCLUDED.stop_loss_rsi_sobrevenda, take_profit_rsi_sobrevenda = EXCLUDED.take_profit_rsi_sobrevenda,
@@ -294,7 +294,7 @@ def executar(self, dados, par, timeframe, config):
                     sinal_mfi_sobrevenda = EXCLUDED.sinal_mfi_sobrevenda, stop_loss_mfi_sobrevenda = EXCLUDED.stop_loss_mfi_sobrevenda, take_profit_mfi_sobrevenda = EXCLUDED.take_profit_mfi_sobrevenda;
                 """,
                 (
-                    par,
+                    symbol,
                     timeframe,
                     timestamp,
                     rsi[-1],
@@ -324,7 +324,7 @@ def executar(self, dados, par, timeframe, config):
 
         conn.commit()
         logger.debug(
-            f"Indicadores de osciladores calculados e sinais gerados para {par} - {timeframe}."
+            f"Indicadores de osciladores calculados e sinais gerados para {symbol} - {timeframe}."
         )
 
     except (Exception, psycopg2.Error) as error:
