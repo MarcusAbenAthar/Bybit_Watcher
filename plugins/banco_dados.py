@@ -150,7 +150,7 @@ class BancoDados(Plugin):
                     sinal TEXT,
                     stop_loss REAL,
                     take_profit REAL,
-                    UNIQUE (symbol timeframe, timestamp)
+                    UNIQUE (symbol, timeframe, timestamp)
                 );
                 """
             )
@@ -174,7 +174,7 @@ class BancoDados(Plugin):
                     sinal TEXT,
                     stop_loss REAL,
                     take_profit REAL,
-                    UNIQUE (symbol timeframe, timestamp)
+                    UNIQUE (symbol, timeframe, timestamp)
                 );
                 """
             )
@@ -198,7 +198,7 @@ class BancoDados(Plugin):
                     nome_indicador TEXT NOT NULL,
                     valor REAL,
                     sinal TEXT,
-                    UNIQUE (symbol timeframe, timestamp, nome_indicador)
+                    UNIQUE (symbol, timeframe, timestamp, nome_indicador)
                 );
                 """
             )
@@ -224,7 +224,7 @@ class BancoDados(Plugin):
                     nome_indicador TEXT NOT NULL,
                     valor REAL,
                     sinal TEXT,
-                    UNIQUE (symbol timeframe, timestamp, nome_indicador)
+                    UNIQUE (symbol, timeframe, timestamp, nome_indicador)
                 );
                 """
             )
@@ -247,7 +247,7 @@ class BancoDados(Plugin):
                     timestamp BIGINT NOT NULL,
                     nome_indicador TEXT NOT NULL,
                     valor REAL,
-                    UNIQUE (symbol timeframe, timestamp, nome_indicador)
+                    UNIQUE (symbol, timeframe, timestamp, nome_indicador)
                 );
                 """
             )
@@ -272,7 +272,7 @@ class BancoDados(Plugin):
                     timestamp BIGINT NOT NULL,
                     nome_indicador TEXT NOT NULL,
                     valor REAL,
-                    UNIQUE (symbol timeframe, timestamp, nome_indicador)
+                    UNIQUE (symbol, timeframe, timestamp, nome_indicador)
                 );
                 """
             )
@@ -295,7 +295,7 @@ class BancoDados(Plugin):
                     timestamp BIGINT NOT NULL,
                     nome_indicador TEXT NOT NULL,
                     valor REAL,
-                    UNIQUE (symbol timeframe, timestamp, nome_indicador)
+                    UNIQUE (symbol, timeframe, timestamp, nome_indicador)
                 );
                 """
             )
@@ -396,9 +396,9 @@ class BancoDados(Plugin):
 
             # SQL para inserção
             sql = """
-                INSERT INTO klines (symbol timeframe, timestamp, open, high, low, close, volume)
+                INSERT INTO klines (symbol, timeframe, timestamp, open, high, low, close, volume)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (symbol timeframe, timestamp) DO NOTHING;
+                ON CONFLICT (symbol, timeframe, timestamp) DO NOTHING;
             """
 
             for dado in dados:
@@ -443,9 +443,9 @@ class BancoDados(Plugin):
         try:
             cursor = self.conn.cursor()
             sql = f"""
-                INSERT INTO analise_candles (symbol timeframe, timestamp, padrao, classificacao, sinal, stop_loss, take_profit)
+                INSERT INTO analise_candles (symbol, timeframe, timestamp, padrao, classificacao, sinal, stop_loss, take_profit)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (symbol timeframe, timestamp) DO UPDATE
+                ON CONFLICT (symbol, timeframe, timestamp) DO UPDATE
                 SET padrao = EXCLUDED.padrao, classificacao = EXCLUDED.classificacao,
                     sinal = EXCLUDED.sinal, stop_loss = EXCLUDED.stop_loss, take_profit = EXCLUDED.take_profit;
             """
@@ -472,9 +472,9 @@ class BancoDados(Plugin):
         try:
             cursor = self.conn.cursor()
             sql = f"""
-                INSERT INTO medias_moveis (symbol timeframe, timestamp, sinal, stop_loss, take_profit)
+                INSERT INTO medias_moveis (symbol, timeframe, timestamp, sinal, stop_loss, take_profit)
                 VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (symbol timeframe, timestamp) DO UPDATE
+                ON CONFLICT (symbol, timeframe, timestamp) DO UPDATE
                 SET sinal = EXCLUDED.sinal, stop_loss = EXCLUDED.stop_loss, take_profit = EXCLUDED.take_profit;
             """
             cursor.execute(
@@ -498,9 +498,9 @@ class BancoDados(Plugin):
         try:
             cursor = self.conn.cursor()
             sql = f"""
-                INSERT INTO indicadores_osciladores (symbol timeframe, timestamp, nome_indicador, valor, sinal)
+                INSERT INTO indicadores_osciladores (symbol, timeframe, timestamp, nome_indicador, valor, sinal)
                 VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (symbol timeframe, timestamp, nome_indicador) DO UPDATE
+                ON CONFLICT (symbol, timeframe, timestamp, nome_indicador) DO UPDATE
                 SET valor = EXCLUDED.valor, sinal = EXCLUDED.sinal;
             """
             cursor.execute(
@@ -526,9 +526,9 @@ class BancoDados(Plugin):
         try:
             cursor = self.conn.cursor()
             sql = f"""
-                INSERT INTO indicadores_tendencia (symbol timeframe, timestamp, nome_indicador, valor, sinal)
+                INSERT INTO indicadores_tendencia (symbol, timeframe, timestamp, nome_indicador, valor, sinal)
                 VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (symbol timeframe, timestamp, nome_indicador) DO UPDATE
+                ON CONFLICT (symbol, timeframe, timestamp, nome_indicador) DO UPDATE
                 SET valor = EXCLUDED.valor, sinal = EXCLUDED.sinal;
             """
             cursor.execute(
@@ -554,9 +554,9 @@ class BancoDados(Plugin):
         try:
             cursor = self.conn.cursor()
             sql = f"""
-                INSERT INTO indicadores_volatilidade (symbol timeframe, timestamp, nome_indicador, valor)
+                INSERT INTO indicadores_volatilidade (symbol, timeframe, timestamp, nome_indicador, valor)
                 VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (symbol timeframe, timestamp, nome_indicador) DO UPDATE
+                ON CONFLICT (symbol, timeframe, timestamp, nome_indicador) DO UPDATE
                 SET valor = EXCLUDED.valor;
             """
             cursor.execute(
@@ -581,9 +581,9 @@ class BancoDados(Plugin):
         try:
             cursor = self.conn.cursor()
             sql = f"""
-                INSERT INTO indicadores_volume (symbol timeframe, timestamp, nome_indicador, valor)
+                INSERT INTO indicadores_volume (symbol, timeframe, timestamp, nome_indicador, valor)
                 VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (symbol timeframe, timestamp, nome_indicador) DO UPDATE
+                ON CONFLICT (symbol, timeframe, timestamp, nome_indicador) DO UPDATE
                 SET valor = EXCLUDED.valor;
             """
             cursor.execute(
@@ -606,9 +606,9 @@ class BancoDados(Plugin):
         try:
             cursor = self.conn.cursor()
             sql = f"""
-                INSERT INTO outros_indicadores (symbol timeframe, timestamp, nome_indicador, valor)
+                INSERT INTO outros_indicadores (symbol, timeframe, timestamp, nome_indicador, valor)
                 VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (symbol timeframe, timestamp, nome_indicador) DO UPDATE
+                ON CONFLICT (symbol, timeframe, timestamp, nome_indicador) DO UPDATE
                 SET valor = EXCLUDED.valor;
             """
             cursor.execute(
