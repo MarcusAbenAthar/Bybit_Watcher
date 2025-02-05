@@ -19,157 +19,114 @@ class AnaliseCandles(Plugin):
     def identificar_padrao(self, candle):
         """
         Identifica o padrão do candle usando TA-Lib.
-
-        Args:
-            candle (list): Lista com os dados do candle [abertura, fechamento, máximo, mínimo].
-
-        Returns:
-            str: Nome do padrão identificado ou None se nenhum padrão for identificado.
         """
-        abertura, fechamento, maximo, minimo = candle
+        try:
+            if not candle or len(candle) < 4:
+                return None
 
-        # Converte os dados do candle para o formato aceito pelo TA-Lib
-        candle_data = {
-            "open": abertura,
-            "high": maximo,
-            "low": minimo,
-            "close": fechamento,
-        }
+            abertura, fechamento, maximo, minimo = candle
 
-        # Identifica o padrão do candle usando a função CDL do TA-Lib
-        padrao = talib.CDL(candle_data)
+            # Converte os dados do candle para o formato aceito pelo TA-Lib
+            candle_data = {
+                "open": abertura,
+                "high": maximo,
+                "low": minimo,
+                "close": fechamento,
+            }
 
-        # Mapeia os códigos numéricos dos padrões para nomes mais descritivos
-        padroes = {
-            talib.CDL2CROWS: "dois_corvos",
-            talib.CDL3BLACKCROWS: "tres_corvos_negros",
-            talib.CDL3INSIDE: "tres_dentro_cima_baixo",
-            talib.CDL3LINESTRIKE: "golpe_de_tres_linhas",
-            talib.CDL3OUTSIDE: "tres_fora_cima_baixo",
-            talib.CDL3STARSINSOUTH: "tres_estrelas_no_sul",
-            talib.CDL3WHITESOLDIERS: "tres_soldados_brancos",
-            talib.CDLABANDONEDBABY: "bebe_abandonado",
-            talib.CDLADVANCEBLOCK: "avanco_de_bloco",
-            talib.CDLBELTHOLD: "cinturao",
-            talib.CDLBREAKAWAY: "rompimento",
-            talib.CDLCLOSINGMARUBOZU: "fechamento_marubozu",
-            talib.CDLCONCEALBABYSWALL: "engolimento_de_bebe",
-            talib.CDLCOUNTERATTACK: "contra_ataque",
-            talib.CDLDARKCLOUDCOVER: "cobertura_de_nuvem_escura",
-            talib.CDLDOJI: "doji",
-            talib.CDLDOJISTAR: "doji_estrela",
-            talib.CDLDRAGONFLYDOJI: "libelula_doji",
-            talib.CDLENGULFING: "engolfo",
-            talib.CDLEVENINGDOJISTAR: "estrela_da_noite_doji",
-            talib.CDLEVENINGSTAR: "estrela_da_noite",
-            talib.CDLGAPSIDESIDEWHITE: "lacuna_lateral_lado_branco",
-            talib.CDLGRAVESTONEDOJI: "lapide_doji",
-            talib.CDLHAMMER: "martelo",
-            talib.CDLHANGINGMAN: "enforcado",
-            talib.CDLHARAMI: "harami",
-            talib.CDLHARAMICROSS: "harami_cruzado",
-            talib.CDLHIGHWAVE: "onda_alta",
-            talib.CDLHIKKAKE: "hikkake",
-            talib.CDLHIKKAKEMOD: "hikkake_modificado",
-            talib.CDLHOMINGPIGEON: "pombo_correio",
-            talib.CDLIDENTICAL3CROWS: "tres_corvos_identicos",
-            talib.CDLINNECK: "pescoco_interno",
-            talib.CDLINVERTEDHAMMER: "martelo_invertido",
-            talib.CDLKICKING: "chute",
-            talib.CDLKICKINGBYLENGTH: "chute_por_comprimento",
-            talib.CDLLADDERBOTTOM: "fundo_de_escada",
-            talib.CDLLONGLEGGEDDOJI: "doji_pernas_longas",
-            talib.CDLLONGLINE: "linha_longa",
-            talib.CDLMARUBOZU: "marubozu",
-            talib.CDLMATCHINGLOW: "minima_correspondente",
-            talib.CDLMATHOLD: "mat_hold",
-            talib.CDLMORNINGDOJISTAR: "estrela_da_manha_doji",
-            talib.CDLMORNINGSTAR: "estrela_da_manha",
-            talib.CDLONNECK: "pescoco_externo",
-            talib.CDLPIERCING: "piercing",
-            talib.CDLRICKSHAWMAN: "homem_de_riquixa",
-            talib.CDLRISEFALL3METHODS: "subida_e_queda_tres_metodos",
-            talib.CDLSEPARATINGLINES: "linhas_separadoras",
-            talib.CDLSHOOTINGSTAR: "estrela_cadente",
-            talib.CDLSHORTLINE: "linha_curta",
-            talib.CDLSPINNINGTOP: "pião",
-            talib.CDLSTALLEDPATTERN: "padrao_estagnado",
-            talib.CDLSTICKSANDWICH: "sanduiche_de_velas",
-            talib.CDLTAKURI: "takuri",
-            talib.CDLTASUKIGAP: "lacuna_tasuki",
-            talib.CDLTHRUSTING: "empurrando",
-            talib.CDLTRISTAR: "tri_estrela",
-            talib.CDLUNIQUE3RIVER: "tres_rios_unicos",
-            talib.CDLUPSIDEGAP2CROWS: "lacuna_de_alta_dois_corvos",
-            talib.CDLXSIDEGAP3METHODS: "lacuna_lateral_tres_metodos",
-        }
+            # Identifica o padrão do candle usando a função CDL do TA-Lib
+            padrao = None
+            for func in talib.get_function_groups()["Pattern Recognition"]:
+                result = getattr(talib, func)(candle_data)
+                if result != 0:  # Se encontrou um padrão
+                    padrao = func.lower().replace("cdl", "")
+                    break
 
-        # Retorna o nome do padrão ou None se não for encontrado
-        return padroes.get(padrao)
+            return padrao
+
+        except Exception as e:
+            logger.error(f"Erro ao identificar padrão: {e}")
+            return None
 
     def classificar_candle(self, candle):
         """
-        Classifica o candle como alta, baixa ou indecisão, seguindo as Regras de Ouro.
-
-        Args:
-            candle (list): Lista com os dados do candle (abertura, fechamento, máximo, mínimo).
-
-        Returns:
-            str: Classificação do candle ("alta", "baixa" ou "indecisão").
+        Classifica o candle como alta, baixa ou indecisão.
         """
-        abertura, fechamento, maximo, minimo = candle
+        try:
+            if not candle or len(candle) < 4:
+                return "indecisão"
 
-        # Calcula o tamanho do corpo do candle
-        tamanho_corpo = abs(fechamento - abertura)
+            abertura, fechamento, maximo, minimo = candle
 
-        # Define um limite para considerar um candle como "pequeno" (Regra de Ouro: Critério)
-        limite_corpo_pequeno = 0.1 * (maximo - minimo)  # 10% da amplitude do candle
+            # Calcula o tamanho do corpo do candle
+            tamanho_corpo = abs(fechamento - abertura)
+            limite_corpo_pequeno = 0.1 * (maximo - minimo)
 
-        # Classifica o candle (Regra de Ouro: Clareza)
-        if tamanho_corpo <= limite_corpo_pequeno:
-            return "indecisão"  # Doji ou candle com corpo muito pequeno
-        elif fechamento > abertura:
-            return "alta"
-        else:
-            return "baixa"
+            if tamanho_corpo <= limite_corpo_pequeno:
+                return "indecisão"
+            elif fechamento > abertura:
+                return "alta"
+            else:
+                return "baixa"
 
-    def gerar_sinal(self, dados, padrao, classificacao, symbol, timeframe, config):
+        except Exception as e:
+            logger.error(f"Erro ao classificar candle: {e}")
+            return "indecisão"
+
+    def gerar_sinal(self, candle, padrao, classificacao, symbol, timeframe, config):
         """
-        Gera um sinal de compra ou venda com base no padrão e na classificação do candle.
+        Gera sinal baseado no padrão e classificação do candle.
         """
-        sinal = None
-        stop_loss = None
-        take_profit = None
+        try:
+            if not padrao or not classificacao:
+                return self._sinal_padrao()
 
-        chave_padrao = f"{padrao}_{classificacao}"
-        # Verifica se a chave existe no dicionário de padrões
-        if chave_padrao in PADROES_CANDLES:
-            # Obtém a lógica para o padrão
-            logica = PADROES_CANDLES[chave_padrao]
-            sinal = logica["sinal"]
+            # Busca o padrão no PADROES_CANDLES
+            chave_padrao = f"{padrao}_{classificacao}"
+            if chave_padrao not in PADROES_CANDLES:
+                return self._sinal_padrao()
 
-            # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
-            alavancagem = self.calculo_alavancagem.calcular_alavancagem(
-                dados[-1], symbol, timeframe, config
-            )
+            padrao_info = PADROES_CANDLES[chave_padrao]
 
-            # Calcula o stop loss e o take profit, passando a alavancagem como argumento
-            stop_loss = logica["stop_loss"](dados, alavancagem)
-            take_profit = logica["take_profit"](dados, alavancagem)
+            # Calcula stop loss e take profit
+            try:
+                alavancagem = self.calculo_alavancagem.calcular_alavancagem(
+                    candle, symbol, timeframe, config
+                )
+                stop_loss = padrao_info["stop_loss"](candle, alavancagem)
+                take_profit = padrao_info["take_profit"](candle, alavancagem)
+            except Exception as e:
+                logger.error(f"Erro ao calcular níveis: {e}")
+                return self._sinal_padrao()
 
+            return {
+                "sinal": padrao_info["sinal"],
+                "stop_loss": stop_loss,
+                "take_profit": take_profit,
+                "forca": self.calcular_forca_padrao(candle, padrao),
+                "confianca": self.calcular_confianca(candle, padrao),
+            }
+
+        except Exception as e:
+            logger.error(f"Erro ao gerar sinal: {e}")
+            return self._sinal_padrao()
+
+    def _sinal_padrao(self):
+        """Retorna um sinal padrão vazio."""
         return {
-            "sinal": sinal,
-            "stop_loss": stop_loss,
-            "take_profit": take_profit,
+            "sinal": None,
+            "stop_loss": None,
+            "take_profit": None,
+            "forca": 0,
+            "confianca": 0,
         }
 
     def executar(self, dados, symbol, timeframe, config):
         """
-        Executa a análise dos candles, gera sinais de trading e salva os resultados no banco de dados.
+        Executa a análise dos candles.
         """
         try:
-            # Usa a conexão com o banco de dados fornecida pelo Core
-            conn = obter_banco_dados().conn
+            conn = obter_banco_dados()
             cursor = conn.cursor()
 
             for candle in dados:
@@ -180,15 +137,19 @@ class AnaliseCandles(Plugin):
                     candle, padrao, classificacao, symbol, timeframe, config
                 )
 
-                timestamp = int(candle / 1000)
+                timestamp = int(candle[0] / 1000)
 
                 cursor.execute(
                     """
-                    INSERT INTO analise_candles (symbol, timeframe, timestamp, padrao, classificacao, sinal, stop_loss, take_profit)
+                    INSERT INTO analise_candles 
+                    (symbol, timeframe, timestamp, padrao, classificacao, sinal, stop_loss, take_profit)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (symbol, timeframe, timestamp) DO UPDATE
-                    SET padrao = EXCLUDED.padrao, classificacao = EXCLUDED.classificacao,
-                        sinal = EXCLUDED.sinal, stop_loss = EXCLUDED.stop_loss, take_profit = EXCLUDED.take_profit;
+                    SET padrao = EXCLUDED.padrao, 
+                        classificacao = EXCLUDED.classificacao,
+                        sinal = EXCLUDED.sinal, 
+                        stop_loss = EXCLUDED.stop_loss, 
+                        take_profit = EXCLUDED.take_profit;
                     """,
                     (
                         symbol,
@@ -207,3 +168,85 @@ class AnaliseCandles(Plugin):
 
         except (Exception, psycopg2.Error) as error:
             logger.error(f"Erro ao analisar candles: {error}")
+
+    def calcular_forca_padrao(self, candle, padrao):
+        """
+        Calcula a força do padrão identificado.
+
+        Args:
+            candle (list): Lista com os dados do candle [open, close, high, low]
+            padrao (str): Nome do padrão identificado
+
+        Returns:
+            float: Força do padrão (0-100)
+        """
+        try:
+            if not padrao or not candle or len(candle) < 4:
+                return 0
+
+            abertura, fechamento, maximo, minimo = candle
+
+            # Calcula o tamanho relativo do candle
+            tamanho_corpo = abs(float(fechamento) - float(abertura))
+            tamanho_total = float(maximo) - float(minimo)
+
+            # Evita divisão por zero
+            if tamanho_total <= 0:
+                return 0
+
+            # Calcula a força base pelo tamanho relativo do corpo
+            forca_base = (tamanho_corpo / tamanho_total) * 100
+
+            # Ajusta a força baseado no tipo de padrão
+            # Verifica se existe o padrão com sufixo _alta ou _baixa
+            multiplicador = 1.0
+            if f"{padrao}_alta" in PADROES_CANDLES:
+                multiplicador = PADROES_CANDLES[f"{padrao}_alta"].get("peso", 1.0)
+            elif f"{padrao}_baixa" in PADROES_CANDLES:
+                multiplicador = PADROES_CANDLES[f"{padrao}_baixa"].get("peso", 1.0)
+
+            return min(100, forca_base * multiplicador)
+
+        except Exception as e:
+            logger.error(f"Erro ao calcular força do padrão: {e}")
+            return 0
+
+    def calcular_confianca(self, candle, padrao):
+        """
+        Calcula a confiança do padrão identificado.
+
+        Args:
+            candle (list): Lista com os dados do candle [open, close, high, low]
+            padrao (str): Nome do padrão identificado
+
+        Returns:
+            float: Confiança do padrão (0-100)
+        """
+        try:
+            if not padrao or not candle or len(candle) < 4:
+                return 0
+
+            abertura, fechamento, maximo, minimo = candle
+
+            # Calcula o tamanho relativo do candle
+            tamanho_corpo = abs(float(fechamento) - float(abertura))
+            tamanho_total = float(maximo) - float(minimo)
+
+            # Evita divisão por zero
+            if tamanho_total <= 0:
+                return 0
+
+            # Calcula a confiança base pelo tamanho relativo do corpo
+            confianca_base = (tamanho_corpo / tamanho_total) * 100
+
+            # Ajusta a confiança baseado no tipo de padrão
+            multiplicador = PADROES_CANDLES.get(f"{padrao}_alta", {}).get("peso", 1.0)
+            multiplicador = PADROES_CANDLES.get(f"{padrao}_baixa", {}).get(
+                "peso", multiplicador
+            )
+
+            return min(100, confianca_base * multiplicador)
+
+        except Exception as e:
+            logger.error(f"Erro ao calcular confiança do padrão: {e}")
+            return 0
