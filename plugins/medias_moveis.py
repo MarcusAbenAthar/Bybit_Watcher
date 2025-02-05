@@ -1,6 +1,6 @@
 from loguru import logger
 from plugins.plugin import Plugin
-from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
+from plugins.gerente_plugin import obter_calculo_alavancagem
 import talib
 
 
@@ -14,8 +14,6 @@ class MediasMoveis(Plugin):
         self.config = config
         # Obtém o plugin de cálculo de alavancagem
         self.calculo_alavancagem = obter_calculo_alavancagem()
-        # Obtém o plugin de banco de dados
-        self.banco_dados = obter_banco_dados()
 
     def calcular_media_movel(self, dados, periodo, tipo="simples"):
         """
@@ -110,6 +108,8 @@ class MediasMoveis(Plugin):
             timeframe (str): Timeframe dos candles.
         """
         try:
+            from plugins.gerente_plugin import obter_banco_dados
+
             banco_dados = obter_banco_dados(self.config)
             # Calcula as médias móveis
             media_movel_curta = self.calcular_media_movel(

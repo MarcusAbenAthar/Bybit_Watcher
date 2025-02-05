@@ -59,69 +59,69 @@ def carregar_plugins(diretorio, config=None):
 
     Args:
         diretorio: Caminho para o diretório de plugins
-        config: Configurações do bot
+        config: Configurações para os plugins
+
+    Returns:
+        list: Lista de instâncias dos plugins carregados
     """
     plugins = []
     logger.debug(f"=== Iniciando carregamento de plugins ===")
 
-    # Carrega plugins do diretório principal
-    for nome_arquivo in os.listdir(diretorio):
-        if nome_arquivo.endswith(".py") and not nome_arquivo.startswith("_"):
-            nome_modulo = nome_arquivo[:-3]
+    try:
+        # Lista todos os arquivos .py no diretório
+        arquivos = [
+            f
+            for f in os.listdir(diretorio)
+            if f.endswith(".py") and not f.startswith("_")
+        ]
+
+        # Ordena os arquivos para garantir ordem de carregamento
+        ordem_plugins = [
+            "indicadores_tendencia.py",
+            "medias_moveis.py",
+            "sinais_plugin.py",
+        ]
+
+        # Coloca os plugins prioritários no início
+        for plugin_nome in ordem_plugins:
+            if plugin_nome in arquivos:
+                arquivos.remove(plugin_nome)
+                arquivos.insert(0, plugin_nome)
+
+        # Carrega cada plugin
+        for arquivo in arquivos:
+            nome_modulo = arquivo[:-3]  # Remove .py
             try:
-                if nome_modulo == "analise_candles":
-                    from plugins.analise_candles import AnaliseCandles
+                # Importa o módulo
+                modulo = importlib.import_module(f"{diretorio}.{nome_modulo}")
 
-                    modulo = AnaliseCandles
-                else:
-                    modulo = importlib.import_module(f"{diretorio}.{nome_modulo}")
+                # Procura pela classe do plugin
+                for nome_attr in dir(modulo):
+                    attr = getattr(modulo, nome_attr)
+                    if (
+                        isinstance(attr, type)
+                        and issubclass(attr, Plugin)
+                        and attr != Plugin
+                    ):
 
-                for nome_classe in dir(modulo):
-                    if nome_classe != "Plugin":
-                        classe = getattr(modulo, nome_classe)
-                        if isinstance(classe, type) and issubclass(classe, Plugin):
-                            # Verifica se a classe precisa de config
-                            if "config" in classe.__init__.__code__.co_varnames:
-                                plugin = classe(config)
-                            else:
-                                plugin = classe()
-                            plugins.append(plugin)
-                            logger.debug(f"Plugin carregado com sucesso: {nome_classe}")
+                        # Instancia o plugin com config se necessário
+                        if "config" in attr.__init__.__code__.co_varnames:
+                            plugin = attr(config)
+                        else:
+                            plugin = attr()
+
+                        plugins.append(plugin)
+                        logger.debug(f"Plugin carregado com sucesso: {nome_attr}")
 
             except Exception as e:
                 logger.error(f"Erro ao carregar plugin {nome_modulo}: {e}")
 
-    # Carrega plugins do subdiretório indicadores
-    diretorio_indicadores = os.path.join(diretorio, "indicadores")
-    if os.path.exists(diretorio_indicadores):
-        for nome_arquivo in os.listdir(diretorio_indicadores):
-            if nome_arquivo.endswith(".py") and not nome_arquivo.startswith("_"):
-                nome_modulo = nome_arquivo[:-3]
-                try:
-                    modulo = importlib.import_module(
-                        f"{diretorio}.indicadores.{nome_modulo}"
-                    )
+        logger.debug(f"=== Total de plugins carregados: {len(plugins)} ===")
+        for p in plugins:
+            logger.debug(f"Plugin ativo: {p.__class__.__name__}")
 
-                    for nome_classe in dir(modulo):
-                        if nome_classe != "Plugin":
-                            classe = getattr(modulo, nome_classe)
-                            if isinstance(classe, type) and issubclass(classe, Plugin):
-                                # Verifica se a classe precisa de config
-                                if "config" in classe.__init__.__code__.co_varnames:
-                                    plugin = classe(config)
-                                else:
-                                    plugin = classe()
-                                plugins.append(plugin)
-                                logger.debug(
-                                    f"Plugin carregado com sucesso: {nome_classe}"
-                                )
-
-                except Exception as e:
-                    logger.error(f"Erro ao carregar plugin {nome_modulo}: {e}")
-
-    logger.debug(f"=== Total de plugins carregados: {len(plugins)} ===")
-    for p in plugins:
-        logger.debug(f"Plugin ativo: {p.__class__.__name__}")
+    except Exception as e:
+        logger.error(f"Erro ao carregar plugins: {e}")
 
     return plugins
 

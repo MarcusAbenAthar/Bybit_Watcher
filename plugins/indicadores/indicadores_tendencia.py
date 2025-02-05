@@ -20,22 +20,11 @@ from plugins.gerente_plugin import obter_banco_dados
 
 
 class IndicadoresTendencia(Plugin):
-    def __init__(self):
+    def __init__(self, config=None):
         """Inicializa o plugin de indicadores de tendência."""
         super().__init__()
         self.nome = "Indicadores de Tendência"
-
-        # Configurações padrão
-        self.config = {
-            "sma_rapida": 9,
-            "sma_lenta": 21,
-            "ema_rapida": 12,
-            "ema_lenta": 26,
-            "macd_signal": 9,
-            "adx_periodo": 14,
-            "min_adx": 25,  # Força mínima da tendência
-            "min_confianca": 0.7,  # Confiança mínima para sinais
-        }
+        self.config = config
 
     def calcular_medias_moveis(self, dados: pd.DataFrame) -> Dict[str, pd.Series]:
         """

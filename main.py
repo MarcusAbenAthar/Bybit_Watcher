@@ -88,7 +88,6 @@ while True:
                 and dados.get("linear")
                 and not dados.get("id", "").endswith("/USDT:USDT")
             ):
-
                 # Limpa o nome do símbolo mantendo o USDT no final
                 symbol_limpo = symbol.replace("/USDT:USDT", "USDT")
 
@@ -106,7 +105,7 @@ while True:
                             symbol,
                             timeframe,
                             params={"category": "linear"},
-                            limit=200,  # Explicita o limite
+                            limit=200,
                         )
 
                         if not klines:
@@ -118,14 +117,14 @@ while True:
                         # Formata os dados usando o símbolo limpo
                         dados = [
                             (
-                                symbol_limpo,  # símbolo
-                                timeframe,  # timeframe
-                                kline[0],  # timestamp
-                                kline[1],  # open
-                                kline[2],  # high
-                                kline[3],  # low
-                                kline[4],  # close
-                                kline[5],  # volume
+                                symbol_limpo,
+                                timeframe,
+                                kline[0],
+                                kline[1],
+                                kline[2],
+                                kline[3],
+                                kline[4],
+                                kline[5],
                             )
                             for kline in klines
                         ]
@@ -133,21 +132,51 @@ while True:
                         # Armazena os dados no banco de dados com o símbolo limpo
                         banco_dados.inserir_dados_klines(dados)
 
-                        # Executa os plugins com o símbolo limpo
+                        # Processa os dados através dos plugins na ordem correta
+                        resultados = {}
+
+                        # Primeiro processa indicadores
                         for plugin in plugins:
-                            try:
-                                plugin.executar(dados, symbol_limpo, timeframe, config)
-                            except Exception as e:
-                                logger.error(
-                                    f"Erro ao executar plugin {plugin.__class__.__name__} "
-                                    f"para {symbol_limpo} - {timeframe}: {e}"
+                            if plugin.nome in [
+                                "Indicadores de Tendência",
+                                "Médias Móveis",
+                            ]:
+                                resultado = plugin.executar(
+                                    dados, symbol_limpo, timeframe
                                 )
+                                if resultado:
+                                    chave = (
+                                        plugin.nome.lower()
+                                        .replace(" ", "_")
+                                        .replace("ê", "e")
+                                    )
+                                    resultados[chave] = resultado
+
+                        # Depois processa sinais
+                        for plugin in plugins:
+                            if plugin.nome == "Sinais" and resultados:
+                                plugin.executar(resultados, symbol_limpo, timeframe)
+
+                        # Por fim, processa outros plugins
+                        for plugin in plugins:
+                            if plugin.nome not in [
+                                "Indicadores de Tendência",
+                                "Médias Móveis",
+                                "Sinais",
+                            ]:
+                                try:
+                                    plugin.executar(dados, symbol_limpo, timeframe)
+                                except Exception as e:
+                                    logger.error(
+                                        f"Erro ao executar plugin {plugin.__class__.__name__} "
+                                        f"para {symbol_limpo} - {timeframe}: {e}"
+                                    )
 
                     except ccxt.RateLimitExceeded:
                         logger.warning(
                             f"Rate limit atingido para {symbol_limpo}. Aguardando..."
                         )
-                        time.sleep(5)  # Espera 5 segundos antes de continuar
+                        time.sleep(5)
                         continue
 
                     except ccxt.ExchangeError as e:
