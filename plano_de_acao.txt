@@ -10,3 +10,7 @@ Regras de OURO para programar o bot:
 8 - Composto por plugins
 9 - Testável
 10 - Documentado com Docstrings e comentários
+
+
+
+https://github.com/MarcusAbenAthar/Bybit_Watcher

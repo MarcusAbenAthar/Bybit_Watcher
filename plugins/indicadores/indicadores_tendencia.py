@@ -1,597 +1,315 @@
-from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
+"""
+Plugin de Indicadores de Tendência
+
+Este plugin implementa diversos indicadores técnicos para análise de tendência,
+incluindo médias móveis, MACD, ADX e outros indicadores direcionais.
+
+Características:
+- Análise multi-timeframe
+- Confirmações múltiplas
+- Níveis de TP/SL automáticos
+- Filtros de qualidade
+"""
+
+from typing import List, Tuple, Dict, Optional
+import numpy as np
+import pandas as pd
 from loguru import logger
-import psycopg2
-import talib
 from plugins.plugin import Plugin
+from plugins.banco_dados import obter_banco_dados
 
 
 class IndicadoresTendencia(Plugin):
-    """
-    Plugin para calcular indicadores de tendência.
-    """
-
     def __init__(self):
-        """Inicializa o plugin Indicadores de Tendencia."""
+        """Inicializa o plugin de indicadores de tendência."""
         super().__init__()
-        # Obtém o plugin de cálculo de alavancagem
-        self.calculo_alavancagem = obter_calculo_alavancagem()
-        # Obtém o plugin de banco de dados
-        self.banco_dados = obter_banco_dados()
+        self.nome = "Indicadores de Tendência"
 
-    def calcular_tema(self, dados, periodo=30):
+        # Configurações padrão
+        self.config = {
+            "sma_rapida": 9,
+            "sma_lenta": 21,
+            "ema_rapida": 12,
+            "ema_lenta": 26,
+            "macd_signal": 9,
+            "adx_periodo": 14,
+            "min_adx": 25,  # Força mínima da tendência
+            "min_confianca": 0.7,  # Confiança mínima para sinais
+        }
+
+    def calcular_medias_moveis(self, dados: pd.DataFrame) -> Dict[str, pd.Series]:
         """
-        Calcula a Média Móvel Exponencial Tripla (TEMA) para os dados fornecidos,
-        usando a biblioteca TA-Lib.
+        Calcula diferentes tipos de médias móveis.
 
         Args:
-            dados (list): Lista de candles.
-            periodo (int): Período da TEMA.
+            dados: DataFrame com OHLCV
 
         Returns:
-            list: Lista com os valores da TEMA.
-        """
-        fechamentos = [candle[4] for candle in dados]
-        return talib.TEMA(fechamentos, timeperiod=periodo)
-
-    def calcular_kama(self, dados, periodo=30):
-        """
-        Calcula a Média Móvel Adaptativa (KAMA) para os dados fornecidos,
-        usando a biblioteca TA-Lib.
-
-        Args:
-            dados (list): Lista de candles.
-            periodo (int): Período da KAMA.
-
-        Returns:
-            list: Lista com os valores da KAMA.
-        """
-        fechamentos = [candle[4] for candle in dados]
-        return talib.KAMA(fechamentos, timeperiod=periodo)
-
-    def calcular_macd_histograma(
-        self, dados, fastperiod=12, slowperiod=26, signalperiod=9
-    ):
-        """
-        Calcula o MACD com histograma para os dados fornecidos, usando a biblioteca TA-Lib.
-
-        Args:
-            dados (list): Lista de candles.
-            fastperiod (int): Período da média móvel rápida.
-            slowperiod (int): Período da média móvel lenta.
-            signalperiod (int): Período da média móvel do sinal.
-
-        Returns:
-            tuple: Uma tupla com as listas do MACD, do sinal e do histograma.
-        """
-        fechamentos = [candle[4] for candle in dados]
-        macd, signal, hist = talib.MACD(
-            fechamentos,
-            fastperiod=fastperiod,
-            slowperiod=slowperiod,
-            signalperiod=signalperiod,
-        )
-        return macd, signal, hist
-
-    def calcular_adx(self, dados, periodo=14):
-        """
-        Calcula o ADX (Average Directional Index) para os dados fornecidos, usando a biblioteca TA-Lib.
-
-        Args:
-            dados (list): Lista de candles.
-            periodo (int): Período do ADX.
-
-        Returns:
-            list: Lista com os valores do ADX.
-        """
-        high = [candle[2] for candle in dados]
-        low = [candle[3] for candle in dados]
-        close = [candle[4] for candle in dados]
-        return talib.ADX(high, low, close, timeperiod=periodo)
-
-    def calcular_aroon(self, dados, periodo=14):
-        """
-        Calcula o Aroon para os dados fornecidos, usando a biblioteca TA-Lib.
-
-        Args:
-            dados (list): Lista de candles.
-            periodo (int): Período do Aroon.
-
-        Returns:
-            tuple: Uma tupla com as listas do Aroon Up e do Aroon Down.
-        """
-        high = [candle[2] for candle in dados]
-        low = [candle[3] for candle in dados]
-        return talib.AROON(high, low, timeperiod=periodo)
-
-    def calcular_rsi(self, dados, symbol, timeframe, periodo=14):
-        """
-        Calcula o RSI (Relative Strength Index) para os dados fornecidos, usando a biblioteca TA-Lib.
-        Considera diferentes períodos de RSI para diferentes timeframes e ajusta o período dinamicamente
-        com base na volatilidade do ativo, seguindo as Regras de Ouro.
-
-        Args:
-            dados (list): Lista de candles.
-            symbol (str): Par de moedas.
-            timeframe (str): Timeframe dos candles.
-            periodo (int): Período base do RSI.
-
-        Returns:
-            list: Lista com os valores do RSI.
-        """
-        # Ajusta o período do RSI com base no timeframe
-        if timeframe == "1m":
-            periodo = max(7, periodo // 2)  # Reduz o período para timeframes menores
-        elif timeframe == "1d":
-            periodo = min(28, periodo * 2)  # Aumenta o período para timeframes maiores
-
-        # Calcula a volatilidade do ativo
-        volatilidade = self.calcular_volatilidade(dados)
-
-        # Ajusta o período do RSI com base na volatilidade
-        # Aumenta o período para volatilidade alta, diminui para volatilidade baixa
-        ajuste_volatilidade = int(
-            volatilidade * 10
-        )  # Ajuste o fator 10 conforme necessário
-        periodo = max(7, min(28, periodo + ajuste_volatilidade))
-
-        # Extrai os valores de fechamento dos candles
-        fechamentos = [candle[4] for candle in dados]
-
-        # Calcula o RSI usando a função RSI do TA-Lib
-        rsi = talib.RSI(fechamentos, timeperiod=periodo)
-
-        return rsi
-
-    def calcular_macd(
-        self, dados, symbol, timeframe, fastperiod=12, slowperiod=26, signalperiod=9
-    ):
-        """
-        Calcula o MACD (Moving Average Convergence Divergence) para os dados fornecidos,
-        usando a biblioteca TA-Lib. Ajusta os períodos das médias móveis dinamicamente
-        com base no timeframe e na volatilidade do ativo, seguindo as Regras de Ouro.
-
-        Args:
-            dados (list): Lista de candles.
-            symbol (str): Par de moedas.
-            timeframe (str): Timeframe dos candles.
-            fastperiod (int): Período base da média móvel rápida.
-            slowperiod (int): Período base da média móvel lenta.
-            signalperiod (int): Período base da média móvel do sinal.
-
-        Returns:
-            tuple: Uma tupla com as listas do MACD, do sinal e do histograma.
-        """
-        # Ajusta os períodos das médias móveis com base no timeframe
-        if timeframe == "1m":
-            fastperiod = max(
-                7, fastperiod // 2
-            )  # Reduz o período para timeframes menores
-            slowperiod = max(14, slowperiod // 2)
-            signalperiod = max(4, signalperiod // 2)
-        elif timeframe == "1d":
-            fastperiod = min(
-                28, fastperiod * 2
-            )  # Aumenta o período para timeframes maiores
-            slowperiod = min(52, slowperiod * 2)
-            signalperiod = min(18, signalperiod * 2)
-
-        # Calcula a volatilidade do ativo
-        volatilidade = self.calcular_volatilidade(dados)
-
-        # Ajusta os períodos das médias móveis com base na volatilidade
-        # Aumenta os períodos para volatilidade alta, diminui para volatilidade baixa
-        ajuste_volatilidade = int(
-            volatilidade * 5
-        )  # Ajuste o fator 5 conforme necessário
-        fastperiod = max(7, min(28, fastperiod + ajuste_volatilidade))
-        slowperiod = max(14, min(52, slowperiod + ajuste_volatilidade))
-        signalperiod = max(4, min(18, signalperiod + ajuste_volatilidade))
-
-        # Extrai os valores de fechamento dos candles
-        fechamentos = [candle[4] for candle in dados]
-
-        # Calcula o MACD usando a função MACD do TA-Lib
-        macd, signal, hist = talib.MACD(
-            fechamentos,
-            fastperiod=fastperiod,
-            slowperiod=slowperiod,
-            signalperiod=signalperiod,
-        )
-
-        return macd, signal, hist
-
-    def calcular_adx(self, dados, periodo=14):
-        """
-        Calcula o ADX (Average Directional Index) para os dados fornecidos, usando a biblioteca TA-Lib.
-
-        Args:
-            dados (list): Lista de candles.
-            periodo (int): Período do ADX.
-
-        Returns:
-            list: Lista com os valores do ADX.
-        """
-        high = [candle[2] for candle in dados]
-        low = [candle[3] for candle in dados]
-        close = [candle[4] for candle in dados]
-        return talib.ADX(high, low, close, timeperiod=periodo)
-
-    def calcular_aroon(self, dados, periodo=14):
-        """
-        Calcula o Aroon para os dados fornecidos, usando a biblioteca TA-Lib.
-
-        Args:
-            dados (list): Lista de candles.
-            periodo (int): Período do Aroon.
-
-        Returns:
-            tuple: Uma tupla com as listas do Aroon Up e do Aroon Down.
-        """
-        high = [candle[2] for candle in dados]
-        low = [candle[3] for candle in dados]
-        return talib.AROON(high, low, timeperiod=periodo)
-
-    def calcular_sar_parabolico(self, dados, acceleration=0.02, maximum=0.2):
-        """
-        Calcula o SAR Parabólico (Parabolic SAR) para os dados fornecidos, usando a biblioteca TA-Lib.
-
-        Args:
-            dados (list): Lista de candles.
-            acceleration (float): Fator de aceleração.
-            maximum (float): Valor máximo do fator de aceleração.
-
-        Returns:
-            list: Lista com os valores do SAR Parabólico.
-        """
-        high = [candle[2] for candle in dados]
-        low = [candle[3] for candle in dados]
-        return talib.SAR(high, low, acceleration=acceleration, maximum=maximum)
-
-    def gerar_sinal(self, dados, indicador, tipo, symbol, timeframe, config):
-        """
-        Gera um sinal de compra ou venda com base no indicador de tendência fornecido,
-        seguindo as Regras de Ouro.
-
-        Args:
-            dados (list): Lista de candles.
-            indicador (str): Nome do indicador de tendência.
-            tipo (str): Tipo de sinal (depende do indicador).
-            symbol (str): Par de moedas.
-            timeframe (str): Timeframe dos candles.
-            config (ConfigParser): Objeto com as configurações do bot.
-
-        Returns:
-            dict: Um dicionário com o sinal, o stop loss e o take profit.
+            Dict com as diferentes médias móveis calculadas
         """
         try:
-            sinal = None
-            stop_loss = None
-            take_profit = None
-
-            # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
-            alavancagem = self.calculo_alavancagem.calcular_alavancagem(
-                dados[-1], symbol, timeframe, config
-            )
-
-            # ----- Lógica para o RSI -----
-            if indicador == "rsi":
-                rsi = self.calcular_rsi(dados, symbol, timeframe)
-                if tipo == "sobrecompra" and rsi[-1] > 70:
-                    sinal = "venda"
-                elif tipo == "sobrevenda" and rsi[-1] < 30:
-                    sinal = "compra"
-
-            # ----- Lógica para o MACD -----
-            elif indicador == "macd":
-                macd, signal, hist = self.calcular_macd(dados, symbol, timeframe)
-                if tipo == "cruzamento_acima" and macd[-1] > signal[-1]:
-                    sinal = "compra"
-                elif tipo == "cruzamento_abaixo" and macd[-1] < signal[-1]:
-                    sinal = "venda"
-            # ----- Lógica para o ADX -----
-            elif indicador == "adx":
-                adx = self.calcular_adx(dados)
-                if tipo == "forte_alta" and adx[-1] > 25:
-                    sinal = "compra"
-                elif tipo == "forte_baixa" and adx[-1] > 25:
-                    sinal = "venda"
-
-            # ----- Lógica para o Aroon -----
-            elif indicador == "aroon":
-                aroon_up, aroon_down = self.calcular_aroon(dados)
-                if tipo == "cruzamento_acima" and aroon_up[-1] > aroon_down[-1]:
-                    sinal = "compra"
-                elif tipo == "cruzamento_abaixo" and aroon_up[-1] < aroon_down[-1]:
-                    sinal = "venda"
-
-            # ----- Lógica para o SAR Parabólico -----
-            elif indicador == "sar_parabolico":
-                sar = self.calcular_sar_parabolico(dados)
-                if tipo == "reversao_alta" and sar[-1] < dados[-1][4]:
-                    sinal = "compra"
-                elif tipo == "reversao_baixa" and sar[-1] > dados[-1][4]:
-                    sinal = "venda"
-
-            # ----- Lógica para o TEMA -----
-            elif indicador == "tema":
-                tema = self.calcular_tema(dados)
-                if tipo == "cruzamento_acima" and dados[-1][4] > tema[-1]:
-                    sinal = "compra"
-                elif tipo == "cruzamento_abaixo" and dados[-1][4] < tema[-1]:
-                    sinal = "venda"
-
-            # ----- Lógica para o KAMA -----
-            elif indicador == "kama":
-                kama = self.calcular_kama(dados)
-                if tipo == "cruzamento_acima" and dados[-1][4] > kama[-1]:
-                    sinal = "compra"
-                elif tipo == "cruzamento_abaixo" and dados[-1][4] < kama[-1]:
-                    sinal = "venda"
-
-            # ----- Lógica para o MACD com histograma -----
-            elif indicador == "macd_histograma":
-                macd, signal, hist = self.calcular_macd_histograma(dados)
-                if tipo == "cruzamento_acima" and hist[-1] > 0 and hist[-2] < 0:
-                    sinal = "compra"
-                elif tipo == "cruzamento_abaixo" and hist[-1] < 0 and hist[-2] > 0:
-                    sinal = "venda"
-
-            # Calcula o stop loss e o take profit, considerando a alavancagem
-            if sinal == "compra":
-                stop_loss = dados[-1] - (dados[-1] - dados[-1]) * (0.1 / alavancagem)
-                take_profit = dados[-1] + (dados[-1] - dados[-1]) * (2 / alavancagem)
-            elif sinal == "venda":
-                stop_loss = dados[-1] + (dados[-1] - dados[-1]) * (0.1 / alavancagem)
-                take_profit = dados[-1] - (dados[-1] - dados[-1]) * (2 / alavancagem)
+            close = dados["close"]
 
             return {
-                "sinal": sinal,
-                "stop_loss": stop_loss,
-                "take_profit": take_profit,
+                "sma_rapida": close.rolling(self.config["sma_rapida"]).mean(),
+                "sma_lenta": close.rolling(self.config["sma_lenta"]).mean(),
+                "ema_rapida": close.ewm(
+                    span=self.config["ema_rapida"], adjust=False
+                ).mean(),
+                "ema_lenta": close.ewm(
+                    span=self.config["ema_lenta"], adjust=False
+                ).mean(),
             }
+        except Exception as e:
+            logger.error(f"Erro ao calcular médias móveis: {e}")
+            return {}
+
+    def calcular_macd(self, dados: pd.DataFrame) -> Dict[str, pd.Series]:
+        """
+        Calcula o MACD e suas componentes.
+
+        Args:
+            dados: DataFrame com OHLCV
+
+        Returns:
+            Dict com linha MACD, signal e histograma
+        """
+        try:
+            close = dados["close"]
+            ema_rapida = close.ewm(span=self.config["ema_rapida"], adjust=False).mean()
+            ema_lenta = close.ewm(span=self.config["ema_lenta"], adjust=False).mean()
+
+            macd_line = ema_rapida - ema_lenta
+            signal_line = macd_line.ewm(
+                span=self.config["macd_signal"], adjust=False
+            ).mean()
+            histogram = macd_line - signal_line
+
+            return {"macd": macd_line, "signal": signal_line, "histogram": histogram}
+        except Exception as e:
+            logger.error(f"Erro ao calcular MACD: {e}")
+            return {}
+
+    def calcular_adx(self, dados: pd.DataFrame) -> Dict[str, pd.Series]:
+        """
+        Calcula o ADX (Average Directional Index).
+
+        Args:
+            dados: DataFrame com OHLCV
+
+        Returns:
+            Dict com ADX e indicadores direcionais
+        """
+        try:
+            high = dados["high"]
+            low = dados["low"]
+            close = dados["close"]
+            periodo = self.config["adx_periodo"]
+
+            # Cálculo do True Range
+            tr1 = high - low
+            tr2 = abs(high - close.shift(1))
+            tr3 = abs(low - close.shift(1))
+            tr = pd.DataFrame({"tr1": tr1, "tr2": tr2, "tr3": tr3}).max(axis=1)
+            atr = tr.rolling(periodo).mean()
+
+            # Movimento Direcional
+            up_move = high - high.shift(1)
+            down_move = low.shift(1) - low
+
+            pos_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0)
+            neg_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0)
+
+            pdi = 100 * pd.Series(pos_dm).rolling(periodo).mean() / atr
+            ndi = 100 * pd.Series(neg_dm).rolling(periodo).mean() / atr
+
+            dx = 100 * abs(pdi - ndi) / (pdi + ndi)
+            adx = dx.rolling(periodo).mean()
+
+            return {"adx": adx, "pdi": pdi, "ndi": ndi}
+        except Exception as e:
+            logger.error(f"Erro ao calcular ADX: {e}")
+            return {}
+
+    def gerar_sinal(self, dados: pd.DataFrame) -> Dict[str, any]:
+        """
+        Gera sinais de trading baseados nos indicadores.
+
+        Args:
+            dados: DataFrame com OHLCV
+
+        Returns:
+            Dict com sinais e níveis de TP/SL
+        """
+        try:
+            # Calcula todos os indicadores
+            medias = self.calcular_medias_moveis(dados)
+            macd = self.calcular_macd(dados)
+            adx = self.calcular_adx(dados)
+
+            # Inicializa contadores de confirmação
+            confirmacoes_compra = 0
+            confirmacoes_venda = 0
+            total_indicadores = 0
+
+            # 1. Análise de Médias Móveis
+            if medias:
+                total_indicadores += 1
+                if (
+                    medias["sma_rapida"].iloc[-1] > medias["sma_lenta"].iloc[-1]
+                    and medias["ema_rapida"].iloc[-1] > medias["ema_lenta"].iloc[-1]
+                ):
+                    confirmacoes_compra += 1
+                elif (
+                    medias["sma_rapida"].iloc[-1] < medias["sma_lenta"].iloc[-1]
+                    and medias["ema_rapida"].iloc[-1] < medias["ema_lenta"].iloc[-1]
+                ):
+                    confirmacoes_venda += 1
+
+            # 2. Análise MACD
+            if macd:
+                total_indicadores += 1
+                if macd["histogram"].iloc[-1] > 0 and macd["histogram"].iloc[-2] <= 0:
+                    confirmacoes_compra += 1
+                elif macd["histogram"].iloc[-1] < 0 and macd["histogram"].iloc[-2] >= 0:
+                    confirmacoes_venda += 1
+
+            # 3. Análise ADX
+            if adx and adx["adx"].iloc[-1] >= self.config["min_adx"]:
+                total_indicadores += 1
+                if adx["pdi"].iloc[-1] > adx["ndi"].iloc[-1]:
+                    confirmacoes_compra += 1
+                else:
+                    confirmacoes_venda += 1
+
+            # Calcula níveis de confiança
+            if total_indicadores > 0:
+                confianca_compra = confirmacoes_compra / total_indicadores
+                confianca_venda = confirmacoes_venda / total_indicadores
+            else:
+                return {"sinal": "NEUTRO", "confianca": 0}
+
+            # Gera sinal final com base na confiança mínima
+            if confianca_compra >= self.config["min_confianca"]:
+                # Calcula níveis de TP/SL para compra
+                atr = self.calcular_atr(dados)
+                preco_atual = dados["close"].iloc[-1]
+                stop_loss = preco_atual - (atr * 1.5)
+                take_profit = preco_atual + (atr * 2)
+
+                return {
+                    "sinal": "COMPRA",
+                    "confianca": confianca_compra,
+                    "stop_loss": stop_loss,
+                    "take_profit": take_profit,
+                }
+
+            elif confianca_venda >= self.config["min_confianca"]:
+                # Calcula níveis de TP/SL para venda
+                atr = self.calcular_atr(dados)
+                preco_atual = dados["close"].iloc[-1]
+                stop_loss = preco_atual + (atr * 1.5)
+                take_profit = preco_atual - (atr * 2)
+
+                return {
+                    "sinal": "VENDA",
+                    "confianca": confianca_venda,
+                    "stop_loss": stop_loss,
+                    "take_profit": take_profit,
+                }
+
+            return {"sinal": "NEUTRO", "confianca": 0}
 
         except Exception as e:
-            logger.error(f"Erro ao gerar sinal para {indicador} - {tipo}: {e}")
-            return {
-                "sinal": None,
-                "stop_loss": None,
-                "take_profit": None,
-            }
+            logger.error(f"Erro ao gerar sinal: {e}")
+            return {"sinal": "ERRO", "confianca": 0}
 
-    def executar(self, dados, symbol, timeframe, config):
+    def calcular_atr(self, dados: pd.DataFrame, periodo: int = 14) -> float:
+        """Calcula o ATR para definição de TP/SL."""
+        try:
+            high = dados["high"]
+            low = dados["low"]
+            close = dados["close"]
+
+            tr1 = high - low
+            tr2 = abs(high - close.shift(1))
+            tr3 = abs(low - close.shift(1))
+            tr = pd.DataFrame({"tr1": tr1, "tr2": tr2, "tr3": tr3}).max(axis=1)
+            atr = tr.rolling(periodo).mean().iloc[-1]
+
+            return atr
+        except Exception as e:
+            logger.error(f"Erro ao calcular ATR: {e}")
+            return 0
+
+    def executar(self, dados: List[Tuple], symbol: str, timeframe: str, config) -> None:
         """
-        Executa o cálculo dos indicadores de tendência, gera sinais de trading e salva os resultados no banco de dados.
+        Executa a análise de tendência e salva os resultados.
 
         Args:
-            dados (list): Lista de candles.
-            symbol (str): Par de moedas.
-            timeframe (str): Timeframe dos candles.
+            dados: Lista de tuplas com dados OHLCV
+            symbol: Símbolo do par
+            timeframe: Timeframe da análise
+            config: Configurações do bot
         """
         try:
-            conn = obter_banco_dados().conn
-            cursor = conn.cursor()
+            logger.debug(f"Iniciando análise de tendência para {symbol} - {timeframe}")
+            logger.debug(f"Quantidade de dados recebidos: {len(dados)}")
 
-            for candle in dados:
-                # Calcula os indicadores de tendência para o candle atual
-                rsi = self.calcular_rsi([candle], symbol, timeframe)
-                macd, macd_signal, macd_hist = self.calcular_macd(
-                    [candle], symbol, timeframe
-                )
-                adx = self.calcular_adx([candle])
-                aroon_up, aroon_down = self.calcular_aroon([candle])
-                sar = self.calcular_sar_parabolico([candle])
-                tema = self.calcular_tema([candle])
-                kama = self.calcular_kama([candle])
-                macd_histograma = self.calcular_macd_histograma([candle])
-
-                # Gera os sinais de compra e venda para o candle atual
-                sinal_rsi_sobrecompra = self.gerar_sinal(
-                    [candle], "rsi", "sobrecompra", symbol, timeframe, config
-                )
-
-                sinal_rsi_sobrevenda = self.gerar_sinal(
-                    [candle], "rsi", "sobrevenda", symbol, timeframe
-                )
-                sinal_macd_cruzamento_acima = self.gerar_sinal(
-                    [candle], "macd", "cruzamento_acima", symbol, timeframe
-                )
-                sinal_macd_cruzamento_abaixo = self.gerar_sinal(
-                    [candle], "macd", "cruzamento_abaixo", symbol, timeframe
-                )
-                sinal_adx_forte_alta = self.gerar_sinal(
-                    [candle], "adx", "forte_alta", symbol, timeframe
-                )
-                sinal_adx_forte_baixa = self.gerar_sinal(
-                    [candle], "adx", "forte_baixa", symbol, timeframe
-                )
-                sinal_aroon_cruzamento_acima = self.gerar_sinal(
-                    [candle], "aroon", "cruzamento_acima", symbol, timeframe
-                )
-                sinal_aroon_cruzamento_abaixo = self.gerar_sinal(
-                    [candle], "aroon", "cruzamento_abaixo", symbol, timeframe
-                )
-                sinal_sar_reversao_alta = self.gerar_sinal(
-                    [candle], "sar_parabolico", "reversao_alta", symbol, timeframe
-                )
-                sinal_sar_reversao_baixa = self.gerar_sinal(
-                    [candle], "sar_parabolico", "reversao_baixa", symbol, timeframe
-                )
-                sinal_tema_cruzamento_acima = self.gerar_sinal(
-                    [candle], "tema", "cruzamento_acima", symbol, timeframe
-                )
-                sinal_tema_cruzamento_abaixo = self.gerar_sinal(
-                    [candle], "tema", "cruzamento_abaixo", symbol, timeframe
-                )
-                sinal_kama_cruzamento_acima = self.gerar_sinal(
-                    [candle], "kama", "cruzamento_acima", symbol, timeframe
-                )
-                sinal_kama_cruzamento_abaixo = self.gerar_sinal(
-                    [candle], "kama", "cruzamento_abaixo", symbol, timeframe
-                )
-                sinal_macd_histograma_cruzamento_acima = self.gerar_sinal(
-                    [candle], "macd_histograma", "cruzamento_acima", symbol, timeframe
-                )
-                sinal_macd_histograma_cruzamento_abaixo = self.gerar_sinal(
-                    [candle], "macd_histograma", "cruzamento_abaixo", symbol, timeframe
-                )
-
-                # Salva os resultados no banco de dados para o candle atual
-                timestamp = int(candle / 1000)  # Converte o timestamp para segundos
-                cursor.execute(
-                    """
-                    INSERT INTO indicadores_tendencia (
-                        symbol, timeframe, timestamp, rsi, macd, macd_signal, macd_hist, adx, aroon_up, aroon_down, sar, tema, kama, macd_histograma,
-                        sinal_rsi_sobrecompra, stop_loss_rsi_sobrecompra, take_profit_rsi_sobrecompra,
-                        sinal_rsi_sobrevenda, stop_loss_rsi_sobrevenda, take_profit_rsi_sobrevenda,
-                        sinal_macd_cruzamento_acima, stop_loss_macd_cruzamento_acima, take_profit_macd_cruzamento_acima,
-                        sinal_macd_cruzamento_abaixo, stop_loss_macd_cruzamento_abaixo, take_profit_macd_cruzamento_abaixo,
-                        sinal_adx_forte_alta, stop_loss_adx_forte_alta, take_profit_adx_forte_alta,
-                        sinal_adx_forte_baixa, stop_loss_adx_forte_baixa, take_profit_adx_forte_baixa,
-                        sinal_aroon_cruzamento_acima, stop_loss_aroon_cruzamento_acima, take_profit_aroon_cruzamento_acima,
-                        sinal_aroon_cruzamento_abaixo, stop_loss_aroon_cruzamento_abaixo, take_profit_aroon_cruzamento_abaixo,
-                        sinal_sar_reversao_alta, stop_loss_sar_reversao_alta, take_profit_sar_reversao_alta,
-                        sinal_sar_reversao_baixa, stop_loss_sar_reversao_baixa, take_profit_sar_reversao_baixa,
-                        sinal_tema_cruzamento_acima, stop_loss_tema_cruzamento_acima, take_profit_tema_cruzamento_acima,
-                        sinal_tema_cruzamento_abaixo, stop_loss_tema_cruzamento_abaixo, take_profit_tema_cruzamento_abaixo,
-                        sinal_kama_cruzamento_acima, stop_loss_kama_cruzamento_acima, take_profit_kama_cruzamento_acima,
-                        sinal_kama_cruzamento_abaixo, stop_loss_kama_cruzamento_abaixo, take_profit_kama_cruzamento_abaixo,
-                        sinal_macd_histograma_cruzamento_acima, stop_loss_macd_histograma_cruzamento_acima, take_profit_macd_histograma_cruzamento_acima,
-                        sinal_macd_histograma_cruzamento_abaixo, stop_loss_macd_histograma_cruzamento_abaixo, take_profit_macd_histograma_cruzamento_abaixo
-                    )
-                    VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                    )
-                    ON CONFLICT (symbol, timeframe, timestamp) DO UPDATE SET
-                    rsi = EXCLUDED.rsi,
-                    macd = EXCLUDED.macd,
-                    macd_signal = EXCLUDED.macd_signal,
-                    macd_hist = EXCLUDED.macd_hist,
-                    adx = EXCLUDED.adx,
-                    aroon_up = EXCLUDED.aroon_up,
-                    aroon_down = EXCLUDED.aroon_down,
-                    sar = EXCLUDED.sar,
-                    tema = EXCLUDED.tema,
-                    kama = EXCLUDED.kama,
-                    macd_histograma = EXCLUDED.macd_histograma,
-                    sinal_rsi_sobrecompra = EXCLUDED.sinal_rsi_sobrecompra,
-                    stop_loss_rsi_sobrecompra = EXCLUDED.stop_loss_rsi_sobrecompra,
-                    take_profit_rsi_sobrecompra = EXCLUDED.take_profit_rsi_sobrecompra,
-                    sinal_rsi_sobrevenda = EXCLUDED.sinal_rsi_sobrevenda,
-                    stop_loss_rsi_sobrevenda = EXCLUDED.stop_loss_rsi_sobrevenda,
-                    take_profit_rsi_sobrevenda = EXCLUDED.take_profit_rsi_sobrevenda,
-                    sinal_macd_cruzamento_acima = EXCLUDED.sinal_macd_cruzamento_acima,
-                    stop_loss_macd_cruzamento_acima = EXCLUDED.stop_loss_macd_cruzamento_acima,
-                    take_profit_macd_cruzamento_acima = EXCLUDED.take_profit_macd_cruzamento_acima,
-                    sinal_macd_cruzamento_abaixo = EXCLUDED.sinal_macd_cruzamento_abaixo,
-                    stop_loss_macd_cruzamento_abaixo = EXCLUDED.stop_loss_macd_cruzamento_abaixo,
-                    take_profit_macd_cruzamento_abaixo = EXCLUDED.take_profit_macd_cruzamento_abaixo,
-                    sinal_adx_forte_alta = EXCLUDED.sinal_adx_forte_alta,
-                    stop_loss_adx_forte_alta = EXCLUDED.stop_loss_adx_forte_alta,
-                    take_profit_adx_forte_alta = EXCLUDED.take_profit_adx_forte_alta,
-                    sinal_adx_forte_baixa = EXCLUDED.sinal_adx_forte_baixa,
-                    stop_loss_adx_forte_baixa = EXCLUDED.stop_loss_adx_forte_baixa,
-                    take_profit_adx_forte_baixa = EXCLUDED.take_profit_adx_forte_baixa,
-                    sinal_aroon_cruzamento_acima = EXCLUDED.sinal_aroon_cruzamento_acima,
-                    stop_loss_aroon_cruzamento_acima = EXCLUDED.stop_loss_aroon_cruzamento_acima,
-                    take_profit_aroon_cruzamento_acima = EXCLUDED.take_profit_aroon_cruzamento_acima,
-                    sinal_aroon_cruzamento_abaixo = EXCLUDED.sinal_aroon_cruzamento_abaixo,
-                    stop_loss_aroon_cruzamento_abaixo = EXCLUDED.stop_loss_aroon_cruzamento_abaixo,
-                    take_profit_aroon_cruzamento_abaixo = EXCLUDED.take_profit_aroon_cruzamento_abaixo,
-                    sinal_sar_reversao_alta = EXCLUDED.sinal_sar_reversao_alta,
-                    stop_loss_sar_reversao_alta = EXCLUDED.stop_loss_sar_reversao_alta,
-                    take_profit_sar_reversao_alta = EXCLUDED.take_profit_sar_reversao_alta,
-                    sinal_sar_reversao_baixa = EXCLUDED.sinal_sar_reversao_baixa,
-                    stop_loss_sar_reversao_baixa = EXCLUDED.stop_loss_sar_reversao_baixa,
-                    take_profit_sar_reversao_baixa = EXCLUDED.take_profit_sar_reversao_baixa,
-                    sinal_tema_cruzamento_acima = EXCLUDED.sinal_tema_cruzamento_acima,
-                    stop_loss_tema_cruzamento_acima = EXCLUDED.stop_loss_tema_cruzamento_acima,
-                    take_profit_tema_cruzamento_acima = EXCLUDED.take_profit_tema_cruzamento_acima,
-                    sinal_tema_cruzamento_abaixo = EXCLUDED.sinal_tema_cruzamento_abaixo,
-                    stop_loss_tema_cruzamento_abaixo = EXCLUDED.stop_loss_tema_cruzamento_abaixo,
-                    take_profit_tema_cruzamento_abaixo = EXCLUDED.take_profit_tema_cruzamento_abaixo,
-                    sinal_kama_cruzamento_acima = EXCLUDED.sinal_kama_cruzamento_acima,
-                    stop_loss_kama_cruzamento_acima = EXCLUDED.stop_loss_kama_cruzamento_acima,
-                    take_profit_kama_cruzamento_acima = EXCLUDED.take_profit_kama_cruzamento_acima,
-                    sinal_kama_cruzamento_abaixo = EXCLUDED.sinal_kama_cruzamento_abaixo,
-                    stop_loss_kama_cruzamento_abaixo = EXCLUDED.stop_loss_kama_cruzamento_abaixo,
-                    take_profit_kama_cruzamento_abaixo = EXCLUDED.take_profit_kama_cruzamento_abaixo,
-                    sinal_macd_histograma_cruzamento_acima = EXCLUDED.sinal_macd_histograma_cruzamento_acima,
-                    stop_loss_macd_histograma_cruzamento_acima = EXCLUDED.stop_loss_macd_histograma_cruzamento_acima,
-                    take_profit_macd_histograma_cruzamento_acima = EXCLUDED.take_profit_macd_histograma_cruzamento_acima,
-                    sinal_macd_histograma_cruzamento_abaixo = EXCLUDED.sinal_macd_histograma_cruzamento_abaixo,
-                    stop_loss_macd_histograma_cruzamento_abaixo = EXCLUDED.stop_loss_macd_histograma_cruzamento_abaixo,
-                    take_profit_macd_histograma_cruzamento_abaixo = EXCLUDED.take_profit_macd_histograma_cruzamento_abaixo
-                )""",
-                    (
-                        symbol,
-                        timeframe,
-                        timestamp,
-                        rsi[-1],
-                        macd[-1],
-                        macd_signal[-1],
-                        macd_hist[-1],
-                        adx[-1],
-                        aroon_up[-1],
-                        aroon_down[-1],
-                        sar[-1],
-                        tema[-1],
-                        kama[-1],
-                        macd_histograma[-1],
-                        sinal_rsi_sobrecompra["sinal"],
-                        sinal_rsi_sobrecompra["stop_loss"],
-                        sinal_rsi_sobrecompra["take_profit"],
-                        sinal_rsi_sobrevenda["sinal"],
-                        sinal_rsi_sobrevenda["stop_loss"],
-                        sinal_rsi_sobrevenda["take_profit"],
-                        sinal_macd_cruzamento_acima["sinal"],
-                        sinal_macd_cruzamento_acima["stop_loss"],
-                        sinal_macd_cruzamento_acima["take_profit"],
-                        sinal_macd_cruzamento_abaixo["sinal"],
-                        sinal_macd_cruzamento_abaixo["stop_loss"],
-                        sinal_macd_cruzamento_abaixo["take_profit"],
-                        sinal_adx_forte_alta["sinal"],
-                        sinal_adx_forte_alta["stop_loss"],
-                        sinal_adx_forte_alta["take_profit"],
-                        sinal_adx_forte_baixa["sinal"],
-                        sinal_adx_forte_baixa["stop_loss"],
-                        sinal_adx_forte_baixa["take_profit"],
-                        sinal_aroon_cruzamento_acima["sinal"],
-                        sinal_aroon_cruzamento_acima["stop_loss"],
-                        sinal_aroon_cruzamento_acima["take_profit"],
-                        sinal_aroon_cruzamento_abaixo["sinal"],
-                        sinal_aroon_cruzamento_abaixo["stop_loss"],
-                        sinal_aroon_cruzamento_abaixo["take_profit"],
-                        sinal_sar_reversao_alta["sinal"],
-                        sinal_sar_reversao_alta["stop_loss"],
-                        sinal_sar_reversao_alta["take_profit"],
-                        sinal_sar_reversao_baixa["sinal"],
-                        sinal_sar_reversao_baixa["stop_loss"],
-                        sinal_sar_reversao_baixa["take_profit"],
-                        sinal_tema_cruzamento_acima["sinal"],
-                        sinal_tema_cruzamento_acima["stop_loss"],
-                        sinal_tema_cruzamento_acima["take_profit"],
-                        sinal_tema_cruzamento_abaixo["sinal"],
-                        sinal_tema_cruzamento_abaixo["stop_loss"],
-                        sinal_tema_cruzamento_abaixo["take_profit"],
-                        sinal_kama_cruzamento_acima["sinal"],
-                        sinal_kama_cruzamento_acima["stop_loss"],
-                        sinal_kama_cruzamento_acima["take_profit"],
-                        sinal_kama_cruzamento_abaixo["sinal"],
-                        sinal_kama_cruzamento_abaixo["stop_loss"],
-                        sinal_kama_cruzamento_abaixo["take_profit"],
-                        sinal_macd_histograma_cruzamento_acima["sinal"],
-                        sinal_macd_histograma_cruzamento_acima["stop_loss"],
-                        sinal_macd_histograma_cruzamento_acima["take_profit"],
-                        sinal_macd_histograma_cruzamento_abaixo["sinal"],
-                        sinal_macd_histograma_cruzamento_abaixo["stop_loss"],
-                        sinal_macd_histograma_cruzamento_abaixo["take_profit"],
-                    ),
-                )
-
-            conn.commit()
-            logger.debug(
-                f"Indicadores de tendência calculados e sinais gerados para {symbol} - {timeframe}."
+            # Converte dados para DataFrame
+            df = pd.DataFrame(
+                dados,
+                columns=[
+                    "symbol",
+                    "timeframe",
+                    "timestamp",
+                    "open",
+                    "high",
+                    "low",
+                    "close",
+                    "volume",
+                ],
             )
 
-        except (Exception, psycopg2.Error) as error:
-            logger.error(f"Erro ao calcular indicadores de tendência: {error}")
+            logger.debug(f"DataFrame criado com sucesso. Shape: {df.shape}")
+
+            # Atualiza configurações se necessário
+            if config.has_section("indicadores_tendencia"):
+                self.config.update(config["indicadores_tendencia"])
+                logger.debug("Configurações atualizadas")
+
+            # Gera sinal
+            sinal = self.gerar_sinal(df)
+            logger.debug(f"Sinal gerado: {sinal}")
+
+            # Loga resultado
+            if sinal["sinal"] != "NEUTRO":
+                logger.info(
+                    f"{symbol} - {timeframe} - Sinal: {sinal['sinal']} "
+                    f"(Confiança: {sinal['confianca']:.2%})"
+                )
+
+                if "stop_loss" in sinal:
+                    logger.info(
+                        f"Stop Loss: {sinal['stop_loss']:.8f} | "
+                        f"Take Profit: {sinal['take_profit']:.8f}"
+                    )
+
+            # Salva resultado no banco de dados
+            self.banco_dados.salvar_sinal(
+                symbol=symbol,
+                timeframe=timeframe,
+                tipo="tendencia",
+                sinal=sinal["sinal"],
+                confianca=sinal["confianca"],
+                stop_loss=sinal.get("stop_loss"),
+                take_profit=sinal.get("take_profit"),
+                timestamp=df["timestamp"].iloc[-1],
+            )
+            logger.debug("Sinal salvo no banco de dados")
+
+        except Exception as e:
+            logger.error(
+                f"Erro ao executar análise de tendência para {symbol} - {timeframe}: {e}"
+            )
+            logger.exception("Detalhes do erro:")

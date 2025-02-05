@@ -118,8 +118,8 @@ while True:
                         # Formata os dados usando o símbolo limpo
                         dados = [
                             (
-                                symbol_limpo,
-                                timeframe,
+                                symbol_limpo,  # símbolo
+                                timeframe,  # timeframe
                                 kline[0],  # timestamp
                                 kline[1],  # open
                                 kline[2],  # high
