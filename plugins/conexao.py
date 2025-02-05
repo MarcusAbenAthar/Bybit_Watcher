@@ -16,7 +16,7 @@ class Conexao(Plugin):
         """
         super().__init__()
         self.exchange = None
-        load_dotenv()  # Carrega as variáveis do .env
+        load_dotenv()
 
     def conectar_bybit(self, config):
         """
@@ -42,23 +42,37 @@ class Conexao(Plugin):
     def carregar_mercados(self):
         """
         Carrega os mercados da Bybit.
-
-        Returns:
-            Um dicionário contendo os mercados da Bybit.
-
-        Raises:
-            ValueError: Se houver algum erro ao carregar os mercados.
         """
         try:
             mercados = self.exchange.load_markets()
-
-            if not mercados:
-                raise ValueError(
-                    "Falha ao carregar os mercados. A resposta veio vazia."
-                )
             return mercados
-        except Exception as e:
-            logger.error(f"Erro ao carregar os mercados da Bybit: {e}")
+
+        except Exception as erro:
+            logger.error(f"Erro ao carregar os mercados da Bybit: {str(erro)}")
+            raise
+
+    def inicializar(self, config=None):
+        """
+        Inicializa a conexão com a Bybit.
+        """
+        try:
+            logger.info("Inicializando a conexão com a Bybit...")
+
+            api_key = os.getenv("API_KEY")
+            api_secret = os.getenv("API_SECRET")
+
+            if not api_key or not api_secret:
+                raise ValueError("Chaves de API não configuradas corretamente.")
+
+            self.conectar_bybit(config)
+            self.filtrar_pares_usdt()
+
+            logger.info("Conexão estabelecida com sucesso!")
+            logger.info(f"Mercado conectado: {self.exchange.options['defaultType']}")
+
+        except Exception as erro:
+            logger.error(f"Erro ao conectar na Bybit: {str(erro)}")
+            self.exchange = None
             raise
 
     def filtrar_pares_usdt(self):
@@ -80,35 +94,4 @@ class Conexao(Plugin):
         except Exception as erro:
             logger.error(f"Erro ao filtrar os pares USDT: {str(erro)}")
             logger.debug(f"Detalhes do erro: {str(erro)}")
-            raise
-
-    def inicializar(self, config=None):
-        """
-        Inicializa a conexão com a Bybit.
-
-        Args:
-            config: Um objeto `ConfigParser` opcional contendo as configurações da Bybit.
-
-        Raises:
-            ValueError: Se as chaves de API não forem configuradas corretamente.
-        """
-        try:
-            logger.info("Inicializando a conexão com a Bybit...")
-
-            api_key = os.getenv("API_KEY")
-            api_secret = os.getenv("API_SECRET")
-
-            if not api_key or not api_secret:
-                raise ValueError("Chaves de API não configuradas corretamente.")
-
-            self.conectar_bybit(config)
-            self.filtrar_pares_usdt()
-
-            logger.info("Conexão estabelecida com sucesso!")
-            logger.info(f"Mercado conectado: {self.exchange.options['defaultType']}")
-
-        except Exception as e:
-            logger.error(f"Erro ao conectar na Bybit: {e}")
-            self.exchange = None
-            logger.debug(f"Detalhes do erro: {str(e)}")
             raise

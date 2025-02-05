@@ -75,66 +75,92 @@ if __name__ == "__main__":
     banco_dados = obter_banco_dados(config)
 
     # Carrega os mercados
-    conexao_bybit.carregar_mercados()
-
-    # Obtém os pares de moedas USDT
-    pares_usdt = conexao_bybit.pares_usdt
-    logger.info(f"Pares USDT: {pares_usdt}")
+    mercados = conexao_bybit.carregar_mercados()
 
 # Loop principal do bot
 while True:
     try:
         logger.info("Iniciando coleta de dados...")
-        for symbol in pares_usdt:
-            if symbol not in pares_processados:
-                logger.info(f"Coletando dados para o symbol {symbol}...")
-                pares_processados.add(symbol)
-            for timeframe in timeframes:
-                try:
-                    # Coleta os dados
-                    klines = exchange.fetch_ohlcv(
-                        symbol,
-                        timeframe,
-                        params={"category": "linear"},
-                    )
-                    # Formata os dados como uma lista de tuplas
-                    dados = [
-                        (
+        for symbol, dados in mercados.items():
+            if (
+                dados.get("type") == "swap"
+                and dados.get("settle") == "USDT"
+                and dados.get("linear")
+                and not dados.get("id", "").endswith("/USDT:USDT")
+            ):
+
+                # Limpa o nome do símbolo mantendo o USDT no final
+                symbol_limpo = symbol.replace("/USDT:USDT", "USDT")
+
+                if symbol_limpo not in pares_processados:
+                    logger.info(f"Coletando dados para o symbol {symbol_limpo}...")
+                    pares_processados.add(symbol_limpo)
+
+                for timeframe in timeframes:
+                    try:
+                        # Adiciona um pequeno delay entre as chamadas
+                        time.sleep(0.5)
+
+                        # Coleta os dados usando o símbolo original para a API
+                        klines = exchange.fetch_ohlcv(
                             symbol,
                             timeframe,
-                            kline,
-                            kline,
-                            kline,
-                            kline,
-                            kline,
-                            kline,
+                            params={"category": "linear"},
+                            limit=200,  # Explicita o limite
                         )
-                        for kline in klines
-                    ]
 
-                    if not dados:
+                        if not klines:
+                            logger.warning(
+                                f"Sem dados disponíveis para {symbol_limpo} - {timeframe}"
+                            )
+                            continue
+
+                        # Formata os dados usando o símbolo limpo
+                        dados = [
+                            (
+                                symbol_limpo,
+                                timeframe,
+                                kline[0],  # timestamp
+                                kline[1],  # open
+                                kline[2],  # high
+                                kline[3],  # low
+                                kline[4],  # close
+                                kline[5],  # volume
+                            )
+                            for kline in klines
+                        ]
+
+                        # Armazena os dados no banco de dados com o símbolo limpo
+                        banco_dados.inserir_dados_klines(dados)
+
+                        # Executa os plugins com o símbolo limpo
+                        for plugin in plugins:
+                            try:
+                                plugin.executar(dados, symbol_limpo, timeframe, config)
+                            except Exception as e:
+                                logger.error(
+                                    f"Erro ao executar plugin {plugin.__class__.__name__} "
+                                    f"para {symbol_limpo} - {timeframe}: {e}"
+                                )
+
+                    except ccxt.RateLimitExceeded:
                         logger.warning(
-                            f"Dados vazios para {symbol} - {timeframe}. Pulando análise."
+                            f"Rate limit atingido para {symbol_limpo}. Aguardando..."
+                        )
+                        time.sleep(5)  # Espera 5 segundos antes de continuar
+                        continue
+
+                    except ccxt.ExchangeError as e:
+                        logger.error(
+                            f"Erro da exchange para {symbol_limpo} - {timeframe}: {e}"
                         )
                         continue
 
-                    # Armazena os dados no banco de dados
-                    banco_dados.inserir_dados_klines(dados)
-
-                    # Executa os plugins
-                    for plugin in plugins:
-                        try:
-                            plugin.executar(dados, symbol, timeframe, config)
-                        except Exception as e:
-                            logger.error(
-                                f"Erro ao executar plugin {plugin.__class__.__name__} "
-                                f"para {symbol} - {timeframe}: {e}"
-                            )
-
-                except Exception as e:
-                    logger.error(
-                        f"Erro ao coletar dados ou analisar {symbol} - {timeframe}: {e}"
-                    )
+                    except Exception as e:
+                        logger.error(
+                            f"Erro ao coletar dados ou analisar {symbol_limpo} - {timeframe}: {e}"
+                        )
+                        continue
 
         logger.debug(f"Aguardando {30} segundos para a próxima coleta...")
         time.sleep(30)
@@ -144,3 +170,4 @@ while True:
         time.sleep(60)
     except Exception as e:
         logger.exception(f"Erro inesperado: {e}")
+        time.sleep(30)
