@@ -53,12 +53,18 @@ def inicializar_banco_dados(config):
     )  # Adiciona um log no final da função
 
 
-def carregar_plugins(diretorio):
+def carregar_plugins(diretorio, config=None):
     """
     Carrega todos os plugins de um determinado diretório.
+
+    Args:
+        diretorio: Caminho para o diretório de plugins
+        config: Configurações do bot
     """
     plugins = []
+    logger.debug(f"=== Iniciando carregamento de plugins ===")
 
+    # Carrega plugins do diretório principal
     for nome_arquivo in os.listdir(diretorio):
         if nome_arquivo.endswith(".py") and not nome_arquivo.startswith("_"):
             nome_modulo = nome_arquivo[:-3]
@@ -71,15 +77,52 @@ def carregar_plugins(diretorio):
                     modulo = importlib.import_module(f"{diretorio}.{nome_modulo}")
 
                 for nome_classe in dir(modulo):
-                    if nome_classe != "Plugin" and nome_classe.isupper():
-                        classe_plugin = getattr(modulo, nome_classe)
-                        if issubclass(classe_plugin, Plugin):
-                            plugin = classe_plugin()
+                    if nome_classe != "Plugin":
+                        classe = getattr(modulo, nome_classe)
+                        if isinstance(classe, type) and issubclass(classe, Plugin):
+                            # Verifica se a classe precisa de config
+                            if "config" in classe.__init__.__code__.co_varnames:
+                                plugin = classe(config)
+                            else:
+                                plugin = classe()
                             plugins.append(plugin)
-                            logger.debug(f"Plugin {nome_classe} carregado com sucesso.")
+                            logger.debug(f"Plugin carregado com sucesso: {nome_classe}")
 
             except Exception as e:
                 logger.error(f"Erro ao carregar plugin {nome_modulo}: {e}")
+
+    # Carrega plugins do subdiretório indicadores
+    diretorio_indicadores = os.path.join(diretorio, "indicadores")
+    if os.path.exists(diretorio_indicadores):
+        for nome_arquivo in os.listdir(diretorio_indicadores):
+            if nome_arquivo.endswith(".py") and not nome_arquivo.startswith("_"):
+                nome_modulo = nome_arquivo[:-3]
+                try:
+                    modulo = importlib.import_module(
+                        f"{diretorio}.indicadores.{nome_modulo}"
+                    )
+
+                    for nome_classe in dir(modulo):
+                        if nome_classe != "Plugin":
+                            classe = getattr(modulo, nome_classe)
+                            if isinstance(classe, type) and issubclass(classe, Plugin):
+                                # Verifica se a classe precisa de config
+                                if "config" in classe.__init__.__code__.co_varnames:
+                                    plugin = classe(config)
+                                else:
+                                    plugin = classe()
+                                plugins.append(plugin)
+                                logger.debug(
+                                    f"Plugin carregado com sucesso: {nome_classe}"
+                                )
+
+                except Exception as e:
+                    logger.error(f"Erro ao carregar plugin {nome_modulo}: {e}")
+
+    logger.debug(f"=== Total de plugins carregados: {len(plugins)} ===")
+    for p in plugins:
+        logger.debug(f"Plugin ativo: {p.__class__.__name__}")
+
     return plugins
 
 

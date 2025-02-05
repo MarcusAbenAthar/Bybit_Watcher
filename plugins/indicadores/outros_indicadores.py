@@ -10,11 +10,13 @@ class OutrosIndicadores(Plugin):
     Plugin para calcular outros indicadores.
     """
 
-    def __init__(self):
+    def __init__(self, config=None):
         """Inicializa o plugin OutrosIndicadores."""
         super().__init__()
         self.calculo_alavancagem = obter_calculo_alavancagem()
-        self.banco_dados = obter_banco_dados()
+        self.banco_dados = obter_banco_dados(config)
+        self.nome = "Outros Indicadores"
+        self.config = config
 
     def calcular_fibonacci_retracement(self, dados):
         """
@@ -251,7 +253,7 @@ class OutrosIndicadores(Plugin):
                 "take_profit": None,
             }
 
-    def executar(self, dados, symbol, timeframe, config):
+    def executar(self, dados, symbol, timeframe):
         """
         Executa o cálculo dos indicadores, gera sinais de trading e salva os resultados no banco de dados.
 
@@ -261,7 +263,8 @@ class OutrosIndicadores(Plugin):
             timeframe (str): Timeframe dos candles.
         """
         try:
-            conn = obter_banco_dados().conn
+            banco_dados = obter_banco_dados(self.config)
+            conn = banco_dados.conn
             cursor = conn.cursor()
 
             for candle in dados:
@@ -272,22 +275,37 @@ class OutrosIndicadores(Plugin):
 
                 # Gera os sinais de compra e venda para o candle atual
                 sinal_ichimoku_compra = self.gerar_sinal(
-                    [candle], "ichimoku", "compra", symbol, timeframe, config
+                    [candle], "ichimoku", "compra", symbol, timeframe, self.config
                 )
                 sinal_ichimoku_venda = self.gerar_sinal(
-                    [candle], "ichimoku", "venda", symbol, timeframe
+                    [candle], "ichimoku", "venda", symbol, timeframe, self.config
                 )
                 sinal_fibonacci_suporte = self.gerar_sinal(
-                    [candle], "fibonacci_retracement", "suporte", symbol, timeframe
+                    [candle],
+                    "fibonacci_retracement",
+                    "suporte",
+                    symbol,
+                    timeframe,
+                    self.config,
                 )
                 sinal_fibonacci_resistencia = self.gerar_sinal(
-                    [candle], "fibonacci_retracement", "resistencia", symbol, timeframe
+                    [candle],
+                    "fibonacci_retracement",
+                    "resistencia",
+                    symbol,
+                    timeframe,
+                    self.config,
                 )
                 sinal_pivot_points_suporte = self.gerar_sinal(
-                    [candle], "pivot_points", "suporte", symbol, timeframe
+                    [candle], "pivot_points", "suporte", symbol, timeframe, self.config
                 )
                 sinal_pivot_points_resistencia = self.gerar_sinal(
-                    [candle], "pivot_points", "resistencia", symbol, timeframe
+                    [candle],
+                    "pivot_points",
+                    "resistencia",
+                    symbol,
+                    timeframe,
+                    self.config,
                 )
 
                 # Salva os resultados no banco de dados para o candle atual

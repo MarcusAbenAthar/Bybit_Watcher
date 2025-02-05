@@ -10,13 +10,15 @@ class IndicadoresVolatilidade(Plugin):
     Plugin para calcular indicadores de volatilidade.
     """
 
-    def __init__(self):
+    def __init__(self, config=None):
         """Inicializa o plugin IndicadoresVolatilidade."""
         super().__init__()
+        self.nome = "Indicadores de Volatilidade"
+        self.config = config
         # Obtém o plugin de cálculo de alavancagem
         self.calculo_alavancagem = obter_calculo_alavancagem()
         # Obtém o plugin de banco de dados
-        self.banco_dados = obter_banco_dados()
+        self.banco_dados = obter_banco_dados(config)
 
     def calcular_bandas_de_bollinger(self, dados, periodo=20, desvio_padrao=2):
         """
@@ -128,7 +130,7 @@ class IndicadoresVolatilidade(Plugin):
                 "take_profit": None,
             }
 
-    def executar(self, dados, symbol, timeframe, config):
+    def executar(self, dados, symbol, timeframe):
         """
         Executa o cálculo dos indicadores de volatilidade, gera sinais de trading e salva os resultados no banco de dados.
 
@@ -136,11 +138,10 @@ class IndicadoresVolatilidade(Plugin):
             dados (list): Lista de candles.
             symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
-            config (ConfigParser): Objeto com as configurações do bot.
         """
 
         try:
-            conn = obter_banco_dados().conn
+            conn = self.banco_dados.conn
             cursor = conn.cursor()
 
             for candle in dados:
@@ -157,7 +158,7 @@ class IndicadoresVolatilidade(Plugin):
                     "rompimento_superior",
                     symbol,
                     timeframe,
-                    config,
+                    self.config,
                 )
                 sinal_bandas_rompimento_inferior = self.gerar_sinal(
                     [candle],
@@ -165,13 +166,13 @@ class IndicadoresVolatilidade(Plugin):
                     "rompimento_inferior",
                     symbol,
                     timeframe,
-                    config,
+                    self.config,
                 )
                 sinal_atr_rompimento_alta = self.gerar_sinal(
-                    [candle], "atr", "rompimento_alta", symbol, timeframe, config
+                    [candle], "atr", "rompimento_alta", symbol, timeframe, self.config
                 )
                 sinal_atr_rompimento_baixa = self.gerar_sinal(
-                    [candle], "atr", "rompimento_baixa", symbol, timeframe, config
+                    [candle], "atr", "rompimento_baixa", symbol, timeframe, self.config
                 )
 
                 # Salva os resultados no banco de dados para o candle atual

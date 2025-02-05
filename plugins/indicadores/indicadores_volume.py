@@ -10,13 +10,15 @@ class IndicadoresVolume(Plugin):
     Plugin para calcular indicadores de volume.
     """
 
-    def __init__(self):
+    def __init__(self, config=None):
         """Inicializa o plugin IndicadoresVolume."""
         super().__init__()
+        self.nome = "Indicadores de Volume"
+        self.config = config
         # Obtém o plugin de cálculo de alavancagem
         self.calculo_alavancagem = obter_calculo_alavancagem()
         # Obtém o plugin de banco de dados
-        self.banco_dados = obter_banco_dados()
+        self.banco_dados = obter_banco_dados(config)
 
     def calcular_obv(self, dados):
         """
@@ -153,7 +155,7 @@ class IndicadoresVolume(Plugin):
                 "take_profit": None,
             }
 
-    def executar(self, dados, symbol, timeframe, config):
+    def executar(self, dados, symbol, timeframe):
         """
         Executa o cálculo dos indicadores de volume, gera sinais e salva no banco de dados.
 
@@ -161,10 +163,10 @@ class IndicadoresVolume(Plugin):
             dados (list): Lista de candles.
             symbol (str): Par de moedas.
             timeframe (str): Timeframe dos candles.
-            config (ConfigParser): Objeto com as configurações do bot.
         """
         try:
-            conn = obter_banco_dados().conn
+            banco_dados = obter_banco_dados(self.config)
+            conn = banco_dados.conn
             cursor = conn.cursor()
             for candle in dados:
                 # Calcula os indicadores de volume para o candle atual
@@ -174,23 +176,23 @@ class IndicadoresVolume(Plugin):
 
                 # Gera os sinais de compra e venda para o candle atual
                 sinal_obv_divergencia_altista = self.gerar_sinal(
-                    [candle], "obv", "divergencia_altista", symbol, timeframe, config
+                    [candle], "obv", "divergencia_altista", symbol, timeframe, self.config
                 )
 
                 sinal_obv_divergencia_baixista = self.gerar_sinal(
-                    [candle], "obv", "divergencia_baixista", symbol, timeframe
+                    [candle], "obv", "divergencia_baixista", symbol, timeframe, self.config
                 )
                 sinal_cmf_cruzamento_acima = self.gerar_sinal(
-                    [candle], "cmf", "cruzamento_acima", symbol, timeframe
+                    [candle], "cmf", "cruzamento_acima", symbol, timeframe, self.config
                 )
                 sinal_cmf_cruzamento_abaixo = self.gerar_sinal(
-                    [candle], "cmf", "cruzamento_abaixo", symbol, timeframe
+                    [candle], "cmf", "cruzamento_abaixo", symbol, timeframe, self.config
                 )
                 sinal_mfi_sobrecompra = self.gerar_sinal(
-                    [candle], "mfi", "sobrecompra", symbol, timeframe
+                    [candle], "mfi", "sobrecompra", symbol, timeframe, self.config
                 )
                 sinal_mfi_sobrevenda = self.gerar_sinal(
-                    [candle], "mfi", "sobrevenda", symbol, timeframe
+                    [candle], "mfi", "sobrevenda", symbol, timeframe, self.config
                 )
 
                 # Salva os resultados no banco de dados para o candle atual

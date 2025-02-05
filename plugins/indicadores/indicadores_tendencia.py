@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 from loguru import logger
 from plugins.plugin import Plugin
-from plugins.banco_dados import obter_banco_dados
+from plugins.gerente_plugin import obter_banco_dados
 
 
 class IndicadoresTendencia(Plugin):
@@ -253,6 +253,9 @@ class IndicadoresTendencia(Plugin):
             config: Configurações do bot
         """
         try:
+            # Obtém o banco de dados quando necessário
+            banco_dados = obter_banco_dados(config)
+
             logger.debug(f"Iniciando análise de tendência para {symbol} - {timeframe}")
             logger.debug(f"Quantidade de dados recebidos: {len(dados)}")
 
@@ -296,7 +299,7 @@ class IndicadoresTendencia(Plugin):
                     )
 
             # Salva resultado no banco de dados
-            self.banco_dados.salvar_sinal(
+            banco_dados.salvar_sinal(
                 symbol=symbol,
                 timeframe=timeframe,
                 tipo="tendencia",
@@ -309,7 +312,5 @@ class IndicadoresTendencia(Plugin):
             logger.debug("Sinal salvo no banco de dados")
 
         except Exception as e:
-            logger.error(
-                f"Erro ao executar análise de tendência para {symbol} - {timeframe}: {e}"
-            )
+            logger.error(f"Erro ao executar análise de tendência: {e}")
             logger.exception("Detalhes do erro:")

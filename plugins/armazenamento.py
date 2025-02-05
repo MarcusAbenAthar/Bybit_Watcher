@@ -10,46 +10,23 @@ class Armazenamento(Plugin):
     Plugin para armazenar os dados dos candles no banco de dados.
     """
 
-    def __init__(self, banco_dados):  # Adicionar banco_dados como argumento
+    def __init__(self):
         super().__init__()
-        self.banco_dados = (
-            banco_dados  # Armazenar a conexão    def inicializar(self, config):
-        )
 
-    def executar(self, dados, symbol, timeframe):
+    def executar(self, dados, symbol, timeframe, config):
         """
         Insere os dados das velas no banco de dados.
         """
         try:
-            # Usa a conexão com o banco de dados fornecida pelo Core
-            conn = obter_banco_dados().conn  # Obtém a conexão do banco de dados
-            cursor = conn.cursor()
+            # Obtém o banco de dados quando necessário
+            banco_dados = obter_banco_dados(config)
 
-            for kline in dados:
-                timestamp = int(kline / 1000)
-                open = kline
-                high = kline
-                low = kline
-                close = kline
-                volume = kline
+            # Usa a conexão com o banco de dados
+            banco_dados.inserir_dados_klines(dados)
 
-                try:
-                    cursor.execute(
-                        """
-                        INSERT INTO klines (symbol, timeframe, timestamp, open, high, low, close, volume)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (symbol, timeframe, timestamp) DO NOTHING;  -- Evita duplicatas
-                        """,
-                        (symbol, timeframe, timestamp, open, high, low, close, volume),
-                    )
-                except Exception as e:
-                    logger.error(f"Erro ao inserir kline: {e}")
-                    conn.rollback()  # Faz o rollback da transação em caso de erro
-
-            conn.commit()
             logger.debug(
                 f"Dados de {symbol} - {timeframe} inseridos no banco de dados."
             )
 
-        except (Exception, psycopg2.Error) as error:
+        except Exception as error:
             logger.error(f"Erro ao inserir dados no PostgreSQL: {error}")

@@ -57,8 +57,8 @@ def load_config_from_file(filename):
 if __name__ == "__main__":
     config = load_config_from_file("config.ini")
 
-    # Carrega os plugins
-    plugins = carregar_plugins("plugins")
+    # Carrega os plugins passando o config
+    plugins = carregar_plugins("plugins", config)
 
     # Obtém a instância do plugin Conexao
     conexao_bybit = obter_conexao()

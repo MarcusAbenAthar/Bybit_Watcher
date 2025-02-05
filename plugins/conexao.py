@@ -89,7 +89,7 @@ class Conexao(Plugin):
                     and dados.get("linear")
                 ):
 
-                    logger.debug(f"Par Perpetual USDT encontrado: {dados['id']}")
+                    pass
 
         except Exception as erro:
             logger.error(f"Erro ao filtrar os pares USDT: {str(erro)}")

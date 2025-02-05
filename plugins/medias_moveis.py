@@ -7,9 +7,11 @@ import talib
 class MediasMoveis(Plugin):
     """Plugin para calcular as médias móveis."""
 
-    def __init__(self):
+    def __init__(self, config=None):
         """Inicializa o plugin MediasMoveis."""
         super().__init__()
+        self.nome = "Médias Móveis"
+        self.config = config
         # Obtém o plugin de cálculo de alavancagem
         self.calculo_alavancagem = obter_calculo_alavancagem()
         # Obtém o plugin de banco de dados
@@ -108,6 +110,7 @@ class MediasMoveis(Plugin):
             timeframe (str): Timeframe dos candles.
         """
         try:
+            banco_dados = obter_banco_dados(self.config)
             # Calcula as médias móveis
             media_movel_curta = self.calcular_media_movel(
                 dados, periodo=20, tipo="simples"
@@ -118,7 +121,11 @@ class MediasMoveis(Plugin):
 
             # Gera o sinal de compra ou venda
             sinal = self.gerar_sinal(
-                dados, [media_movel_curta, media_movel_longa], symbol, timeframe
+                dados,
+                [media_movel_curta, media_movel_longa],
+                symbol,
+                timeframe,
+                self.config,
             )
 
             if sinal[
@@ -128,7 +135,7 @@ class MediasMoveis(Plugin):
                 timestamp = int(
                     dados[-1][0] / 1000
                 )  # Converte o timestamp symbola segundos
-                self.banco_dados.inserir_dados(
+                banco_dados.inserir_dados(
                     "medias_moveis",
                     {  # Usando a função inserir_dados do Core
                         "symbol": symbol,
@@ -146,5 +153,5 @@ class MediasMoveis(Plugin):
             else:
                 logger.debug(f"Nenhum sinal gerado para {symbol} - {timeframe}.")
 
-        except Exception as error:
-            logger.error(f"Erro ao calcular médias móveis: {error}")
+        except Exception as e:
+            logger.error(f"Erro ao processar médias móveis: {e}")
