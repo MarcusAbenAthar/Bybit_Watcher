@@ -216,19 +216,6 @@ def obter_analise_candles():
     return analise_candles
 
 
-def obter_armazenamento():
-    """
-    Fornece acesso ao plugin de Armazenamento.
-
-    Returns:
-        Armazenamento: Instância do plugin de Armazenamento.
-    """
-    from plugins.armazenamento import Armazenamento
-
-    armazenamento = Armazenamento()  # Cria a instância da classe Armazenamento
-    return armazenamento  # Retorna a instância da classe Armazenamento
-
-
 def obter_calculo_alavancagem():
     """
     Fornece acesso ao plugin de Cálculo de Alavancagem.

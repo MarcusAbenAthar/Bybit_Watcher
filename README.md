@@ -22,7 +22,6 @@ O bot utiliza uma arquitetura de plugins para facilitar a implementação e a ma
 **Plugins:**
 
 - `analise_candles.py`: Analisa os candles e gera sinais de trading.
-- `armazenamento.py`: Armazena os dados das velas no banco de dados.
 - `banco_dados.py`: Gerencia o banco de dados PostgreSQL.
 - `calculo_alavancagem.py`: Calcula a alavancagem ideal para as operações.
 - `conexao.py`: Estabelece e gerencia a conexão com a Bybit.
