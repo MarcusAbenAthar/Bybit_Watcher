@@ -1,5 +1,7 @@
 import psycopg2
-from loguru import logger
+import logging
+
+logger = logging.getLogger(__name__)
 from plugins.plugin import Plugin
 from typing import List, Tuple
 

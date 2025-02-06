@@ -11,8 +11,15 @@ import datetime
 import os
 import time
 import ccxt
+from logging_config import LOG_CONFIG
 from dotenv import load_dotenv
-from loguru import logger
+import logging
+
+# Configurar logging
+logging.config.dictConfig(LOG_CONFIG)
+logger = logging.getLogger(__name__)
+
+logger = logging.getLogger(__name__)
 from plugins.gerente_plugin import (
     carregar_plugins,
     obter_conexao,

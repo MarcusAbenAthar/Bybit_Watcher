@@ -1,6 +1,8 @@
 from plugins.plugin import Plugin
 from plugins.gerente_plugin import obter_conexao
-from loguru import logger
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ExecucaoOrdens(Plugin):
@@ -59,8 +61,10 @@ class ExecucaoOrdens(Plugin):
             dados (dict): Dados da ordem a ser executada
         """
         try:
+            # Mudando de INFO para DEBUG já que são detalhes de execução
+            logger.debug(f"Executando ordem: {dados}")
+
             # Aqui você pode implementar a lógica de execução de ordens
-            logger.info(f"Executando ordem: {dados}")
             return True
 
         except Exception as e:

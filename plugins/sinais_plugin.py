@@ -1,5 +1,7 @@
 from plugins.plugin import Plugin
-from loguru import logger
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class SinaisPlugin(Plugin):

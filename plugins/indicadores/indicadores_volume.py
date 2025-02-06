@@ -1,6 +1,8 @@
 import psycopg2
 from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
-from loguru import logger
+import logging
+
+logger = logging.getLogger(__name__)
 import talib
 from plugins.plugin import Plugin
 
@@ -176,11 +178,21 @@ class IndicadoresVolume(Plugin):
 
                 # Gera os sinais de compra e venda para o candle atual
                 sinal_obv_divergencia_altista = self.gerar_sinal(
-                    [candle], "obv", "divergencia_altista", symbol, timeframe, self.config
+                    [candle],
+                    "obv",
+                    "divergencia_altista",
+                    symbol,
+                    timeframe,
+                    self.config,
                 )
 
                 sinal_obv_divergencia_baixista = self.gerar_sinal(
-                    [candle], "obv", "divergencia_baixista", symbol, timeframe, self.config
+                    [candle],
+                    "obv",
+                    "divergencia_baixista",
+                    symbol,
+                    timeframe,
+                    self.config,
                 )
                 sinal_cmf_cruzamento_acima = self.gerar_sinal(
                     [candle], "cmf", "cruzamento_acima", symbol, timeframe, self.config

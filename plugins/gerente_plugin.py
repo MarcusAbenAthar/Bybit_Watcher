@@ -10,7 +10,9 @@ testabilidade do código.
 """
 
 from plugins.plugin import Plugin
-from loguru import logger
+import logging
+
+logger = logging.getLogger(__name__)
 import os
 import importlib
 

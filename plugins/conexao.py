@@ -1,4 +1,6 @@
-from loguru import logger
+import logging
+
+logger = logging.getLogger(__name__)
 import ccxt
 from dotenv import load_dotenv
 import os

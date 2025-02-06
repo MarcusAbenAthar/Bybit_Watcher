@@ -1,4 +1,8 @@
-from loguru import logger  # Certifique-se de ter o logger configurado corretamente
+import logging
+
+logger = logging.getLogger(
+    __name__
+)  # Certifique-se de ter o logger configurado corretamente
 import ccxt
 from plugins.plugin import Plugin
 import talib
@@ -83,26 +87,3 @@ class CalculoAlavancagem(Plugin):
 
         # Retorna o último valor do ATR
         return atr[-1]
-
-    def obter_exchange(self, config):
-        """
-        Retorna a instância da Exchange configurada.
-
-        Args:
-            config (ConfigParser): Objeto com as configurações do bot.
-
-        Returns:
-            ccxt.Exchange: Instância da Exchange.
-        """
-        try:
-            exchange = ccxt.bybit(
-                {
-                    "apiKey": config.get("Bybit", "API_KEY"),
-                    "secret": config.get("Bybit", "API_SECRET"),
-                    "enableRateLimit": True,
-                }
-            )
-            return exchange
-        except Exception as e:
-            logger.error(f"Erro ao conectar na Bybit: {e}")
-            raise

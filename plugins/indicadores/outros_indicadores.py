@@ -1,5 +1,7 @@
 from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
-from loguru import logger
+import logging
+
+logger = logging.getLogger(__name__)
 import psycopg2
 import talib
 from plugins.plugin import Plugin

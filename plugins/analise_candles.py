@@ -1,4 +1,6 @@
-from loguru import logger
+import logging
+
+logger = logging.getLogger(__name__)
 
 import psycopg2
 from plugins.plugin import Plugin
