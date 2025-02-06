@@ -5,6 +5,7 @@ from plugins.plugin import Plugin
 from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
 import talib
 from utils.padroes_candles import PADROES_CANDLES
+import numpy as np
 
 
 class AnaliseCandles(Plugin):
@@ -14,6 +15,8 @@ class AnaliseCandles(Plugin):
 
     def __init__(self):
         super().__init__()
+        self.nome = "Análise de Candles"
+        self.descricao = "Plugin para análise de padrões de candles"
         self.calculo_alavancagem = obter_calculo_alavancagem()
 
     def identificar_padrao(self, candle):
@@ -121,53 +124,21 @@ class AnaliseCandles(Plugin):
             "confianca": 0,
         }
 
-    def executar(self, dados, symbol, timeframe, config):
+    def executar(self, dados, symbol, timeframe):
         """
         Executa a análise dos candles.
+
+        Args:
+            dados (list): Lista de candles
+            symbol (str): Símbolo do par
+            timeframe (str): Timeframe da análise
         """
         try:
-            conn = obter_banco_dados()
-            cursor = conn.cursor()
-
-            for candle in dados:
-                padrao = self.identificar_padrao(candle)
-                classificacao = self.classificar_candle(candle)
-
-                sinal = self.gerar_sinal(
-                    candle, padrao, classificacao, symbol, timeframe, config
-                )
-
-                timestamp = int(candle[0] / 1000)
-
-                cursor.execute(
-                    """
-                    INSERT INTO analise_candles 
-                    (symbol, timeframe, timestamp, padrao, classificacao, sinal, stop_loss, take_profit)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (symbol, timeframe, timestamp) DO UPDATE
-                    SET padrao = EXCLUDED.padrao, 
-                        classificacao = EXCLUDED.classificacao,
-                        sinal = EXCLUDED.sinal, 
-                        stop_loss = EXCLUDED.stop_loss, 
-                        take_profit = EXCLUDED.take_profit;
-                    """,
-                    (
-                        symbol,
-                        timeframe,
-                        timestamp,
-                        padrao,
-                        classificacao,
-                        sinal["sinal"],
-                        sinal["stop_loss"],
-                        sinal["take_profit"],
-                    ),
-                )
-
-            conn.commit()
-            logger.debug(f"Análise de candles para {symbol} - {timeframe} concluída.")
-
-        except (Exception, psycopg2.Error) as error:
-            logger.error(f"Erro ao analisar candles: {error}")
+            # Implementação da análise
+            return self.analisar_candles(dados)
+        except Exception as e:
+            logger.error(f"Erro ao analisar candles: {e}")
+            raise
 
     def calcular_forca_padrao(self, candle, padrao):
         """
@@ -250,3 +221,44 @@ class AnaliseCandles(Plugin):
         except Exception as e:
             logger.error(f"Erro ao calcular confiança do padrão: {e}")
             return 0
+
+    def analisar_candles(self, dados):
+        """
+        Analisa os padrões nos candles.
+
+        Args:
+            dados (list): Lista de candles para análise
+        """
+        try:
+            # Verificar se dados é válido
+            if not dados or not isinstance(dados[0], (list, tuple)):
+                logger.warning("Dados inválidos para análise de candles")
+                return {}
+
+            # Converter apenas os dados numéricos para numpy array
+            dados_np = []
+            for candle in dados:
+                # Pegar apenas os valores OHLCV, ignorando symbol e timeframe
+                valores = [
+                    float(v) for v in candle[2:]
+                ]  # Começar do índice 2 (timestamp)
+                dados_np.append(valores)
+
+            dados_np = np.array(dados_np, dtype=np.float64)
+
+            # Extrair OHLC (ajustando índices após remover symbol/timeframe)
+            opens = dados_np[:, 1]
+            highs = dados_np[:, 2]
+            lows = dados_np[:, 3]
+            closes = dados_np[:, 4]
+
+            # Analisar padrões usando TALib
+            resultados = {}
+            resultados["doji"] = talib.CDLDOJI(opens, highs, lows, closes)
+            resultados["hammer"] = talib.CDLHAMMER(opens, highs, lows, closes)
+
+            return resultados
+
+        except Exception as e:
+            logger.error(f"Erro na análise de candles: {e}")
+            raise

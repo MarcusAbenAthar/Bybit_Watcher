@@ -15,6 +15,8 @@ class BancoDados(Plugin):
     def __init__(self, config):
         """Inicializa o plugin BancoDados."""
         super().__init__()
+        self.nome = "Banco de Dados"
+        self.config = config
         self.conectar(
             config.get("database", "database"),
             config.get("database", "user"),

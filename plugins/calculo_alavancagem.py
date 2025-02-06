@@ -12,6 +12,7 @@ class CalculoAlavancagem(Plugin):
     def __init__(self):
         """Inicializa o plugin CalculoAlavancagem."""
         super().__init__()
+        self.nome = "Cálculo de Alavancagem"
         self.cache_volatilidade = {}  # Inicializa o cache de volatilidade
 
     def calcular_alavancagem(self, dados, symbol, timeframe, config):

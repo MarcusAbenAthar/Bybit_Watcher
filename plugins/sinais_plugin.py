@@ -212,24 +212,41 @@ class SinaisPlugin(Plugin):
             logger.error(f"Erro ao calcular confiança: {e}")
             return 0.0
 
-    def logar_sinal(self, sinal, symbol, timeframe):
+    def logar_sinal(self, symbol, timeframe, sinal):
         """
         Gera um log estruturado do sinal.
 
         Args:
-            sinal (dict): Sinal consolidado
             symbol (str): Símbolo do par
             timeframe (str): Timeframe da análise
+            sinal (dict): Sinal consolidado
+
+        Returns:
+            dict: Sinal formatado
         """
-        if sinal:
+        try:
+            if not all([symbol, timeframe, sinal]):
+                raise ValueError("Parâmetros inválidos")
+
+            sinal_formatado = {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "direcao": sinal if isinstance(sinal, str) else sinal.get("direcao"),
+                "forca": sinal.get("forca") if isinstance(sinal, dict) else None,
+                "confianca": (
+                    sinal.get("confianca") if isinstance(sinal, dict) else None
+                ),
+            }
+
             logger.info(
-                "SINAL CONSOLIDADO | "
-                f"Symbol: {symbol} | "
-                f"Timeframe: {timeframe} | "
-                f"Direção: {sinal['direcao']} | "
-                f"Força: {sinal['forca']} | "
-                f"Confiança: {sinal['confianca']}%"
+                "SINAL | "
+                f"Symbol: {sinal_formatado['symbol']} | "
+                f"Timeframe: {sinal_formatado['timeframe']} | "
+                f"Direção: {sinal_formatado['direcao']}"
             )
 
-            # Log detalhado dos indicadores (nível debug)
-            logger.debug(f"Detalhes dos indicadores: {sinal['indicadores']}")
+            return sinal_formatado
+
+        except Exception as e:
+            logger.error(f"Erro ao logar sinal: {e}")
+            raise

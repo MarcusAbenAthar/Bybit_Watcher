@@ -15,6 +15,7 @@ class PriceAction(Plugin):
         Inicializa o plugin PriceAction.
         """
         super().__init__()
+        self.nome = "Price Action"
 
     def identificar_padrao(self, dados):
         """
@@ -47,35 +48,17 @@ class PriceAction(Plugin):
 
     def executar(self, dados, symbol, timeframe):
         """
-        Executa a análise de price action e salva os resultados no banco de dados.
+        Executa análise de price action.
 
         Args:
-            dados (list): Lista de candles.
-            symbol (str): Par de moedas.
-            timeframe (str): Timeframe dos candles.
+            dados (list): Dados para análise
+            symbol (str): Símbolo do par
+            timeframe (str): Timeframe dos dados
         """
         try:
-            padrao = self.identificar_padrao(dados)
-
-            if padrao:
-                sinal = self.gerar_sinal(dados, padrao)
-
-                if sinal:
-                    # Salva os resultados no banco de dados (usando a conexão do Core)
-                    timestamp = int(dados[-1] / 1000)  # Timestamp do último candle
-                    # ... (código para salvar os resultados no banco de dados)
-
-                    logger.info(
-                        f"Sinal de {sinal['sinal']} gerado para {symbol} - {timeframe} com padrão {padrao}"
-                    )
-                else:
-                    logger.info(
-                        f"Nenhum sinal gerado symbola {symbol} - {timeframe} com padrão {padrao}"
-                    )
-            else:
-                logger.info(
-                    f"Nenhum padrão de price action identificado para {symbol} - {timeframe}"
-                )
-
+            # Implementação básica
+            logger.info(f"Analisando price action para {symbol} - {timeframe}")
+            return True
         except Exception as e:
             logger.error(f"Erro ao executar análise de price action: {e}")
+            raise

@@ -2,6 +2,7 @@ from loguru import logger
 from plugins.plugin import Plugin
 from plugins.gerente_plugin import obter_calculo_alavancagem
 import talib
+import numpy as np
 
 
 class MediasMoveis(Plugin):
@@ -111,18 +112,20 @@ class MediasMoveis(Plugin):
             from plugins.gerente_plugin import obter_banco_dados
 
             banco_dados = obter_banco_dados(self.config)
-            # Calcula as médias móveis
-            media_movel_curta = self.calcular_media_movel(
-                dados, periodo=20, tipo="simples"
-            )
-            media_movel_longa = self.calcular_media_movel(
-                dados, periodo=50, tipo="simples"
-            )
+            # Converter os dados para numpy array e extrair apenas os preços de fechamento
+            dados_fechamento = [
+                candle[4] for candle in dados
+            ]  # índice 4 é o preço de fechamento
+            fechamentos = np.array(dados_fechamento, dtype=np.float64)
+
+            # Calcular médias móveis
+            ma_curta = talib.SMA(fechamentos, timeperiod=9)
+            ma_longa = talib.SMA(fechamentos, timeperiod=21)
 
             # Gera o sinal de compra ou venda
             sinal = self.gerar_sinal(
                 dados,
-                [media_movel_curta, media_movel_longa],
+                [ma_curta, ma_longa],
                 symbol,
                 timeframe,
                 self.config,
@@ -153,5 +156,8 @@ class MediasMoveis(Plugin):
             else:
                 logger.debug(f"Nenhum sinal gerado para {symbol} - {timeframe}.")
 
+            return {"ma_curta": ma_curta, "ma_longa": ma_longa}
+
         except Exception as e:
             logger.error(f"Erro ao processar médias móveis: {e}")
+            raise

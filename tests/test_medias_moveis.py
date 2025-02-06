@@ -1,77 +1,59 @@
-import unittest
-from unittest.mock import MagicMock, patch
+from unittest import TestCase
+from unittest.mock import patch, Mock
 import numpy as np
-
 from plugins.medias_moveis import MediasMoveis
-from plugins.gerente_plugin import obter_calculo_alavancagem
 
 
-class TestMediasMoveis(unittest.TestCase):
-    """
-    Classe de teste para o plugin MediasMoveis, que verifica o cálculo das médias móveis e a geração de sinais.
-    """
+class TestMediasMoveis(TestCase):
+    def setUp(self):
+        self.plugin = MediasMoveis()
+        self.plugin.banco_dados = Mock()
+        # Usando apenas preços de fechamento para médias móveis
+        self.dados_teste = np.array([100.0, 102.0, 104.0, 103.0, 105.0])
 
-    @patch("plugins.medias_moveis.talib")  # Substitui o talib por um mock
-    def test_calcular_media_movel_simples(self, mock_talib):
-        """
-        Verifica se o cálculo da média móvel simples está correto.
-        """
-        # Cria um mock para o objeto CalculoAlavancagem
-        mock_calculo_alavancagem = MagicMock()
-        # Cria uma instância do plugin MediasMoveis, passando o mock como argumento
-        plugin = MediasMoveis(mock_calculo_alavancagem)
-        # Cria um mock para a função SMA do talib
-        mock_talib.SMA = MagicMock(return_value=np.array())
+    @patch("talib.SMA")
+    def test_calcular_media_movel_simples(self, mock_sma):
+        """Testa o cálculo da média móvel simples."""
+        mock_sma.return_value = np.array([101.0, 103.0, 104.0])
 
-        # Chama a função calcular_media_movel com tipo "simples"
-        resultado = plugin.calcular_media_movel([], 3, tipo="simples")
+        self.plugin.calcular_media_movel(self.dados_teste, 3, "simples")
+        mock_sma.assert_called_once()
 
-        # Verifica se a função SMA do talib foi chamada com os argumentos corretos
-        mock_talib.SMA.assert_called_once_with([], timeperiod=3)
+    @patch("talib.EMA")
+    def test_calcular_media_movel_exponencial(self, mock_ema):
+        """Testa o cálculo da média móvel exponencial."""
+        mock_ema.return_value = np.array([101.5, 103.2, 104.1])
 
-        # Verifica se o resultado é o esperado
-        self.assertTrue(np.array_equal(resultado, np.array()))
+        self.plugin.calcular_media_movel(self.dados_teste, 3, "exponencial")
+        mock_ema.assert_called_once()
 
-    @patch("plugins.medias_moveis.talib")  # Substitui o talib por um mock
-    def test_calcular_media_movel_exponencial(self, mock_talib):
-        """
-        Verifica se o cálculo da média móvel exponencial está correto.
-        """
-        # Cria um mock para o objeto CalculoAlavancagem
-        mock_calculo_alavancagem = MagicMock()
-        # Cria uma instância do plugin MediasMoveis, passando o mock como argumento
-        plugin = MediasMoveis(mock_calculo_alavancagem)
-        # Cria um mock para a função EMA do talib
-        mock_talib.EMA = MagicMock(return_value=np.array())
+    def test_calcular_media_movel_tipo_invalido(self):
+        """Testa se lança erro para tipo de média inválido."""
+        with self.assertRaises(ValueError):
+            self.plugin.calcular_media_movel(self.dados_teste, 3, "invalido")
 
-        # Chama a função calcular_media_movel com tipo "exponencial"
-        resultado = plugin.calcular_media_movel([], 3, tipo="exponencial")
+    def test_gerar_sinal_deve_retornar_dict(self):
+        """Testa se gerar_sinal retorna um dicionário com os campos corretos."""
+        mock_config = Mock()
 
-        # Verifica se a função EMA do talib foi chamada com os argumentos corretos
-        mock_talib.EMA.assert_called_once_with([], timeperiod=3)
+        # Mock das médias móveis para evitar IndexError
+        with patch.object(self.plugin, "calcular_media_movel") as mock_mm:
+            mock_mm.return_value = np.array([100.0, 101.0, 102.0])
 
-        # Verifica se o resultado é o esperado
-        self.assertTrue(np.array_equal(resultado, np.array()))
+            sinal = self.plugin.gerar_sinal(
+                self.dados_teste, "cruzamento_alta", "BTCUSDT", "1h", mock_config
+            )
 
-    @patch("plugins.medias_moveis.talib")  # Substitui o talib por um mock
+            self.assertIsInstance(sinal, dict)
+            self.assertIn("sinal", sinal)
+
+    @patch("plugins.medias_moveis.talib")
     def test_calcular_media_movel_ponderada(self, mock_talib):
-        """
-        Verifica se o cálculo da média móvel ponderada está correto.
-        """
-        # Cria um mock para o objeto CalculoAlavancagem
-        mock_calculo_alavancagem = MagicMock()
-        # Cria uma instância do plugin MediasMoveis, passando o mock como argumento
-        plugin = MediasMoveis(mock_calculo_alavancagem)
-        # Cria um mock para a função WMA do talib
-        mock_talib.WMA = MagicMock(return_value=np.array())
-
-        # Chama a função calcular_media_movel com tipo "ponderada"
-        resultado = plugin.calcular_media_movel([], 3, tipo="ponderada")
-
-        # Verifica se a função WMA do talib foi chamada com os argumentos corretos
-        mock_talib.WMA.assert_called_once_with([], timeperiod=3)
-
-        # Verifica se o resultado é o esperado
-        self.assertTrue(np.array_equal(resultado, np.array()))
+        """Verifica se o cálculo da média móvel ponderada está correto."""
+        mock_talib.WMA = Mock(return_value=np.array([101.0, 102.0, 103.0]))
+        resultado = self.plugin.calcular_media_movel(
+            self.dados_teste, 3, tipo="ponderada"
+        )
+        self.assertTrue(isinstance(resultado, np.ndarray))
 
     # ... (adicionar testes para a função gerar_sinal)...

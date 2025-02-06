@@ -16,6 +16,7 @@ class Conexao(Plugin):
         """
         super().__init__()
         self.exchange = None
+        self.nome = "Conexão"
         load_dotenv()
 
     def conectar_bybit(self, config):

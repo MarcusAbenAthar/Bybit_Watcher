@@ -1,5 +1,7 @@
 import unittest
 from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
+from configparser import ConfigParser
+from unittest.mock import patch, Mock
 
 
 class TestGerentePlugin(unittest.TestCase):
@@ -18,8 +20,17 @@ class TestGerentePlugin(unittest.TestCase):
         """
         Testa a obtenção do banco de dados.
         """
-        banco = obter_banco_dados()
-        self.assertIsNotNone(banco)
+        config = ConfigParser()
+        config.add_section("database")
+        config.set("database", "host", "localhost")
+        config.set("database", "database", "bybit_watcher_db")
+        config.set("database", "user", "postgres")
+        config.set("database", "password", "123456")
+
+        with patch("plugins.banco_dados.psycopg2.connect") as mock_connect:
+            mock_connect.return_value = Mock()
+            banco = obter_banco_dados(config)
+            self.assertIsNotNone(banco)
 
     def test_calculo_alavancagem(self):
         # Teste adicional para verificar o cálculo de alavancagem

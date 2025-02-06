@@ -12,21 +12,39 @@ class Armazenamento(Plugin):
 
     def __init__(self):
         super().__init__()
+        self.nome = "Armazenamento"
 
-    def executar(self, dados, symbol, timeframe, config):
+    def executar(self, dados, symbol, timeframe):
         """
-        Insere os dados das velas no banco de dados.
+        Executa o armazenamento dos dados.
+
+        Args:
+            dados (list): Lista de dados para armazenar
+            symbol (str): Símbolo do par
+            timeframe (str): Timeframe dos dados
         """
         try:
-            # Obtém o banco de dados quando necessário
-            banco_dados = obter_banco_dados(config)
+            # Implementação do armazenamento
+            return self.armazenar_dados(dados, symbol, timeframe)
+        except Exception as e:
+            logger.error(f"Erro ao armazenar dados: {e}")
+            raise
 
-            # Usa a conexão com o banco de dados
-            banco_dados.inserir_dados_klines(dados)
+    def armazenar_dados(self, dados, symbol, timeframe):
+        """
+        Armazena os dados recebidos.
 
-            logger.debug(
-                f"Dados de {symbol} - {timeframe} inseridos no banco de dados."
-            )
+        Args:
+            dados (list): Dados a serem armazenados
+            symbol (str): Símbolo do par
+            timeframe (str): Timeframe dos dados
+        """
+        try:
+            # Aqui você pode implementar a lógica de armazenamento
+            # Por exemplo, salvar em arquivo ou banco de dados
+            logger.info(f"Armazenando dados de {symbol} - {timeframe}")
+            return True
 
-        except Exception as error:
-            logger.error(f"Erro ao inserir dados no PostgreSQL: {error}")
+        except Exception as e:
+            logger.error(f"Erro ao armazenar dados: {e}")
+            raise

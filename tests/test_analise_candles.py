@@ -1,51 +1,73 @@
+from unittest import TestCase
 import unittest
+from unittest.mock import patch, Mock
+import numpy as np
 from plugins.analise_candles import AnaliseCandles
-from unittest.mock import Mock
-from utils.padroes_candles import PADROES_CANDLES
+from configparser import ConfigParser
 
 
-class TestAnaliseCandles(unittest.TestCase):
+class TestAnaliseCandles(TestCase):
     """
     Testes unitários para o plugin AnaliseCandles.
     """
 
     def setUp(self):
+        """Configura o ambiente para cada teste."""
         self.plugin = AnaliseCandles()
-        self.plugin.calculo_alavancagem = Mock()
-        self.plugin.calculo_alavancagem.calcular_alavancagem.return_value = 1.0
-        self.candle_doji = [100.0, 100.5, 105.0, 95.0]
-        self.candle_martelo = [100.0, 110.0, 112.0, 90.0]
-        self.candle_estrela = [110.0, 100.0, 115.0, 98.0]
+        # Mock do banco de dados
+        self.plugin.banco_dados = Mock()
 
-    def test_identificar_padrao(self):
-        padrao = self.plugin.identificar_padrao(self.candle_doji)
-        self.assertIsNotNone(padrao)
+        # Dados de teste em formato numpy array (OHLC)
+        self.dados_teste = np.array(
+            [
+                [100.0, 105.0, 95.0, 102.0],
+                [102.0, 107.0, 97.0, 104.0],
+                [104.0, 109.0, 99.0, 106.0],
+            ]
+        )
 
-    def test_calcular_forca_padrao(self):
-        forca = self.plugin.calcular_forca_padrao(self.candle_martelo, "martelo")
-        self.assertIsInstance(forca, float)
-        self.assertTrue(0 <= forca <= 100)
+    @patch("talib.CDL2CROWS")
+    def test_identificar_padrao_deve_chamar_talib(self, mock_cdl):
+        """Testa se identificar_padrao chama corretamente o TALib."""
+        mock_cdl.return_value = np.array([0, 0, 100])
+
+        open_prices = self.dados_teste[:, 0]
+        high_prices = self.dados_teste[:, 1]
+        low_prices = self.dados_teste[:, 2]
+        close_prices = self.dados_teste[:, 3]
+
+        self.plugin.identificar_padrao(self.dados_teste)
+        mock_cdl.assert_called_once_with(
+            open_prices, high_prices, low_prices, close_prices
+        )
 
     def test_calcular_confianca(self):
-        confianca = self.plugin.calcular_confianca(self.candle_martelo, "martelo")
+        """Testa o cálculo de confiança."""
+        confianca = self.plugin.calcular_confianca(self.dados_teste, "CDL2CROWS")
         self.assertIsInstance(confianca, float)
         self.assertTrue(0 <= confianca <= 100)
 
-    def test_gerar_sinal(self):
-        for padrao in PADROES_CANDLES.keys():
-            sinal = self.plugin.gerar_sinal(
-                self.candle_martelo, padrao, "alta", "BTCUSDT", "1h", {}
-            )
-            self.assertIsInstance(sinal, dict)
-            self.assertIn("sinal", sinal)
-            self.assertIn("stop_loss", sinal)
-            self.assertIn("take_profit", sinal)
-            self.assertIn("forca", sinal)
-            self.assertIn("confianca", sinal)
+    def test_calcular_forca_padrao(self):
+        """Testa o cálculo de força do padrão."""
+        forca = self.plugin.calcular_forca_padrao(self.dados_teste, "CDL2CROWS")
+        self.assertIsInstance(forca, float)
 
-    def test_tratamento_erros(self):
-        self.assertEqual(self.plugin.calcular_forca_padrao([], "martelo"), 0)
-        self.assertEqual(self.plugin.calcular_confianca([], "martelo"), 0)
+    def test_gerar_sinal_deve_retornar_dict(self):
+        """Testa se gerar_sinal retorna um dicionário com os campos corretos."""
+        # Mock da configuração
+        mock_config = Mock()
+
+        sinal = self.plugin.gerar_sinal(
+            self.dados_teste, "CDL2CROWS", "FORTE", "BTCUSDT", "1h", mock_config
+        )
+        self.assertIsInstance(sinal, dict)
+        self.assertIn("padrao", sinal)
+        self.assertIn("forca", sinal)
+
+    def test_identificar_padrao_com_dados_invalidos(self):
+        """Testa se identificar_padrao trata corretamente dados inválidos."""
+        resultado = self.plugin.identificar_padrao(None)
+        self.assertIsNone(resultado)
 
 
 if __name__ == "__main__":

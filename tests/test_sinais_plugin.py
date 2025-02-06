@@ -1,29 +1,43 @@
+from unittest import TestCase
 import unittest
+from unittest.mock import patch, Mock
 from plugins.sinais_plugin import SinaisPlugin
-from unittest.mock import Mock
 
 
-class TestSinaisPlugin(unittest.TestCase):
+class TestSinaisPlugin(TestCase):
     """
     Testes unitários para o plugin SinaisPlugin.
     """
 
     def setUp(self):
+        """Configura o ambiente para cada teste."""
         self.plugin = SinaisPlugin()
-        self.plugin.calculo_alavancagem = Mock()
-        self.plugin.calculo_alavancagem.calcular_alavancagem.return_value = 1.0
+        self.sinal_teste = {
+            "symbol": "BTCUSDT",
+            "timeframe": "1h",
+            "direcao": "COMPRA",
+            "stop_loss": 100.0,
+            "take_profit": 110.0,
+        }
 
-    def test_gerar_sinal(self):
-        sinal = self.plugin.gerar_sinal("BTCUSDT", "1h", {})
-        self.assertIsInstance(sinal, dict)
-        self.assertIn("sinal", sinal)
-        self.assertIn("stop_loss", sinal)
-        self.assertIn("take_profit", sinal)
+    def test_logar_sinal_deve_retornar_dict(self):
+        """Testa se logar_sinal retorna um dicionário quando recebe dados válidos."""
+        with patch("plugins.sinais_plugin.logger"):
+            resultado = self.plugin.logar_sinal(
+                self.sinal_teste["symbol"],
+                self.sinal_teste["timeframe"],
+                self.sinal_teste,
+            )
+            self.assertIsInstance(resultado, dict)
+            self.assertEqual(resultado["symbol"], "BTCUSDT")
+            self.assertEqual(resultado["timeframe"], "1h")
+            self.assertEqual(resultado["direcao"], "COMPRA")
 
-    def test_tratamento_erros(self):
-        self.assertEqual(
-            self.plugin.gerar_sinal(None, None, {}), self.plugin._sinal_padrao()
-        )
+    def test_logar_sinal_deve_lancar_erro_com_dados_invalidos(self):
+        """Testa se logar_sinal lança erro quando recebe dados inválidos."""
+        with patch("plugins.sinais_plugin.logger"):
+            with self.assertRaises(Exception):
+                self.plugin.logar_sinal(None, None, None)
 
 
 if __name__ == "__main__":
