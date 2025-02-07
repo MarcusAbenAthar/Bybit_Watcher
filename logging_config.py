@@ -3,7 +3,12 @@ Configurações de logging do bot.
 Centraliza todas as configurações de logs do sistema.
 """
 
-LOG_CONFIG = {
+import datetime
+
+
+data_hoje = datetime.datetime.now().strftime("%d%m%Y")
+
+LOGGING_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
@@ -20,7 +25,7 @@ LOG_CONFIG = {
         },
         "file": {
             "class": "logging.FileHandler",
-            "filename": "logs/bot.log",
+            "filename": f"logs/bot{data_hoje}.log",
             "formatter": "default",
             "level": "DEBUG",
         },

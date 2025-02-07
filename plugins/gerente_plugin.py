@@ -227,8 +227,7 @@ def obter_calculo_alavancagem():
     """
     from plugins.calculo_alavancagem import CalculoAlavancagem
 
-    calculo_alavancagem = CalculoAlavancagem()
-    return calculo_alavancagem  # Retorna a instância da classe CalculoAlavancagem
+    return CalculoAlavancagem()
 
 
 def obter_execucao_ordens():
@@ -332,3 +331,27 @@ def obter_outros_indicadores():
 
     outros_indicadores = OutrosIndicadores()
     return outros_indicadores
+
+
+def interromper_execucao(self):
+    """
+    Gerencia a interrupção segura do bot.
+    Garante que todas as conexões sejam fechadas corretamente.
+    """
+    try:
+        logger.info("Iniciando encerramento seguro do bot...")
+
+        # Fecha conexão com banco se estiver aberta
+        if hasattr(self, "_db") and self._db is not None:
+            try:
+                self._db.fechar_conexao()
+                logger.info("Conexão com banco de dados encerrada")
+            except Exception as e:
+                logger.error(f"Erro ao fechar conexão com banco: {e}")
+
+        logger.info("Bot encerrado com sucesso")
+        return True
+
+    except Exception as e:
+        logger.error(f"Erro ao encerrar bot: {e}")
+        return False

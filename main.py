@@ -11,12 +11,14 @@ import datetime
 import os
 import time
 import ccxt
-from logging_config import LOG_CONFIG
+from logging import config
 from dotenv import load_dotenv
 import logging
+from logging_config import LOGGING_CONFIG
+import sys
 
 # Configurar logging
-logging.config.dictConfig(LOG_CONFIG)
+config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,7 @@ from plugins.gerente_plugin import (
     obter_conexao,
     obter_banco_dados,
     inicializar_banco_dados,
+    interromper_execucao,
 )
 from configparser import ConfigParser
 
@@ -33,15 +36,6 @@ logs_dir = "logs"
 if not os.path.exists(logs_dir):
     os.makedirs(logs_dir)
 
-data_hoje = datetime.datetime.now().strftime("%d%m%Y")
-
-logger.add(
-    os.path.join(logs_dir, f"bot{data_hoje}.log"),
-    rotation="5 MB",
-    retention="10 days",
-    level="DEBUG",
-    format="{time:DD-MM-YYYY HH:mm:ss} | {level} | {module} | {function} | {line} | {message}",
-)
 
 # Define os timeframes diretamente
 timeframes = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
@@ -207,3 +201,10 @@ while True:
     except Exception as e:
         logger.exception(f"Erro inesperado: {e}")
         time.sleep(30)
+
+    except KeyboardInterrupt:
+        logger.info("Recebido sinal de interrupção...")
+        if interromper_execucao():
+            sys.exit(0)
+        else:
+            sys.exit(1)

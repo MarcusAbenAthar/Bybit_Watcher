@@ -40,18 +40,86 @@ class SinaisPlugin(Plugin):
             dict: Sinal consolidado com todas as informações relevantes
         """
         try:
-            if not dados:  # Se dados for None ou vazio
+            # Validação inicial dos dados
+            if not dados or not self.validar_dados(dados):
                 return None
 
             sinal_consolidado = self.consolidar_sinais(dados)
-            if sinal_consolidado:
-                self.logar_sinal(sinal_consolidado, symbol, timeframe)
 
-            return sinal_consolidado
+            # Só loga e retorna se houver um sinal válido
+            if sinal_consolidado and self.validar_sinal(sinal_consolidado):
+                self.logar_sinal(symbol, timeframe, sinal_consolidado)
+                return sinal_consolidado
+
+            return None
 
         except Exception as e:
             logger.error(f"Erro ao processar sinais: {e}")
             return None
+
+    def validar_dados(self, dados):
+        """
+        Valida se os dados dos indicadores são válidos.
+
+        Args:
+            dados (dict): Dicionário com os sinais dos indicadores
+
+        Returns:
+            bool: True se os dados são válidos, False caso contrário
+        """
+        try:
+            for indicador, valores in dados.items():
+                if not isinstance(valores, dict):
+                    return False
+
+                # Verifica valores NaN
+                for valor in valores.values():
+                    if isinstance(valor, (int, float)) and str(valor).lower() == "nan":
+                        return False
+
+                # Verifica direção válida
+                if "direcao" in valores and valores["direcao"] not in [
+                    "ALTA",
+                    "BAIXA",
+                    "NEUTRO",
+                ]:
+                    return False
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro na validação dos dados: {e}")
+            return False
+
+    def validar_sinal(self, sinal):
+        """
+        Valida se o sinal consolidado é válido para ser enviado.
+
+        Args:
+            sinal (dict): Sinal consolidado
+
+        Returns:
+            bool: True se o sinal deve ser enviado, False caso contrário
+        """
+        try:
+            # Verifica se tem todos os campos necessários
+            campos_obrigatorios = ["direcao", "forca", "confianca"]
+            if not all(campo in sinal for campo in campos_obrigatorios):
+                return False
+
+            # Ignora sinais neutros ou com baixa confiança
+            if sinal["direcao"] == "NEUTRO" or sinal["forca"] == "FRACA":
+                return False
+
+            # Verifica confiança mínima (exemplo: 60%)
+            if sinal["confianca"] < 80:
+                return False
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro na validação do sinal: {e}")
+            return False
 
     def consolidar_sinais(self, dados):
         """

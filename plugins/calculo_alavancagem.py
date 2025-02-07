@@ -13,11 +13,31 @@ class CalculoAlavancagem(Plugin):
     Plugin para calcular a alavancagem ideal para cada operação, considerando a volatilidade e as Regras de Ouro.
     """
 
-    def __init__(self):
+    def __init__(self):  # Voltando ao construtor original sem parâmetros
         """Inicializa o plugin CalculoAlavancagem."""
         super().__init__()
         self.nome = "Cálculo de Alavancagem"
+        self.banco_dados = None
         self.cache_volatilidade = {}  # Inicializa o cache de volatilidade
+
+    def obter_exchange(self):
+        """Obtém a exchange através do gerente."""
+        try:
+            if not self.gerente:
+                raise ValueError("Gerente não inicializado")
+            return self.gerente.obter_conexao()
+        except Exception as e:
+            logger.error(f"Erro ao obter exchange: {e}")
+            return None
+
+    def executar(self, dados, symbol, timeframe):
+        """Executa cálculo de alavancagem."""
+        try:
+            # ... resto do código ...
+            return True
+        except Exception as e:
+            logger.error(f"Erro no cálculo de alavancagem: {e}")
+            return False
 
     def calcular_alavancagem(self, dados, symbol, timeframe, config):
         """
@@ -36,9 +56,7 @@ class CalculoAlavancagem(Plugin):
         chave_cache = f"{symbol}-{timeframe}"
         if chave_cache not in self.cache_volatilidade:
             # Obter o histórico de preços do ativo
-            historico = self.obter_exchange(config).fetch_ohlcv(
-                symbol, timeframe, limit=500
-            )
+            historico = self.obter_exchange().fetch_ohlcv(symbol, timeframe, limit=500)
 
             # Calcular a volatilidade do ativo (exemplo com ATR)
             self.cache_volatilidade[chave_cache] = self.calcular_atr(historico)
