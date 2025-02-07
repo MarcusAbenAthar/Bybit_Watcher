@@ -1,6 +1,6 @@
 Regras de OURO para programar o bot:
 
-1 - Autonomo nas decisões (TP/SL), ele não fará trades
+1 - Autonomo nas decisões (TP, SL e alavancagem), ele não fará trades
 2 - Criterioso
 3 - Seguro
 4 - Certeiro

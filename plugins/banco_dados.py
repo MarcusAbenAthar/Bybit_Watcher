@@ -1,9 +1,10 @@
 import psycopg2
 import logging
-
-logger = logging.getLogger(__name__)
 from plugins.plugin import Plugin
 from typing import List, Tuple
+
+
+logger = logging.getLogger(__name__)
 
 
 class BancoDados(Plugin):
