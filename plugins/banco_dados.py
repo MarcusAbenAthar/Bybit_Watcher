@@ -19,6 +19,8 @@ class BancoDados(Plugin):
         """Inicializa o plugin BancoDados."""
         super().__init__()
         self.nome = "Banco de Dados"
+        self.descricao = "Gerencia conexões e operações com banco de dados"
+        self.conexao = None
         self.config = config
         self.conectar(
             config.get("database", "database"),
@@ -685,3 +687,14 @@ class BancoDados(Plugin):
         if self.conn:
             self.conn.close()
             logger.info("Conexão com o PostgreSQL fechada.")
+
+    def fechar_conexao(self):
+        """Fecha a conexão com o banco de dados."""
+        try:
+            if self.conexao:
+                self.conexao.close()
+                self.conexao = None
+                logger.info("Conexão com banco de dados fechada")
+        except Exception as e:
+            logger.error(f"Erro ao fechar conexão com banco: {e}")
+            raise

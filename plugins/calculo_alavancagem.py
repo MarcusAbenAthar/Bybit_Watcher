@@ -16,9 +16,14 @@ class CalculoAlavancagem(Plugin):
     def __init__(self):  # Voltando ao construtor original sem parâmetros
         """Inicializa o plugin CalculoAlavancagem."""
         super().__init__()
-        self.nome = "Cálculo de Alavancagem"
+        self.nome = "Cálculo Alavancagem"
+        self.descricao = "Calcula alavancagem baseada em risco"
+        self.gerente = None  # Será setado pelo gerente de plugins
         self.banco_dados = None
         self.cache_volatilidade = {}  # Inicializa o cache de volatilidade
+
+    def set_gerente(self, gerente):
+        self.gerente = gerente
 
     def obter_exchange(self):
         """Obtém a exchange através do gerente."""

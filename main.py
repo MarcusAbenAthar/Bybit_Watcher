@@ -2,209 +2,136 @@
 
 """
 Módulo principal do bot de trading.
-
-Este módulo é responsável por iniciar o bot, carregar as configurações,
-conectar ao banco de dados, carregar os plugins e executar o loop principal.
 """
 
 import os
 import time
-import ccxt
-from dotenv import load_dotenv
-from configparser import ConfigParser
 import sys
+import signal
 import logging
 import logging.config
+from configparser import ConfigParser
+from dotenv import load_dotenv
 from logging_config import LOGGING_CONFIG
 from sinais_logging import SINAIS_LOGGING_CONFIG
+from plugins.gerenciador_banco import gerenciador_banco
+from plugins.validador_dados import ValidadorDados
+from plugins.gerente_plugin import (
+    gerente_plugin,
+    obter_conexao,
+    obter_banco_dados,
+    inicializar_banco_dados,
+)
+from plugins.gerenciador_bot import GerenciadorBot
 
-# 1. Configuração do Loguru
+# Configuração do logger
+logging.config.dictConfig(LOGGING_CONFIG)
+logging.config.dictConfig(SINAIS_LOGGING_CONFIG)
+logger = logging.getLogger(__name__)
+
+# Configurações iniciais
 logs_dir = "logs"
 if not os.path.exists(logs_dir):
     os.makedirs(logs_dir)
 
-# Define os timeframes diretamente
-timeframes = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
-
-# Carrega as variáveis de ambiente
+# Carrega variáveis de ambiente
 load_dotenv()
 
-# Inicializa um conjunto vazio
-pares_processados = set()
 
-
-# Carrega as configurações do arquivo config.ini
 def load_config_from_file(filename):
-    config = ConfigParser()
-    config.read(filename)
-    return config
+    """Carrega configurações do arquivo."""
+    try:
+        config = ConfigParser()
+        config.read(filename)
+        return config
+    except Exception as e:
+        logger.error(f"Erro ao carregar configurações: {e}")
+        raise
 
 
-# Bloco principal do script
-if __name__ == "__main__":
-    config = load_config_from_file("config.ini")
+def signal_handler(signum, frame):
+    """Handler para encerramento gracioso."""
+    try:
+        logger.info("Recebido sinal de interrupção...")
+        gerenciador_banco.fechar_conexao()
+        sys.exit(0)
+    except Exception as e:
+        logger.error(f"Erro ao encerrar bot: {e}")
+        sys.exit(1)
 
-    # Configurar o logging
-    logging.config.dictConfig(LOGGING_CONFIG)
-    logging.config.dictConfig(SINAIS_LOGGING_CONFIG)
 
-    logger = logging.getLogger(__name__)
+def processar_par(symbol, timeframe, validador, exchange):
+    """
+    Processa um par específico.
 
-    from plugins.gerente_plugin import (
-        carregar_plugins,
-        obter_conexao,
-        obter_banco_dados,
-        inicializar_banco_dados,
-        interromper_execucao,
-    )
+    Args:
+        symbol (str): Símbolo do par
+        timeframe (str): Timeframe para análise
+        validador (ValidadorDados): Instância do validador
+        exchange (Exchange): Instância da exchange
 
-    # Carrega os plugins passando o config
-    plugins = carregar_plugins("plugins", config)
+    Returns:
+        list: Lista de candles válidos ou None
+    """
+    try:
+        logger.debug(f"Processando {symbol} - {timeframe}")
 
-    # Obtém a instância do plugin Conexao
-    conexao_bybit = obter_conexao()
+        dados = exchange.fetch_ohlcv(symbol, timeframe)
 
-    # Inicializa o plugin Conexao
-    conexao_bybit.inicializar(config)
+        if not validador.validar_dados_completos(dados, symbol, timeframe):
+            return None
 
-    # Inicializa o banco de dados (fora do loop)
-    inicializar_banco_dados(config)
+        logger.debug(f"Dados válidos obtidos para {symbol}")
+        return dados
 
-    # Obtém a exchange do plugin Conexao
-    exchange = conexao_bybit.exchange
+    except Exception as e:
+        logger.error(f"Erro ao processar {symbol}-{timeframe}: {e}")
+        return None
 
-    banco_dados = obter_banco_dados(config)
 
-    # Carrega os mercados
-    mercados = conexao_bybit.carregar_mercados()
+def main():
+    """Função principal do bot."""
+    try:
+        logger.info("Iniciando bot...")
 
-    # Loop principal do bot
-    while True:
-        try:
-            logger.info("Iniciando coleta de dados...")
-            for symbol, dados in mercados.items():
-                if (
-                    dados.get("type") == "swap"
-                    and dados.get("settle") == "USDT"
-                    and dados.get("linear")
-                    and not dados.get("id", "").endswith("/USDT:USDT")
-                ):
-                    # Limpa o nome do símbolo mantendo o USDT no final
-                    symbol_limpo = symbol.replace("/USDT:USDT", "USDT")
+        # Inicializações
+        config = load_config_from_file("config.ini")
+        gerenciador = GerenciadorBot(config)
 
-                    if symbol_limpo not in pares_processados:
-                        logger.info(f"Coletando dados para o symbol {symbol_limpo}...")
-                        pares_processados.add(symbol_limpo)
+        # Carrega plugins e conexões
+        plugins = gerente_plugin.carregar_plugins("plugins", config)
+        conexao_bybit = obter_conexao()
+        conexao_bybit.inicializar(config)
 
-                    for timeframe in timeframes:
-                        try:
-                            # Adiciona um pequeno delay entre as chamadas
-                            time.sleep(0.5)
+        logger.info("Bot iniciado com sucesso")
 
-                            # Coleta os dados usando o símbolo original para a API
-                            klines = exchange.fetch_ohlcv(
-                                symbol,
-                                timeframe,
-                                params={"category": "linear"},
-                                limit=200,
+        # Loop principal
+        while True:
+            try:
+                mercados = conexao_bybit.carregar_mercados()
+                for symbol, dados in mercados.items():
+                    if gerenciador.validar_mercado(dados):
+                        for timeframe in gerenciador.timeframes:
+                            dados = gerenciador.processar_par(
+                                symbol, timeframe, conexao_bybit.exchange
                             )
-
-                            if not klines:
-                                logger.warning(
-                                    f"Sem dados disponíveis para {symbol_limpo} - {timeframe}"
+                            if dados:
+                                gerenciador.processar_plugins(
+                                    plugins, dados, symbol, timeframe
                                 )
-                                continue
 
-                            # Formata os dados usando o símbolo limpo
-                            dados = [
-                                (
-                                    symbol_limpo,
-                                    timeframe,
-                                    kline[0],
-                                    kline[1],
-                                    kline[2],
-                                    kline[3],
-                                    kline[4],
-                                    kline[5],
-                                )
-                                for kline in klines
-                            ]
+                time.sleep(30)
 
-                            # Armazena os dados no banco de dados com o símbolo limpo
-                            banco_dados.inserir_dados_klines(dados)
-
-                            # Processa os dados através dos plugins na ordem correta
-                            resultados = {}
-
-                            # Primeiro processa indicadores
-                            for plugin in plugins:
-                                if plugin.nome in [
-                                    "Indicadores de Tendência",
-                                    "Médias Móveis",
-                                ]:
-                                    resultado = plugin.executar(
-                                        dados, symbol_limpo, timeframe
-                                    )
-                                    if resultado:
-                                        chave = (
-                                            plugin.nome.lower()
-                                            .replace(" ", "_")
-                                            .replace("ê", "e")
-                                        )
-                                        resultados[chave] = resultado
-
-                            # Depois processa sinais
-                            for plugin in plugins:
-                                if plugin.nome == "Sinais" and resultados:
-                                    plugin.executar(resultados, symbol_limpo, timeframe)
-
-                            # Por fim, processa outros plugins
-                            for plugin in plugins:
-                                if plugin.nome not in [
-                                    "Indicadores de Tendência",
-                                    "Médias Móveis",
-                                    "Sinais",
-                                ]:
-                                    try:
-                                        plugin.executar(dados, symbol_limpo, timeframe)
-                                    except Exception as e:
-                                        logger.error(
-                                            f"Erro ao executar plugin {plugin.__class__.__name__} "
-                                            f"para {symbol_limpo} - {timeframe}: {e}"
-                                        )
-
-                        except ccxt.RateLimitExceeded:
-                            logger.warning(
-                                f"Rate limit atingido para {symbol_limpo}. Aguardando..."
-                            )
-                            time.sleep(5)
-                            continue
-
-                        except ccxt.ExchangeError as e:
-                            logger.error(
-                                f"Erro da exchange para {symbol_limpo} - {timeframe}: {e}"
-                            )
-                            continue
-
-                        except Exception as e:
-                            logger.error(
-                                f"Erro ao coletar dados ou analisar {symbol_limpo} - {timeframe}: {e}"
-                            )
-                            continue
-
-            logger.debug(f"Aguardando {30} segundos para a próxima coleta...")
-            time.sleep(30)
-
-        except ccxt.ExchangeError as e:
-            logger.error(f"Erro na exchange: {e}")
-            time.sleep(60)
-        except Exception as e:
-            logger.exception(f"Erro inesperado: {e}")
-            time.sleep(30)
-
-        except KeyboardInterrupt:
-            logger.info("Recebido sinal de interrupção...")
-            if interromper_execucao():
+            except KeyboardInterrupt:
+                logger.info("Interrupção do teclado detectada")
+                gerenciador_banco.fechar_conexao()
                 sys.exit(0)
-            else:
-                sys.exit(1)
+
+    except Exception as e:
+        logger.exception(f"Erro fatal no bot: {e}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal_handler)
+    main()

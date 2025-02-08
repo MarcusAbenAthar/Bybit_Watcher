@@ -2,12 +2,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-import psycopg2
 from plugins.plugin import Plugin
-from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
+from plugins.gerente_plugin import obter_calculo_alavancagem
 import talib
 from utils.padroes_candles import PADROES_CANDLES
 import numpy as np
+from plugins.gerenciador_banco import gerenciador_banco
+from plugins.validador_dados import ValidadorDados
 
 
 class AnaliseCandles(Plugin):
@@ -20,40 +21,70 @@ class AnaliseCandles(Plugin):
         self.nome = "Análise de Candles"
         self.descricao = "Plugin para análise de padrões de candles"
         self.calculo_alavancagem = obter_calculo_alavancagem()
+        self.validador = ValidadorDados()
 
     def identificar_padrao(self, candle):
         """
         Identifica o padrão do candle usando TA-Lib.
+
+        Args:
+            candle (list): Lista com dados OHLC do candle
+                [timestamp, open, high, low, close, volume]
+
+        Returns:
+            str: Nome do padrão identificado ou None
         """
-        if not candle or len(candle) < 4:
-            logger.warning("Dados de candle inválidos.")
+        if not isinstance(candle, (list, tuple)) or len(candle) < 6:
+            logger.warning(f"Dados de candle inválidos: {candle}")
             return None
 
         try:
-            # Desempacota os valores do candle diretamente
-            abertura, fechamento, maximo, minimo = candle
+            # Debug log para verificar a estrutura dos dados
+            logger.debug(f"Dados do candle recebidos: {candle}")
 
-            # Itera pelas funções do grupo "Pattern Recognition" do TA-Lib
+            # Extrair valores OHLC do candle, garantindo que são números
+            try:
+                # Assegurar que estamos pegando os índices corretos
+                open_price = float(candle[2])  # Ajustado do índice 1 para 2
+                high_price = float(candle[3])  # Ajustado do índice 2 para 3
+                low_price = float(candle[4])  # Ajustado do índice 3 para 4
+                close_price = float(candle[5])  # Ajustado do índice 4 para 5
+            except (IndexError, ValueError) as e:
+                logger.error(f"Erro ao converter valores OHLC: {e}")
+                return None
+
+            # Criar arrays numpy para os dados OHLC
+            opens = np.array([open_price], dtype=np.float64)
+            highs = np.array([high_price], dtype=np.float64)
+            lows = np.array([low_price], dtype=np.float64)
+            closes = np.array([close_price], dtype=np.float64)
+
+            # Itera pelas funções do grupo "Pattern Recognition"
             for nome_funcao in talib.get_function_groups()["Pattern Recognition"]:
-                # Obtém a função do TA-Lib
-                funcao_talib = getattr(talib, nome_funcao)
+                try:
+                    funcao_talib = getattr(talib, nome_funcao)
+                    resultado_padrao = funcao_talib(opens, highs, lows, closes)
 
-                # Executa a função com os dados do candle
-                resultado_padrao = funcao_talib(abertura, maximo, minimo, fechamento)
+                    if resultado_padrao[0] != 0:
+                        nome_padrao = (
+                            nome_funcao[3:].lower()
+                            if nome_funcao.startswith("CDL")
+                            else nome_funcao.lower()
+                        )
+                        logger.debug(f"Padrão identificado: {nome_padrao}")
+                        return nome_padrao
 
-                if resultado_padrao != 0:
-                    # Verifica se o nome da função começa com 'CDL' antes de remover
-                    nome_padrao = (
-                        nome_funcao[3:].lower()
-                        if nome_funcao.startswith("CDL")
-                        else nome_funcao.lower()
-                    )
-                    return nome_padrao
+                except Exception as e:
+                    logger.error(f"Erro ao processar padrão {nome_funcao}: {e}")
+                    continue
 
             return None
 
+        except (ValueError, IndexError) as e:
+            logger.error(f"Erro ao converter dados do candle: {e}")
+            return None
         except Exception as e:
-            logger.error(f"Erro ao identificar padrão com a função {nome_funcao}: {e}")
+            logger.error(f"Erro ao identificar padrão: {e}")
             return None
 
     def classificar_candle(self, candle):
@@ -202,92 +233,95 @@ class AnaliseCandles(Plugin):
             return 0
 
     def analisar_candles(self, dados, symbol, timeframe):
-        """
-        Analisa os padrões nos candles, classifica os candles e gera sinais.
-
-        Args:
-            dados (list): Lista de candles para análise.
-            symbol (str): Símbolo do par de moedas.
-            timeframe (str): Timeframe da análise.
-        """
+        """Analisa os candles recebidos."""
         try:
-            # Verificar se dados é válido
-            if not dados or not isinstance(dados, (list, tuple)):
-                logger.warning("Dados inválidos para análise de candles")
-                return {}
+            # Valida parâmetros individualmente
+            if not self.validador.validar_symbol(symbol):
+                return None
 
-            # Converter apenas os dados numéricos para numpy array
-            dados_np = []
-            for candle in dados:
-                # Pegar apenas os valores OHLCV, ignorando symbol e timeframe
-                valores = [
-                    float(v) for v in candle[2:]
-                ]  # Começar do índice 2 (timestamp)
-                dados_np.append(valores)
+            if not self.validador.validar_timeframe(timeframe):
+                return None
 
-            dados_np = np.array(dados_np, dtype=np.float64)
+            if not self.validador.validar_estrutura(dados):
+                return None
 
-            # Extrair OHLC (ajustando índices após remover symbol/timeframe)
-            opens = dados_np[:, 1]
-            highs = dados_np[:, 2]
-            lows = dados_np[:, 3]
-            closes = dados_np[:, 4]
+            # Processa apenas candles válidos
+            candles_validos = [
+                candle for candle in dados if self.validador.validar_candle(candle)
+            ]
 
-            # Analisar padrões usando TALib
-            resultados = {}
+            if not candles_validos:
+                logger.error("Nenhum candle válido para análise")
+                return None
 
-            # Movendo a declaração da variável nome_funcao para fora do try
-            for nome_funcao in talib.get_function_groups()["Pattern Recognition"]:
-                try:
-                    # Obter a função do talib
-                    funcao_talib = getattr(talib, nome_funcao)
-
-                    # Executar a função com os dados OHLC
-                    resultado_padrao = funcao_talib(opens, highs, lows, closes)
-
-                    # Converter o nome da função para o formato do padroes_candles.py
-                    nome_padrao = nome_funcao.lower().replace("cdl", "")
-
-                    # Adicionar o resultado ao dicionário
-                    resultados[nome_padrao] = resultado_padrao
-                except Exception as e:
-                    logger.error(f"Erro ao analisar padrão {nome_funcao}: {e}")
-
-            # 2. Iterar pelos candles e gerar sinais
-            for candle in dados:
-                padrao_candle = self.identificar_padrao(candle)
-                classificacao_candle = self.classificar_candle(candle)
-
-                if padrao_candle:
-                    # 3. Gerar sinal
-                    sinal = self.gerar_sinal(
-                        candle,
-                        padrao_candle,
-                        classificacao_candle,
-                        symbol,
-                        timeframe,
-                        self.config,
-                    )
-
-                    if sinal:
-                        # 4. Salvar sinal no banco de dados
-                        self.banco_dados.inserir_dados(
-                            "analise_candles",
-                            {
-                                "symbol": symbol,
-                                "timeframe": timeframe,
-                                "timestamp": candle,  # Timestamp do candle
-                                "padrao": padrao_candle,
-                                "classificacao": classificacao_candle,
-                                "sinal": sinal["sinal"],
-                                "stop_loss": sinal["stop_loss"],
-                                "take_profit": sinal["take_profit"],
-                            },
-                        )
-
-            return resultados
+            # Continua processamento...
+            return self._executar_analise(candles_validos)
 
         except Exception as e:
-            # Capturar a exceção e logar o erro
             logger.error(f"Erro na análise de candles: {e}")
+            return None
+
+    def _validar_dados_entrada(self, dados):
+        """Valida os dados de entrada."""
+        return dados and isinstance(dados, (list, tuple))
+
+    def _preparar_dados_numpy(self, dados):
+        """Prepara os dados para análise usando numpy."""
+        try:
+            dados_np = [[float(v) for v in candle[2:]] for candle in dados]
+            return np.array(dados_np, dtype=np.float64)
+        except Exception as e:
+            logger.error(f"Erro ao preparar dados numpy: {e}")
             raise
+
+    def _analisar_padroes_talib(self, dados_np):
+        """Analisa padrões usando TA-Lib."""
+        resultados = {}
+        opens = dados_np[:, 1]
+        highs = dados_np[:, 2]
+        lows = dados_np[:, 3]
+        closes = dados_np[:, 4]
+
+        for nome_funcao in talib.get_function_groups()["Pattern Recognition"]:
+            try:
+                funcao_talib = getattr(talib, nome_funcao)
+                resultado = funcao_talib(opens, highs, lows, closes)
+                nome_padrao = nome_funcao.lower().replace("cdl", "")
+                resultados[nome_padrao] = resultado
+            except Exception as e:
+                logger.error(f"Erro no padrão {nome_funcao}: {e}")
+                continue
+
+        return resultados
+
+    def _processar_sinais(self, dados, resultados, symbol, timeframe):
+        """Processa os sinais identificados."""
+        sinais = []
+        for candle in dados:
+            padrao_candle = self.identificar_padrao(candle)
+            if padrao_candle:
+                classificacao = self.classificar_candle(candle)
+                sinal = self.gerar_sinal(
+                    candle, padrao_candle, classificacao, symbol, timeframe, self.config
+                )
+                if sinal:
+                    sinais.append(sinal)
+        return sinais
+
+    def _salvar_resultados(self, sinais, symbol, timeframe):
+        """Salva os resultados usando o gerenciador de banco."""
+        try:
+            for sinal in sinais:
+                dados = {
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "timestamp": sinal.get("timestamp"),
+                    "padrao": sinal.get("padrao"),
+                    "classificacao": sinal.get("classificacao"),
+                    "sinal": sinal.get("sinal"),
+                    "stop_loss": sinal.get("stop_loss"),
+                    "take_profit": sinal.get("take_profit"),
+                }
+                gerenciador_banco.inserir_dados("analise_candles", dados)
+        except Exception as e:
+            logger.error(f"Erro ao salvar resultados: {e}")

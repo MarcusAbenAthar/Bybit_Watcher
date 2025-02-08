@@ -1,4 +1,5 @@
 from plugins.plugin import Plugin
+from plugins.gerenciador_banco import gerenciador_banco
 import logging
 
 logger = logging.getLogger(__name__)
@@ -284,7 +285,7 @@ class SinaisPlugin(Plugin):
 
     def logar_sinal(self, symbol, timeframe, sinal):
         """
-        Gera um log estruturado do sinal.
+        Gera um log estruturado do sinal e salva no banco.
 
         Args:
             symbol (str): Símbolo do par
@@ -308,12 +309,16 @@ class SinaisPlugin(Plugin):
                 ),
             }
 
+            # Log do sinal
             logger.info(
                 "SINAL | "
                 f"Symbol: {sinal_formatado['symbol']} | "
                 f"Timeframe: {sinal_formatado['timeframe']} | "
                 f"Direção: {sinal_formatado['direcao']}"
             )
+
+            # Salva no banco usando o gerenciador
+            gerenciador_banco.inserir_dados("sinais", sinal_formatado)
 
             return sinal_formatado
 

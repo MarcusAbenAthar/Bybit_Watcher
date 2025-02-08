@@ -15,6 +15,8 @@ class MediasMoveis(Plugin):
         super().__init__()
         self.nome = "Médias Móveis"
         self.config = config
+        self.descricao = "Plugin para análise de médias móveis"
+        self.alavancagem = 1  # Default value
         # Obtém o plugin de cálculo de alavancagem
         self.calculo_alavancagem = obter_calculo_alavancagem()
 
@@ -103,63 +105,56 @@ class MediasMoveis(Plugin):
 
     def executar(self, dados, symbol, timeframe):
         """
-        Executa o cálculo das médias móveis, gera sinais de trading e salva os resultados no banco de dados.
+        Executa a análise de médias móveis.
 
         Args:
-            dados (list): Lista de candles.
-            symbol (str): Par de moedas.
-            timeframe (str): Timeframe dos candles.
+            dados (list): Lista de candles
+            symbol (str): Símbolo do par
+            timeframe (str): Timeframe
+
+        Returns:
+            dict: Resultados da análise
         """
         try:
-            from plugins.gerente_plugin import obter_banco_dados
+            # Inicializa alavancagem com valor padrão
+            self.alavancagem = 1  # Valor default
 
-            banco_dados = obter_banco_dados(self.config)
-            # Converter os dados para numpy array e extrair apenas os preços de fechamento
-            dados_fechamento = [
-                candle[4] for candle in dados
-            ]  # índice 4 é o preço de fechamento
-            fechamentos = np.array(dados_fechamento, dtype=np.float64)
+            if not dados or len(dados) < 20:  # Mínimo de candles para análise
+                logger.warning("Dados insuficientes para análise")
+                return None
 
             # Calcular médias móveis
-            ma_curta = talib.SMA(fechamentos, timeperiod=9)
-            ma_longa = talib.SMA(fechamentos, timeperiod=21)
+            closes = np.array([float(candle[4]) for candle in dados])
+            ma20 = talib.SMA(closes, timeperiod=20)
+            ma50 = talib.SMA(closes, timeperiod=50)
 
-            # Gera o sinal de compra ou venda
-            sinal = self.gerar_sinal(
-                dados,
-                [ma_curta, ma_longa],
-                symbol,
-                timeframe,
-                self.config,
-            )
+            # Calcular alavancagem baseada na volatilidade
+            self.alavancagem = self._calcular_alavancagem(closes)
 
-            if sinal[
-                "sinal"
-            ]:  # Verifica se o sinal é válido antes de salvar no banco de dados.
-                # Salva os dados no banco de dados
-                timestamp = int(
-                    dados[-1][0] / 1000
-                )  # Converte o timestamp symbola segundos
-                banco_dados.inserir_dados(
-                    "medias_moveis",
-                    {  # Usando a função inserir_dados do Core
-                        "symbol": symbol,
-                        "timeframe": timeframe,
-                        "timestamp": timestamp,
-                        "sinal": sinal["sinal"],
-                        "stop_loss": sinal["stop_loss"],
-                        "take_profit": sinal["take_profit"],
-                    },
-                )
+            # Gerar sinal
+            sinal = {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "ma20": ma20[-1],
+                "ma50": ma50[-1],
+                "alavancagem": self.alavancagem,
+                "direcao": "compra" if ma20[-1] > ma50[-1] else "venda",
+            }
 
-                logger.debug(
-                    f"Médias móveis calculadas e sinais gerados para {symbol} - {timeframe}."
-                )
-            else:
-                logger.debug(f"Nenhum sinal gerado para {symbol} - {timeframe}.")
-
-            return {"ma_curta": ma_curta, "ma_longa": ma_longa}
+            return sinal
 
         except Exception as e:
             logger.error(f"Erro ao processar médias móveis: {e}")
             raise
+
+    def _calcular_alavancagem(self, closes):
+        """
+        Calcula a alavancagem baseada na volatilidade.
+        """
+        try:
+            volatilidade = np.std(closes[-20:]) / np.mean(closes[-20:])
+            alavancagem = max(1, min(20, int(1 / volatilidade)))
+            return alavancagem
+        except Exception as e:
+            logger.error(f"Erro ao calcular alavancagem: {e}")
+            return 1  # Valor default seguro

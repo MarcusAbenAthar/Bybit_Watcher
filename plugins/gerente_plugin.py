@@ -11,10 +11,213 @@ testabilidade do código.
 
 from plugins.plugin import Plugin
 import logging
-
-logger = logging.getLogger(__name__)
 import os
 import importlib
+
+logger = logging.getLogger(__name__)
+
+
+class GerentePlugin(Plugin):
+    """
+    Gerenciador central de plugins do sistema.
+    """
+
+    _instance = None  # Singleton instance
+    _singleton_plugins = {
+        "BancoDados": None,
+        "ValidadorDados": None,
+        "GerentePlugin": None,
+        "Conexao": None,
+        "GerenciadorBanco": None,
+    }
+    _config = None
+
+    def __new__(cls, config=None):
+        if cls._instance is None:
+            cls._instance = super(GerentePlugin, cls).__new__(cls)
+            cls._config = config
+        return cls._instance
+
+    def __init__(self, config=None):  # <-- Added config parameter
+        if not hasattr(self, "initialized"):
+            super().__init__()
+            self.nome = "Gerente de Plugins"
+            self.descricao = "Gerencia todos os plugins do sistema"
+            self.plugins = []
+            self._config = config  # <-- Store config
+            self.initialized = True
+
+    def carregar_plugins(self, diretorio, config=None):
+        """Carrega todos os plugins de um determinado diretório."""
+        try:
+            # Lista de plugins na ordem de carregamento
+            plugins_ordem = [
+                # Core plugins
+                "conexao",
+                "banco_dados",
+                "validador_dados",
+                # Análise plugins
+                "calculo_alavancagem",
+                "analise_candles",
+                "medias_moveis",
+                "price_action",
+                # Trading plugins
+                "calculo_risco",
+                "execucao_ordens",
+                "sinais_plugin",
+                # Indicadores plugins
+                "indicadores/indicadores_osciladores",
+                "indicadores/indicadores_tendencia",
+                "indicadores/indicadores_volatilidade",
+                "indicadores/indicadores_volume",
+                "indicadores/outros_indicadores",
+                # Gerenciamento
+                "gerenciador_bot",
+            ]
+
+            # Carregar cada plugin na ordem definida
+            for plugin_nome in plugins_ordem:
+                caminho = os.path.join(diretorio, f"{plugin_nome}.py")
+
+                try:
+                    if os.path.exists(caminho):
+                        # Carrega o módulo
+                        spec = importlib.util.spec_from_file_location(
+                            plugin_nome, caminho
+                        )
+                        modulo = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(modulo)
+
+                        # Instancia o plugin
+                        plugin = self._carregar_plugin(plugin_nome, config)
+
+                        if plugin:
+                            self.plugins.append(plugin)
+                            logger.info(
+                                f"Plugin carregado: {plugin.__class__.__name__} ({plugin_nome})"
+                            )
+
+                except Exception as e:
+                    logger.error(f"Erro ao carregar plugin {plugin_nome}: {str(e)}")
+                    continue
+
+            # Inicializa plugins
+            for plugin in self.plugins:
+                if hasattr(plugin, "inicializar"):
+                    plugin.inicializar()
+
+            logger.info(f"=== Total de plugins carregados: {len(self.plugins)} ===")
+            return True
+
+        except Exception as erro:
+            logger.error(f"Erro no carregamento de plugins: {str(erro)}")
+            return False
+
+    def _carregar_plugin(self, nome_modulo, config=None):
+        """Carrega um plugin específico."""
+        try:
+            modulo = importlib.import_module(f"plugins.{nome_modulo}")
+
+            for nome_attr in dir(modulo):
+                attr = getattr(modulo, nome_attr)
+                if (
+                    isinstance(attr, type)
+                    and issubclass(attr, Plugin)
+                    and attr != Plugin
+                ):
+
+                    # Configuração específica para plugins que precisam de config
+                    if attr.__name__ in ["BancoDados", "GerenciadorBanco"]:
+                        plugin = attr(config)
+                    else:
+                        plugin = attr()
+
+                    # Verifica singleton
+                    if attr.__name__ in self._singleton_plugins:
+                        if self._singleton_plugins[attr.__name__] is not None:
+                            return None
+                        self._singleton_plugins[attr.__name__] = plugin
+
+                    return plugin
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Erro ao carregar módulo {nome_modulo}: {str(e)}")
+            return None
+
+    def _verificar_plugin(self, plugin):
+        """Verifica se um plugin está funcionando corretamente."""
+        try:
+            if hasattr(plugin, "verificar_inicializacao"):
+                plugin.verificar_inicializacao()
+            if hasattr(plugin, "validar"):
+                plugin.validar()
+            return True
+        except Exception as e:
+            logger.error(f"Falha na verificação do plugin {plugin.nome}: {e}")
+            return False
+
+    def interromper_execucao(self):
+        """Gerencia a interrupção segura do bot."""
+        try:
+            logger.info("Iniciando encerramento seguro do bot...")
+
+            # Fecha conexão com banco se estiver aberta
+            if hasattr(self, "_db") and self._db is not None:
+                try:
+                    self._db.fechar_conexao()
+                    logger.info("Conexão com banco de dados encerrada")
+                except Exception as e:
+                    logger.error(f"Erro ao fechar conexão com banco: {e}")
+
+            logger.info("Bot encerrado com sucesso")
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro ao encerrar bot: {e}")
+            return False
+
+    def executar_ciclo(self):
+        """Executa um ciclo completo do bot."""
+        try:
+            # Obtém conexão
+            conexao = self._singleton_plugins.get("Conexao")
+            if not conexao:
+                raise ValueError("Conexão não inicializada")
+
+            # Obtém configurações
+            timeframe = self._config.get("timeframe", "1h")
+            symbols = self._config.get("symbols", ["BTCUSDT"])
+
+            # Executa para cada símbolo
+            for symbol in symbols:
+                try:
+                    dados = conexao.obter_dados_mercado(symbol, timeframe)
+
+                    # Executa plugins
+                    for plugin in self.plugins:
+                        if hasattr(plugin, "executar"):
+                            try:
+                                plugin.executar(dados, symbol, timeframe)
+                            except Exception as e:
+                                logger.error(
+                                    f"Erro ao executar plugin {plugin.nome}: {str(e)}"
+                                )
+
+                except Exception as e:
+                    logger.error(f"Erro ao processar símbolo {symbol}: {str(e)}")
+                    continue
+
+            return True
+
+        except Exception as erro:
+            logger.error(f"Erro no ciclo de execução: {str(erro)}")
+            return False
+
+
+# Instância global do gerente
+gerente_plugin = GerentePlugin()
 
 
 def inicializar_banco_dados(config):
@@ -53,79 +256,6 @@ def inicializar_banco_dados(config):
     logger.debug(
         "Banco de dados inicializado com sucesso!"
     )  # Adiciona um log no final da função
-
-
-def carregar_plugins(diretorio, config=None):
-    """
-    Carrega todos os plugins de um determinado diretório.
-
-    Args:
-        diretorio: Caminho para o diretório de plugins
-        config: Configurações para os plugins
-
-    Returns:
-        list: Lista de instâncias dos plugins carregados
-    """
-    plugins = []
-    logger.debug(f"=== Iniciando carregamento de plugins ===")
-
-    try:
-        # Lista todos os arquivos .py no diretório
-        arquivos = [
-            f
-            for f in os.listdir(diretorio)
-            if f.endswith(".py") and not f.startswith("_")
-        ]
-
-        # Ordena os arquivos para garantir ordem de carregamento
-        ordem_plugins = [
-            "indicadores_tendencia.py",
-            "medias_moveis.py",
-            "sinais_plugin.py",
-        ]
-
-        # Coloca os plugins prioritários no início
-        for plugin_nome in ordem_plugins:
-            if plugin_nome in arquivos:
-                arquivos.remove(plugin_nome)
-                arquivos.insert(0, plugin_nome)
-
-        # Carrega cada plugin
-        for arquivo in arquivos:
-            nome_modulo = arquivo[:-3]  # Remove .py
-            try:
-                # Importa o módulo
-                modulo = importlib.import_module(f"{diretorio}.{nome_modulo}")
-
-                # Procura pela classe do plugin
-                for nome_attr in dir(modulo):
-                    attr = getattr(modulo, nome_attr)
-                    if (
-                        isinstance(attr, type)
-                        and issubclass(attr, Plugin)
-                        and attr != Plugin
-                    ):
-
-                        # Instancia o plugin com config se necessário
-                        if "config" in attr.__init__.__code__.co_varnames:
-                            plugin = attr(config)
-                        else:
-                            plugin = attr()
-
-                        plugins.append(plugin)
-                        logger.debug(f"Plugin carregado com sucesso: {nome_attr}")
-
-            except Exception as e:
-                logger.error(f"Erro ao carregar plugin {nome_modulo}: {e}")
-
-        logger.debug(f"=== Total de plugins carregados: {len(plugins)} ===")
-        for p in plugins:
-            logger.debug(f"Plugin ativo: {p.__class__.__name__}")
-
-    except Exception as e:
-        logger.error(f"Erro ao carregar plugins: {e}")
-
-    return plugins
 
 
 def conectar_banco_dados(config):
@@ -190,19 +320,24 @@ def obter_conexao():
     return conexao
 
 
-def obter_banco_dados(config):
+def obter_banco_dados(config=None):
     """
-    Fornece acesso ao plugin de Banco de Dados.
-
-    Returns:
-        BancoDados: Instância do plugin de Banco de Dados.
+    Retorna a conexão única com o banco de dados.
     """
-    from plugins.banco_dados import BancoDados
+    from plugins.gerenciador_banco import gerenciador_banco
 
-    # Cria a instância da classe BancoDados
-    banco_dados = BancoDados(config)
+    if config:
+        gerenciador_banco.inicializar(config)
+    return gerenciador_banco.get_conexao()
 
-    return banco_dados
+
+def finalizar_conexao():
+    """
+    Fecha a conexão com o banco quando o bot for encerrado.
+    """
+    from plugins.gerenciador_banco import gerenciador_banco
+
+    gerenciador_banco.fechar_conexao()
 
 
 def obter_analise_candles():
@@ -333,25 +468,10 @@ def obter_outros_indicadores():
     return outros_indicadores
 
 
-def interromper_execucao(self):
-    """
-    Gerencia a interrupção segura do bot.
-    Garante que todas as conexões sejam fechadas corretamente.
-    """
-    try:
-        logger.info("Iniciando encerramento seguro do bot...")
-
-        # Fecha conexão com banco se estiver aberta
-        if hasattr(self, "_db") and self._db is not None:
-            try:
-                self._db.fechar_conexao()
-                logger.info("Conexão com banco de dados encerrada")
-            except Exception as e:
-                logger.error(f"Erro ao fechar conexão com banco: {e}")
-
-        logger.info("Bot encerrado com sucesso")
-        return True
-
-    except Exception as e:
-        logger.error(f"Erro ao encerrar bot: {e}")
-        return False
+if __name__ == "__main__":
+    gerente = GerentePlugin()
+    sucesso = gerente.carregar_plugins("plugins")
+    if sucesso:
+        print("Plugins carregados:", len(gerente.plugins))
+    else:
+        print("Falha no carregamento")

@@ -174,3 +174,29 @@ cython_debug/
 .pypirc
 /config.ini
 /plano_de_acao.txt
+
+# Arquivos de configuração
+config.ini
+.env
+*.pyc
+
+# Logs
+logs/
+*.log
+
+# Ambiente virtual
+venv/
+env/
+.venv/
+
+# Cache
+__pycache__/
+.pytest_cache/
+
+# IDEs
+.vscode/
+.idea/
+
+# Outros
+*.db
+*.sqlite3
