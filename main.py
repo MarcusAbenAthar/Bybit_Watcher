@@ -18,20 +18,48 @@ Regras de Ouro implementadas:
 10. Documentado - Docstrings completas
 """
 
+# Imports stdlib
 import logging
 import signal
 import sys
 from typing import Optional
+
+# Imports terceiros
 from dotenv import load_dotenv
 import os
+
+# Imports locais
 from plugins.gerente_plugin import GerentePlugin
 
 # Configuração inicial
 load_dotenv()
 logger = logging.getLogger(__name__)
+
+# Configuração de logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
 )
+
+# Plugins essenciais
+PLUGINS_ESSENCIAIS = ["conexao", "banco_dados", "gerenciador_bot"]
+
+# Plugins adicionais
+PLUGINS_ADICIONAIS = [
+    "analise_candles",
+    "calculo_alavancagem",
+    "calculo_risco",
+    "execucao_ordens",
+    "gerenciador_banco",
+    "indicadores.indicadores_osciladores",
+    "indicadores.indicadores_tendencia",
+    "indicadores.indicadores_volatilidade",
+    "indicadores.indicadores_volume",
+    "indicadores.outros_indicadores",
+    "medias_moveis",
+    "price_action",
+    "sinais_plugin",
+    "validador_dados",
+]
 
 
 def signal_handler(signum: int, frame: Optional[object]) -> None:
@@ -42,50 +70,38 @@ def signal_handler(signum: int, frame: Optional[object]) -> None:
 
 def carregar_config() -> dict:
     """
-    Carrega configurações do .env
+    Carrega a configuração do bot de forma segura.
 
     Returns:
-        dict: Configurações carregadas
+        dict: Configuração carregada
     """
-    try:
-        return {
-            "timeframes": ["1m", "5m", "15m", "30m", "1h", "4h", "1d"],
-            "database": {
-                "host": os.getenv("DB_HOST", "localhost"),
-                "database": os.getenv("DB_NAME", "bybit_watcher"),
-                "user": os.getenv("DB_USER", "postgres"),
-                "password": os.getenv("DB_PASSWORD"),
-            },
-        }
-    except Exception as e:
-        logger.error(f"Erro ao carregar config: {e}")
-        raise
+    config = {"timeframes": ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]}
+    return config
 
 
 def inicializar_bot() -> GerentePlugin:
     """
-    Inicializa o bot e seus gerentes.
+    Inicializa o bot de forma segura.
 
     Returns:
-        GerentePlugin: Gerente de plugins inicializado
+        GerentePlugin: Gerenciador inicializado
 
     Raises:
         RuntimeError: Se falhar a inicialização
     """
     try:
-        # Carrega configurações
+        # Carrega config
         config = carregar_config()
 
-        # Inicializa gerente de plugins
+        # Inicializa gerente
         gerente = GerentePlugin()
-        if not gerente.inicializar(config):
-            raise RuntimeError("Falha ao inicializar gerente")
+        gerente.inicializar(config)
 
-        # Carrega plugins (gerenciador_banco e gerenciador_bot serão carregados aqui)
-        if not gerente.carregar_plugins("plugins"):
-            raise RuntimeError("Falha ao carregar plugins")
+        # Carrega plugins essenciais
+        if not gerente.carregar_plugins("plugins"):  # Removido argumento config
+            raise RuntimeError("Falha ao carregar plugins essenciais")
 
-        # Verifica plugins essenciais
+        # Validação final
         if not gerente.verificar_plugins_essenciais():
             raise RuntimeError("Plugins essenciais não inicializados")
 
@@ -124,11 +140,7 @@ def main() -> None:
 
     finally:
         if "gerente" in locals():
-            try:
-                gerente.finalizar()
-                logger.info("Bot finalizado")
-            except Exception as e:
-                logger.error(f"Erro ao finalizar: {e}")
+            gerente.interromper_execucao()
 
 
 if __name__ == "__main__":

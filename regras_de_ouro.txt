@@ -1,0 +1,81 @@
+Regras de OURO para programar o bot:
+
+1 - Autonomo nas decisões (TP, SL e alavancagem), ele não fará trades;
+2 - Criterioso;
+3 - Seguro;
+4 - Certeiro;
+5 - Eficiente;
+6 - Clareza;
+7 - Modular;
+8 - Composto por plugins;
+9 - Testável;
+10 - Documentado com Docstrings e comentários;
+
+Boas práticas ao programar o bot:
+
+1 - Evitar redundâncias;
+2 - Respeitar a responsabilidade de cada plugin;
+3 - Evitar importação circular;
+
+Cada plugin segue:
+
+* Padrão Singleton quando apropriado
+* Herança da classe base Plugin
+* Responsabilidade única
+* Interface padronizada
+* Documentação completa
+* Esta estrutura:
+
+* É modular
+* Evita dependências circulares
+* Facilita testes
+* Mantém organização clara
+* Separa responsabilidades
+
+Estrutura do projeto:
+
+Bybit_Watcher/
+├── main.py                  # Arquivo principal
+├── .env                     # Configurações sensíveis
+├── regras_de_ouro.txt      # Regras do projeto
+│
+├── plugins/                 # Diretório de plugins
+│   ├── __init__.py         # Inicializador do pacote
+│   ├── plugin.py           # Classe base para plugins
+│   ├── conexao.py          # Plugin de conexão com Bybit
+│   ├── banco_dados.py      # Plugin de operações básicas do banco
+│   ├── gerenciador_banco.py # Gerenciador de banco de dados
+│   ├── gerenciador_bot.py  # Gerenciador do bot
+│   ├── calculo_alavancagem.py # Cálculos de alavancagem
+│   ├── calculo_risco.py    # Cálculos de risco
+│   ├── analise_candles.py  # Análise de candles
+│   ├── medias_moveis.py    # Análise de médias móveis
+│   ├── price_action.py     # Análise de price action
+│   ├── validador_dados.py  # Validação de dados
+│   ├── sinais_plugin.py    # Geração de sinais
+│   │
+│   └── indicadores/        # Subpacote de indicadores
+│       ├── __init__.py
+│       ├── indicadores_tendencia.py
+│       ├── indicadores_osciladores.py
+│       ├── indicadores_volatilidade.py
+│       ├── indicadores_volume.py
+│       └── outros_indicadores.py
+│
+├── utils/                  # Utilitários
+│   ├── __init__.py
+│   ├── logging_config.py   # Configuração de logs
+│   └── singleton.py        # Implementação do Singleton
+│
+├── tests/                  # Testes unitários
+│   ├── __init__.py
+│   ├── test_conexao.py
+│   ├── test_banco_dados.py
+│   └── ... (outros testes)
+│
+└── logs/                   # Diretório de logs
+    ├── bot_YYYY-MM-DD.log
+    ├── sinais_YYYY-MM-DD.log
+    └── erros_YYYY-MM-DD.log
+
+https://github.com/MarcusAbenAthar/Bybit_Watcher

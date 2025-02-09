@@ -1,9 +1,9 @@
-import logging
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 from utils.singleton import singleton
 from plugins.plugin import Plugin
 from plugins.gerente_plugin import GerentePlugin
-
-logger = logging.getLogger(__name__)
 
 
 @singleton

@@ -1,4 +1,6 @@
-import logging
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 import numpy as np
 from plugins import gerenciador_banco
 from plugins.validador_dados import ValidadorDados
@@ -7,8 +9,6 @@ from utils.padroes_candles import PADROES_CANDLES
 from utils.singleton import singleton
 from plugins.plugin import Plugin
 from plugins.gerente_plugin import GerentePlugin, obter_calculo_alavancagem
-
-logger = logging.getLogger(__name__)
 
 
 @singleton

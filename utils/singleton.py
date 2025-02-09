@@ -1,7 +1,7 @@
-import logging
-from functools import wraps
+from utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+from functools import wraps
 
 
 def singleton(cls):

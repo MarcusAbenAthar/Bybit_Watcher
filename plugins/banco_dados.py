@@ -1,11 +1,10 @@
 import psycopg2
-import logging
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 from plugins.plugin import Plugin
 from typing import List, Tuple, Optional
 from utils.singleton import singleton
-
-
-logger = logging.getLogger(__name__)
 
 
 @singleton

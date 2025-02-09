@@ -14,13 +14,13 @@ Regras de Ouro:
 10. Documentado - Docstrings completos
 """
 
-import logging
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 import time
 from typing import Dict, List, Optional
 from plugins.plugin import Plugin
 from utils.singleton import singleton
-
-logger = logging.getLogger(__name__)
 
 
 @singleton

@@ -15,15 +15,15 @@ Regras de Ouro:
 """
 
 import os
-import logging
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 import psycopg2
 from psycopg2 import pool
 from typing import Optional
 from dotenv import load_dotenv
 from plugins.plugin import Plugin
 from utils.singleton import singleton
-
-logger = logging.getLogger(__name__)
 
 
 @singleton

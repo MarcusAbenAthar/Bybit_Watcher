@@ -18,12 +18,12 @@ Regras de Ouro:
 
 import os
 import importlib
-import logging
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 from typing import Optional, Dict
 from plugins.plugin import Plugin
 from utils.singleton import singleton
-
-logger = logging.getLogger(__name__)
 
 
 @singleton
@@ -59,70 +59,135 @@ class GerentePlugin:
         Carrega plugins do diretório especificado.
 
         Args:
-            caminho_plugins: Caminho do diretório de plugins
+            caminho_plugins: Caminho para o diretório de plugins
 
         Returns:
             bool: True se plugins carregados com sucesso
         """
         try:
-            # Só carrega uma vez
-            if self.plugins:
-                logger.info("Plugins já carregados")
-                return True
+            # Log do diretório base
+            caminho_base = os.path.abspath(caminho_plugins)
+            logger.info(f"Buscando plugins em: {caminho_base}")
 
-            plugins_carregados = []
+            # Lista de plugins essenciais na ordem de carregamento
+            plugins_essenciais = [
+                "conexao",
+                "banco_dados",
+                "gerenciador_banco",
+                "gerenciador_bot",
+            ]
 
-            # Lista arquivos
-            if os.path.isdir(caminho_plugins):
-                # Ordena plugins para garantir carregamento correto
-                ordem_plugins = [
-                    "conexao.py",
-                    "banco_dados.py",
-                    "gerenciador_banco.py",
-                    "gerenciador_bot.py",
-                    "analise_candles.py",
-                    "indicadores_tendencia.py",
-                    "indicadores_osciladores.py",
-                    "indicadores_volatilidade.py",
-                    "indicadores_volume.py",
-                    "medias_moveis.py",
-                    "price_action.py",
-                    "sinais_plugin.py",
-                ]
+            # Lista de plugins adicionais
+            plugins_adicionais = [
+                "analise_candles",
+                "calculo_alavancagem",
+                "calculo_risco",
+                "execucao_ordens",
+                "medias_moveis",
+                "price_action",
+                "sinais_plugin",
+                "validador_dados",
+            ]
 
-                # Filtra e ordena arquivos
-                arquivos = []
-                for plugin in ordem_plugins:
-                    if plugin in os.listdir(caminho_plugins):
-                        arquivos.append(plugin)
+            logger.info("Iniciando carregamento de plugins essenciais...")
+            for plugin_name in plugins_essenciais:
+                logger.debug(f"Tentando carregar plugin essencial: {plugin_name}")
+                if not self.carregar_plugin(plugin_name):
+                    logger.error(f"Falha ao carregar plugin essencial: {plugin_name}")
+                    return False
 
-                # Adiciona outros plugins não listados
-                for arquivo in os.listdir(caminho_plugins):
-                    if arquivo not in arquivos and self._eh_plugin_valido(arquivo):
-                        arquivos.append(arquivo)
-            else:
-                arquivos = [caminho_plugins]
+            logger.info("Iniciando carregamento de plugins adicionais...")
+            for plugin_name in plugins_adicionais:
+                logger.debug(f"Tentando carregar plugin adicional: {plugin_name}")
+                self.carregar_plugin(plugin_name)
 
-            # Carrega plugins
-            for arquivo in arquivos:
-                if self._eh_plugin_valido(arquivo):
-                    nome_modulo = os.path.splitext(arquivo)[0]
-                    plugin = self._carregar_plugin(nome_modulo)
-
-                    if plugin:
-                        plugins_carregados.append(plugin)
-                        self.plugins[nome_modulo] = plugin
-                        logger.info(f"Plugin carregado: {plugin.nome}")
-
-            if not plugins_carregados:
+            if not self.plugins:
                 logger.warning("Nenhum plugin carregado")
                 return False
 
-            logger.info(f"Total de plugins: {len(plugins_carregados)}")
+            logger.info(f"Total de plugins carregados: {len(self.plugins)}")
             return True
 
         except Exception as e:
             logger.error(f"Erro ao carregar plugins: {e}")
+            return False
+
+    def carregar_plugin(self, nome_plugin: str) -> bool:
+        """
+        Carrega um plugin específico.
+
+        Args:
+            nome_plugin: Nome do plugin a ser carregado
+
+        Returns:
+            bool: True se carregado com sucesso
+        """
+        try:
+            # Remove 'plugins.' do nome se presente
+            nome_plugin = nome_plugin.replace("plugins.", "")
+
+            if nome_plugin in self.plugins:
+                logger.debug(f"Plugin {nome_plugin} já carregado")
+                return True
+
+            # Log do caminho completo
+            caminho_modulo = f"plugins.{nome_plugin}"
+            logger.info(f"Tentando importar módulo: {caminho_modulo}")
+
+            # Importa módulo
+            try:
+                modulo = importlib.import_module(caminho_modulo)
+                caminho_arquivo = os.path.abspath(modulo.__file__)
+                logger.info(f"Módulo {nome_plugin} importado de: {caminho_arquivo}")
+            except ImportError as e:
+                logger.error(f"Falha ao importar {nome_plugin}: {e}")
+                return False
+
+            # Busca classe do plugin
+            plugin_class = None
+            for attr_name in dir(modulo):
+                attr = getattr(modulo, attr_name)
+
+                # Verifica se é uma classe que herda de Plugin
+                if (
+                    isinstance(attr, type)
+                    and issubclass(attr, Plugin)
+                    and attr != Plugin
+                ):
+                    # Tenta instanciar para verificar o nome
+                    try:
+                        instance = attr()
+                        if (
+                            hasattr(instance, "nome")
+                            and instance.nome.lower() == nome_plugin.lower()
+                        ):
+                            plugin_class = attr
+                            logger.debug(
+                                f"Classe plugin válida encontrada: {attr_name}"
+                            )
+                            break  # Encontrou a classe, pode sair do loop
+                    except Exception as e:
+                        logger.error(f"Erro ao instanciar {attr_name}: {e}")
+                        continue
+
+            if not plugin_class:
+                logger.warning(f"Nenhuma classe plugin encontrada em {nome_plugin}")
+                return False
+
+            # Instancia o plugin
+            plugin = plugin_class()
+
+            # Inicializa o plugin
+            if self.config and not plugin.inicializar(self.config):
+                logger.error(f"Falha ao inicializar {nome_plugin}")
+                return False
+
+            self.plugins[nome_plugin] = plugin
+            logger.info(f"Plugin {nome_plugin} carregado com sucesso")
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro ao carregar plugin {nome_plugin}: {e}", exc_info=True)
             return False
 
     def _carregar_plugin(self, nome_modulo: str) -> Optional[Plugin]:
@@ -130,35 +195,46 @@ class GerentePlugin:
         Carrega um plugin específico.
 
         Args:
-            nome_modulo: Nome do módulo do plugin
+            nome_modulo: Nome do módulo do plugin (sem .py)
 
         Returns:
-            Plugin ou None se falhar
+            Optional[Plugin]: Instância do plugin ou None se falhar
         """
         try:
-            logger.debug(f"Carregando: {nome_modulo}")
+            # Importa o módulo
             modulo = importlib.import_module(f"plugins.{nome_modulo}")
 
-            # Busca classe do plugin
-            for nome_item in dir(modulo):
-                item = getattr(modulo, nome_item)
+            # Procura pela classe que herda de Plugin
+            for item_name in dir(modulo):
+                item = getattr(modulo, item_name)
+
+                # Verifica se é uma classe que herda de Plugin
                 if (
                     isinstance(item, type)
                     and issubclass(item, Plugin)
                     and item != Plugin
                 ):
 
-                    # Instancia e inicializa
+                    # Instancia o plugin
                     plugin = item()
-                    if self.config:
-                        plugin.inicializar(self.config)
-                    return plugin
 
-            logger.warning(f"Nenhuma classe plugin em {nome_modulo}")
+                    # Verifica se o nome corresponde
+                    if plugin.nome == nome_modulo:
+                        # Inicializa o plugin
+                        if self.config:
+                            plugin.inicializar(self.config)
+
+                        logger.info(f"Plugin {nome_modulo} carregado com sucesso")
+                        return plugin
+
+            logger.warning(f"Plugin {nome_modulo} não encontrado")
             return None
 
+        except ImportError as e:
+            logger.error(f"Erro ao importar plugin {nome_modulo}: {e}")
+            return None
         except Exception as e:
-            logger.error(f"Erro ao carregar {nome_modulo}: {e}")
+            logger.error(f"Erro ao carregar plugin {nome_modulo}: {e}")
             return None
 
     def _eh_plugin_valido(self, arquivo: str) -> bool:
@@ -221,6 +297,23 @@ class GerentePlugin:
                 plugin.finalizar()
             except Exception as e:
                 logger.error(f"Erro ao finalizar {plugin.nome}: {e}")
+
+    def listar_plugins(self) -> None:
+        """Lista todos os plugins carregados."""
+        try:
+            logger.info("=== Plugins Carregados ===")
+            if not self.plugins:
+                logger.warning("Nenhum plugin carregado!")
+                return
+
+            for nome, plugin in self.plugins.items():
+                status = "✓" if plugin.inicializado else "✗"
+                logger.info(f"{status} {nome}: {plugin.descricao}")
+
+            logger.info(f"Total de plugins: {len(self.plugins)}")
+
+        except Exception as e:
+            logger.error(f"Erro ao listar plugins: {e}")
 
 
 def obter_conexao():

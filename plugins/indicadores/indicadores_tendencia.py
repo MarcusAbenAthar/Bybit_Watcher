@@ -14,9 +14,11 @@ Características:
 from typing import List, Tuple, Dict, Optional
 import numpy as np
 import pandas as pd
-import logging
+from utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+
+
 from plugins.plugin import Plugin
 from plugins.gerente_plugin import obter_banco_dados
 

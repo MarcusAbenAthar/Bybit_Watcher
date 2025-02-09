@@ -1,4 +1,6 @@
-import logging
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 import datetime
 
 # Obter a data de hoje no formato dia-mes-ano
