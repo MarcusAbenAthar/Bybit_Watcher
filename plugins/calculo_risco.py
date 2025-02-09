@@ -1,17 +1,32 @@
+import logging
 import numpy as np
 import talib
+from utils.singleton import singleton
 from plugins.plugin import Plugin
-import logging
+from plugins.gerente_plugin import GerentePlugin
 
 logger = logging.getLogger(__name__)
 
 
+@singleton
 class CalculoRisco(Plugin):
-    """Plugin para cálculo dinâmico de Stop Loss e Take Profit."""
+    """Plugin para cálculos de risco."""
 
     def __init__(self):
+        """Inicializa o plugin CalculoRisco."""
         super().__init__()
         self.nome = "Cálculo de Risco"
+        self.descricao = "Plugin para análise e cálculo de risco"
+        self._config = None
+        self.cache_risco = {}  # Cache para otimização
+        self.gerente = GerentePlugin()
+
+    def inicializar(self, config):
+        """Inicializa as dependências do plugin."""
+        if not self._config:  # Só inicializa uma vez
+            super().inicializar(config)
+            self._config = config
+            logger.info(f"Plugin {self.nome} inicializado com sucesso")
 
     def sinal_confiavel(self, sinal):
         """Verifica se o sinal atende aos critérios de confiabilidade."""

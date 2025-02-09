@@ -1,46 +1,85 @@
 import logging
+import os
+import ccxt
+from plugins.plugin import Plugin
+from utils.singleton import singleton
 
 logger = logging.getLogger(__name__)
-import ccxt
-from dotenv import load_dotenv
-import os
-from plugins.plugin import Plugin
 
 
+@singleton
 class Conexao(Plugin):
-    """
-    Plugin para estabelecer e gerenciar a conexão com a Bybit.
-    """
+    """Plugin para conexão com a Bybit."""
 
     def __init__(self):
-        """
-        Inicializa o plugin Conexao.
-        """
+        """Inicializa o plugin de conexão."""
         super().__init__()
+        self.nome = "Conexão Bybit"
+        self.descricao = "Plugin para conexão com a Bybit"
+        self._config = None
         self.exchange = None
-        self.nome = "Conexão"
-        load_dotenv()
+        self._testnet = True
+        self._mercado = "swap"
+        self._pares_usdt = []
 
-    def conectar_bybit(self, config):
-        """
-        Estabelece conexão com a Bybit.
-        """
+    def inicializar(self, config):
+        """Inicializa a conexão com a Bybit."""
         try:
+            logger.info("Inicializando a conexão com a Bybit...")
+            if not self._config:
+                super().inicializar(config)
+                self._config = config
+                self._mercado = os.getenv("BYBIT_MARKET", "swap")
+
+                # Conecta à Bybit
+                self.conectar_bybit()
+
+                # Filtra pares USDT
+                self._pares_usdt = self.filtrar_pares_usdt()
+
+                logger.info("Conexão estabelecida com sucesso!")
+                logger.info(f"Mercado conectado: {self._mercado}")
+
+        except Exception as e:
+            logger.error(f"Erro ao inicializar conexão: {e}")
+            raise
+
+    def validar(self):
+        """Valida se a conexão está funcionando."""
+        if not self._client:
+            raise ValueError("Cliente Bybit não inicializado")
+        return True
+
+    def conectar_bybit(self):
+        """Estabelece conexão com a Bybit usando variáveis de ambiente."""
+        try:
+            if not os.getenv("BYBIT_API_KEY") or not os.getenv("BYBIT_API_SECRET"):
+                raise ValueError(
+                    "Credenciais da Bybit não encontradas nas variáveis de ambiente"
+                )
+
             self.exchange = ccxt.bybit(
                 {
-                    "apiKey": os.getenv("API_KEY"),
-                    "secret": os.getenv("API_SECRET"),
+                    "apiKey": os.getenv("BYBIT_API_KEY"),
+                    "secret": os.getenv("BYBIT_API_SECRET"),
                     "enableRateLimit": True,
-                    "options": {"defaultType": "swap", "market": "linear"},
+                    "options": {"defaultType": self._mercado, "market": "linear"},
                 }
             )
 
-            logger.info(f"Conexão estabelecida com a Bybit")
+            # Configura testnet baseado em variável de ambiente
+            self._testnet = os.getenv("BYBIT_TESTNET", "true").lower() == "true"
+            if self._testnet:
+                self.exchange.set_sandbox_mode(True)
+                logger.info("Modo testnet ativado")
+
+            self.exchange.load_markets()
+            logger.info("Conexão estabelecida com a Bybit")
             return True
 
         except Exception as erro:
             logger.error(f"Erro ao conectar na Bybit: {str(erro)}")
-            return False
+            raise
 
     def carregar_mercados(self):
         """
@@ -61,30 +100,6 @@ class Conexao(Plugin):
             logger.error(f"Erro ao carregar mercados: {str(erro)}")
             raise
 
-    def inicializar(self, config=None):
-        """
-        Inicializa a conexão com a Bybit.
-        """
-        try:
-            logger.info("Inicializando a conexão com a Bybit...")
-
-            api_key = os.getenv("API_KEY")
-            api_secret = os.getenv("API_SECRET")
-
-            if not api_key or not api_secret:
-                raise ValueError("Chaves de API não configuradas corretamente.")
-
-            self.conectar_bybit(config)
-            self.filtrar_pares_usdt()
-
-            logger.info("Conexão estabelecida com sucesso!")
-            logger.info(f"Mercado conectado: {self.exchange.options['defaultType']}")
-
-        except Exception as erro:
-            logger.error(f"Erro ao conectar na Bybit: {str(erro)}")
-            self.exchange = None
-            raise
-
     def filtrar_pares_usdt(self):
         """Filtra e retorna apenas pares USDT Perpetual (Linear)."""
         try:
@@ -98,7 +113,6 @@ class Conexao(Plugin):
                     and dados.get("active")
                 ):  # Mercado ativo
                     pares_usdt.append(simbolo)
-                    logger.info(f"Par USDT adicionado: {simbolo}")
 
             logger.info(f"Total de pares USDT encontrados: {len(pares_usdt)}")
             return pares_usdt
@@ -106,6 +120,15 @@ class Conexao(Plugin):
         except Exception as erro:
             logger.error(f"Erro ao filtrar pares USDT: {str(erro)}")
             raise
+
+    def obter_pares_usdt(self):
+        """
+        Retorna os pares USDT já filtrados.
+
+        Returns:
+            list: Lista de pares USDT disponíveis
+        """
+        return self._pares_usdt
 
     def validar_mercado(self, dados):
         """

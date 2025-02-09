@@ -1,107 +1,143 @@
 import logging
+import numpy as np
+import talib
+from utils.singleton import singleton
+from plugins.plugin import Plugin
+from plugins.gerente_plugin import GerentePlugin
 
 logger = logging.getLogger(__name__)
-from plugins.plugin import Plugin
-from plugins.gerente_plugin import obter_calculo_alavancagem
-import talib
-import numpy as np
 
 
+@singleton
 class MediasMoveis(Plugin):
-    """Plugin para calcular as médias móveis."""
+    """Plugin para cálculo e análise de médias móveis."""
 
-    def __init__(self, config=None):
+    def __init__(self):
         """Inicializa o plugin MediasMoveis."""
         super().__init__()
         self.nome = "Médias Móveis"
-        self.config = config
         self.descricao = "Plugin para análise de médias móveis"
-        self.alavancagem = 1  # Default value
-        # Obtém o plugin de cálculo de alavancagem
-        self.calculo_alavancagem = obter_calculo_alavancagem()
+        self._config = None
+        self.gerente = GerentePlugin()
+        self.cache_medias = {}
+
+    def inicializar(self, config):
+        """
+        Inicializa o plugin com as configurações fornecidas.
+
+        Args:
+            config: Objeto de configuração
+        """
+        if not self._config:  # Só inicializa uma vez
+            super().inicializar(config)
+            self._config = config
+            self.cache_medias = {}
+            logger.info(f"Plugin {self.nome} inicializado com sucesso")
 
     def calcular_media_movel(self, dados, periodo, tipo="simples"):
         """
-        Calcula a média móvel para os dados fornecidos.
+        Calcula a média móvel dos preços.
 
         Args:
-            dados (list): Lista de candles.
-            periodo (int): Período da média móvel.
-            tipo (str): Tipo da média móvel ("simples", "exponencial", "ponderada").
+            dados: numpy.ndarray com dados OHLCV
+            periodo: int com o período da média
+            tipo: str indicando o tipo de média ("simples", "exponencial", "ponderada")
 
         Returns:
-            list: Lista com os valores da média móvel.
-        """
-        # Extrai os valores de fechamento dos candles
-        fechamentos = [candle for candle in dados]
+            numpy.ndarray com os valores da média móvel
 
-        if tipo == "simples":
-            return talib.SMA(fechamentos, timeperiod=periodo)
-        elif tipo == "exponencial":
-            return talib.EMA(fechamentos, timeperiod=periodo)
-        elif tipo == "ponderada":
-            return talib.WMA(fechamentos, timeperiod=periodo)
-        else:
-            raise ValueError("Tipo de média móvel inválido.")
-
-    def gerar_sinal(self, dados, medias_moveis, symbol, timeframe, config):
+        Raises:
+            ValueError: se o tipo de média for inválido
         """
-        Gera um sinal de compra ou venda com base nos cruzamentos de médias móveis.
+        try:
+            # Converte dados para numpy array e extrai preços de fechamento
+            dados_np = np.array(dados)
+            fechamentos = dados_np[:, 4].astype(np.float64)  # Coluna de fechamento
+
+            if tipo == "simples":
+                return talib.SMA(fechamentos, timeperiod=periodo)
+            elif tipo == "exponencial":
+                return talib.EMA(fechamentos, timeperiod=periodo)
+            elif tipo == "ponderada":
+                return talib.WMA(fechamentos, timeperiod=periodo)
+            else:
+                raise ValueError(f"Tipo de média móvel inválido: {tipo}")
+
+        except ValueError as e:
+            logger.error(f"Erro ao calcular média móvel: {e}")
+            raise  # Re-lança a exceção para ser capturada pelo teste
+        except Exception as e:
+            logger.error(f"Erro ao calcular média móvel: {e}")
+            return None
+
+    def gerar_sinal(self, dados, padrao, symbol, timeframe, config):
+        """
+        Gera sinais baseados em médias móveis.
 
         Args:
-            dados (list): Lista de candles.
-            medias_moveis (list): Lista de médias móveis.
-            symbol (str): Par de moedas.
-            timeframe (str): Timeframe dos candles.
+            dados: numpy array com dados OHLCV
+            padrao: tipo de padrão a ser analisado
+            symbol: par de trading
+            timeframe: período temporal
+            config: configurações
 
         Returns:
-            dict: Um dicionário com o sinal, o stop loss e o take profit.
+            dict: Dicionário com o sinal gerado
         """
-        sinal = None
-        stop_loss = None
-        take_profit = None
+        try:
+            # Obtém períodos das médias das configs
+            periodo_curto = config.getint("medias_moveis", "periodo_curto", fallback=9)
+            periodo_longo = config.getint("medias_moveis", "periodo_longo", fallback=21)
 
-        media_movel_curta = medias_moveis[0]
-        media_movel_longa = medias_moveis[1]
-
-        # Verifica se houve cruzamento das médias móveis
-        if (
-            media_movel_curta[-2] < media_movel_longa[-2]
-            and media_movel_curta[-1] > media_movel_longa[-1]
-        ):
-            sinal = "compra"
-        elif (
-            media_movel_curta[-2] > media_movel_longa[-2]
-            and media_movel_curta[-1] < media_movel_longa[-1]
-        ):
-            sinal = "venda"
-
-            # Calcula a alavancagem ideal (Regra de Ouro: Dinamismo)
-            alavancagem = self.calculo_alavancagem.calcular_alavancagem(
-                dados[-1], symbol, timeframe, config
+            # Calcula as médias
+            media_movel_curta = self.calcular_media_movel(
+                dados, periodo_curto, "exponencial"
+            )
+            media_movel_longa = self.calcular_media_movel(
+                dados, periodo_longo, "exponencial"
             )
 
-        # Calcula o stop loss e o take profit, considerando a alavancagem
-        if sinal == "compra":
-            stop_loss = (
-                dados[-1][3] - (0.05 / alavancagem) * dados[-1][0]
-            )  # Stop loss 5% abaixo do mínimo do último candle
-            take_profit = (
-                dados[-1][2] + (0.15 / alavancagem) * dados[-1][0]
-            )  # Take profit 15% acima do máximo do último candle
-        elif sinal == "venda":
-            stop_loss = (
-                dados[-1][2] + (0.05 / alavancagem) * dados[-1][0]
-            )  # Stop loss 5% acima do máximo do último candle
-            take_profit = (
-                dados[-1][3] - (0.15 / alavancagem) * dados[-1][0]
-            )  # Take profit 15% abaixo do mínimo do último candle
+            # Verifica se temos dados suficientes
+            if len(media_movel_curta) < 2 or len(media_movel_longa) < 2:
+                return {
+                    "sinal": None,
+                    "tipo": "medias_moveis",
+                    "padrao": padrao,
+                    "indicadores": {"media_curta": None, "media_longa": None},
+                }
 
-        return {
-            "sinal": sinal,
-            "stop_loss": stop_loss,
-            "take_profit": take_profit,
-        }
+            # Identifica cruzamentos
+            sinal = None
+            if padrao == "cruzamento_alta":
+                if (
+                    media_movel_curta[-2] < media_movel_longa[-2]
+                    and media_movel_curta[-1] > media_movel_longa[-1]
+                ):
+                    sinal = "COMPRA"
+            elif padrao == "cruzamento_baixa":
+                if (
+                    media_movel_curta[-2] > media_movel_longa[-2]
+                    and media_movel_curta[-1] < media_movel_longa[-1]
+                ):
+                    sinal = "VENDA"
+
+            return {
+                "sinal": sinal,
+                "tipo": "medias_moveis",
+                "padrao": padrao,
+                "indicadores": {
+                    "media_curta": (
+                        media_movel_curta[-1] if len(media_movel_curta) > 0 else None
+                    ),
+                    "media_longa": (
+                        media_movel_longa[-1] if len(media_movel_longa) > 0 else None
+                    ),
+                },
+            }
+
+        except Exception as e:
+            logger.error(f"Erro ao gerar sinal de médias móveis: {e}")
+            return {"sinal": None, "tipo": "medias_moveis", "padrao": padrao}
 
     def executar(self, dados, symbol, timeframe):
         """

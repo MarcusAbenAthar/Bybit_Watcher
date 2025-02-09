@@ -1,28 +1,20 @@
 class Plugin:
-    """
-    Classe base para todos os plugins do bot.
-
-    Define os métodos básicos que todos os plugins devem implementar:
-    - inicializar(): Inicializa o plugin.
-    - executar(): Executa a lógica principal do plugin.
-    - finalizar(): Finaliza o plugin.
-    """
+    """Classe base para plugins."""
 
     def __init__(self):
-        """
-        Inicializa o plugin.
-        """
-        pass  # Implementação padrão (sem ação)
+        self.nome = "Plugin Base"
+        self.descricao = "Classe base para plugins"
+        self._config = None
+        self.gerente = None
 
-    def inicializar(self):
-        """
-        Inicializa o plugin.
+    def inicializar(self, config):
+        """Inicializa o plugin com configurações."""
+        self._config = config
+        return True
 
-        Este método é chamado pelo bot antes do loop principal.
-        Plugins podem usar este método para configurar recursos,
-        carregar dados, etc.
-        """
-        pass  # Implementação padrão (sem ação)
+    def obter_pares_usdt(self):
+        """Método base para obter pares USDT."""
+        raise NotImplementedError("Método obter_pares_usdt não implementado")
 
     def executar(self, dados, symbol, timeframe):
         """

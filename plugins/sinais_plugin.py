@@ -1,32 +1,36 @@
-from plugins.plugin import Plugin
-from plugins.gerenciador_banco import gerenciador_banco
 import logging
+from utils.singleton import singleton
+from plugins.plugin import Plugin
+from plugins.gerente_plugin import GerentePlugin
 
 logger = logging.getLogger(__name__)
 
 
+@singleton
 class SinaisPlugin(Plugin):
-    """
-    Plugin responsável por consolidar e gerenciar sinais de trading.
+    """Plugin para gerenciamento de sinais de trading."""
 
-    Este plugin recebe sinais de diferentes indicadores, consolida as informações
-    e gera um log estruturado que pode ser usado para notificações.
-
-    Attributes:
-        nome (str): Nome do plugin
-        config (dict): Configurações do plugin
-    """
-
-    def __init__(self, config=None):
-        """
-        Inicializa o plugin de sinais.
-
-        Args:
-            config (dict, optional): Configurações do plugin
-        """
+    def __init__(self):
+        """Inicializa o plugin de sinais."""
         super().__init__()
         self.nome = "Sinais"
-        self.config = config
+        self.descricao = "Plugin para gerenciamento de sinais de trading"
+        self._config = None
+        self.gerente = GerentePlugin()
+        self.cache_sinais = {}
+
+    def inicializar(self, config):
+        """
+        Inicializa o plugin com as configurações fornecidas.
+
+        Args:
+            config: Objeto de configuração
+        """
+        if not self._config:  # Só inicializa uma vez
+            super().inicializar(config)
+            self._config = config
+            self.cache_sinais = {}
+            logger.info(f"Plugin {self.nome} inicializado com sucesso")
 
     def executar(self, dados, symbol, timeframe):
         """
@@ -285,41 +289,29 @@ class SinaisPlugin(Plugin):
 
     def logar_sinal(self, symbol, timeframe, sinal):
         """
-        Gera um log estruturado do sinal e salva no banco.
+        Loga um sinal de trading.
 
         Args:
             symbol (str): Símbolo do par
-            timeframe (str): Timeframe da análise
-            sinal (dict): Sinal consolidado
+            timeframe (str): Timeframe do sinal
+            sinal (dict): Dados do sinal
 
         Returns:
-            dict: Sinal formatado
+            dict: Sinal formatado e registrado
         """
         try:
             if not all([symbol, timeframe, sinal]):
-                raise ValueError("Parâmetros inválidos")
+                raise ValueError("Dados inválidos para logging de sinal")
 
             sinal_formatado = {
                 "symbol": symbol,
                 "timeframe": timeframe,
-                "direcao": sinal if isinstance(sinal, str) else sinal.get("direcao"),
-                "forca": sinal.get("forca") if isinstance(sinal, dict) else None,
-                "confianca": (
-                    sinal.get("confianca") if isinstance(sinal, dict) else None
-                ),
+                "direcao": sinal.get("direcao"),
+                "stop_loss": sinal.get("stop_loss"),
+                "take_profit": sinal.get("take_profit"),
             }
 
-            # Log do sinal
-            logger.info(
-                "SINAL | "
-                f"Symbol: {sinal_formatado['symbol']} | "
-                f"Timeframe: {sinal_formatado['timeframe']} | "
-                f"Direção: {sinal_formatado['direcao']}"
-            )
-
-            # Salva no banco usando o gerenciador
-            gerenciador_banco.inserir_dados("sinais", sinal_formatado)
-
+            logger.info(f"Sinal registrado: {sinal_formatado}")
             return sinal_formatado
 
         except Exception as e:

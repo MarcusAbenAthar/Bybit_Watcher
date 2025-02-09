@@ -1,4 +1,5 @@
 import logging
+import logging.config
 import datetime
 
 # Obter a data de hoje no formato dia-mes-ano
@@ -27,3 +28,8 @@ LOGGING_CONFIG = {
     },
     "loggers": {"": {"handlers": ["console", "file"], "level": "INFO"}},
 }
+
+
+def setup_logging():
+    """Configura o logging usando a configuração definida."""
+    logging.config.dictConfig(LOGGING_CONFIG)

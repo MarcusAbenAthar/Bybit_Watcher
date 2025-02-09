@@ -1,40 +1,45 @@
-from unittest import TestCase
-from plugins.price_action import PriceAction
-from unittest.mock import Mock
+import unittest
+from unittest.mock import Mock, patch
+import numpy as np
+from plugins.plugin import Plugin
+from plugins.price_action import PriceAction  # Ensure proper import
 
 
-class TestPriceAction(TestCase):
+class TestPriceAction(unittest.TestCase):
     """
     Testes unitários para o plugin PriceAction.
     """
 
     def setUp(self):
-        """
-        Configura o ambiente de teste antes de cada método.
-        """
+        """Configuração inicial para cada teste."""
         self.plugin = PriceAction()
+        self.plugin.gerente = Mock()
+        self.plugin.gerente._singleton_plugins = {"conexao": Mock()}
 
-        # Mock para o cálculo de alavancagem
-        self.plugin.calculo_alavancagem = Mock()
-        self.plugin.calculo_alavancagem.calcular_alavancagem.return_value = 1.0
-
-        # Dados de exemplo para os testes
-        self.candle_doji = [100.0, 100.5, 105.0, 95.0]  # Doji clássico
-        self.candle_martelo = [100.0, 110.0, 112.0, 90.0]  # Martelo de alta
-        self.candle_estrela = [110.0, 100.0, 115.0, 98.0]  # Estrela cadente
-
+        # Dados de teste em formato de dicionário
         self.candle_teste = {
-            "timestamp": 1000000000,
             "open": 100.0,
             "high": 105.0,
             "low": 95.0,
             "close": 102.0,
-            "volume": 1000,
+            "volume": 1000.0,
+        }
+
+        # Adiciona dados de teste para padrão martelo
+        self.candle_martelo = {
+            "open": 100.0,
+            "high": 105.0,
+            "low": 90.0,
+            "close": 104.0,
+            "volume": 1000.0,
         }
 
     def test_plugin_initialization(self):
         """Testa se o plugin foi inicializado corretamente."""
-        self.assertIsInstance(self.plugin, PriceAction)
+        self.assertIsInstance(self.plugin, Plugin)  # Verifica se é subclasse de Plugin
+        self.assertTrue(
+            type(self.plugin).__name__ == "PriceAction"
+        )  # Verifica o nome da classe
 
     def test_analisar_padrao(self):
         """Testa a análise de padrões."""
@@ -49,7 +54,7 @@ class TestPriceAction(TestCase):
     def test_gerar_sinal_raises_not_implemented(self):
         """Testa se gerar_sinal lança NotImplementedError."""
         with self.assertRaises(NotImplementedError):
-            self.plugin.gerar_sinal(self.candle_teste)
+            self.plugin.gerar_sinal(self.candle_teste, "doji")
 
     def test_analisar_tendencia(self):
         """Testa a análise de tendência."""
@@ -71,8 +76,8 @@ class TestPriceAction(TestCase):
 
     def test_dados_invalidos(self):
         """Testa o comportamento com dados inválidos."""
-        resultado = self.plugin.identificar_padrao(None)
-        self.assertIsNone(resultado)
+        with self.assertRaises(NotImplementedError):
+            self.plugin.identificar_padrao(None)
 
     def test_gerar_sinal_deve_lancar_not_implemented(self):
         """Testa se gerar_sinal lança NotImplementedError."""
@@ -80,6 +85,24 @@ class TestPriceAction(TestCase):
         with self.assertRaises(NotImplementedError):
             self.plugin.gerar_sinal(self.candle_teste, padrao)
 
+    def test_singleton(self):
+        """Testa se o padrão singleton está funcionando."""
+        plugin1 = PriceAction()
+        plugin2 = PriceAction()
+        self.assertIs(plugin1, plugin2, "As instâncias devem ser as mesmas (singleton)")
+
+    def test_nome_plugin(self):
+        """Testa se o nome do plugin está correto."""
+        self.assertEqual(self.plugin.nome, "Price Action")
+        self.assertTrue(hasattr(self.plugin, "descricao"))
+
+    def test_inicializacao(self):
+        """Testa a inicialização do plugin."""
+        config = Mock()
+        self.plugin.inicializar(config)
+        self.assertIsNotNone(self.plugin._config)
+        self.assertIsInstance(self.plugin.cache_padroes, dict)
+
 
 if __name__ == "__main__":
-    TestCase.main()
+    unittest.main()

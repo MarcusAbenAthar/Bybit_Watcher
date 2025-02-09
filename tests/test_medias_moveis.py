@@ -1,15 +1,51 @@
-from unittest import TestCase
-from unittest.mock import patch, Mock
+import unittest
+from unittest.mock import Mock, patch
 import numpy as np
 from plugins.medias_moveis import MediasMoveis
 
 
-class TestMediasMoveis(TestCase):
+class TestMediasMoveis(unittest.TestCase):
+
     def setUp(self):
+        """Configuração inicial para cada teste."""
         self.plugin = MediasMoveis()
-        self.plugin.banco_dados = Mock()
-        # Usando apenas preços de fechamento para médias móveis
-        self.dados_teste = np.array([100.0, 102.0, 104.0, 103.0, 105.0])
+        self.plugin.gerente = Mock()
+        self.plugin.gerente._singleton_plugins = {"conexao": Mock()}
+
+        # Dados de teste
+        self.dados_teste = np.array(
+            [
+                [
+                    0,
+                    100.0,
+                    105.0,
+                    95.0,
+                    102.0,
+                    1000.0,
+                ],  # timestamp, open, high, low, close, volume
+                [0, 102.0, 107.0, 97.0, 104.0, 1100.0],
+                [0, 104.0, 109.0, 99.0, 106.0, 1200.0],
+            ],
+            dtype=np.float64,
+        )
+
+    def test_singleton(self):
+        """Testa se o padrão singleton está funcionando."""
+        plugin1 = MediasMoveis()
+        plugin2 = MediasMoveis()
+        self.assertIs(plugin1, plugin2, "As instâncias devem ser as mesmas (singleton)")
+
+    def test_nome_plugin(self):
+        """Testa se o nome do plugin está correto."""
+        self.assertEqual(self.plugin.nome, "Médias Móveis")
+        self.assertTrue(hasattr(self.plugin, "descricao"))
+
+    def test_inicializacao(self):
+        """Testa a inicialização do plugin."""
+        config = Mock()
+        self.plugin.inicializar(config)
+        self.assertIsNotNone(self.plugin._config)
+        self.assertIsInstance(self.plugin.cache_medias, dict)
 
     @patch("talib.SMA")
     def test_calcular_media_movel_simples(self, mock_sma):
@@ -56,4 +92,6 @@ class TestMediasMoveis(TestCase):
         )
         self.assertTrue(isinstance(resultado, np.ndarray))
 
-    # ... (adicionar testes para a função gerar_sinal)...
+
+if __name__ == "__main__":
+    unittest.main()

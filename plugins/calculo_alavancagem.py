@@ -1,36 +1,45 @@
 import logging
-
-logger = logging.getLogger(
-    __name__
-)  # Certifique-se de ter o logger configurado corretamente
-import ccxt
-from plugins.plugin import Plugin
+import numpy as np
+from plugins.validador_dados import ValidadorDados
 import talib
+from utils.singleton import singleton
+from plugins.plugin import Plugin
+from plugins.gerente_plugin import GerentePlugin
+
+logger = logging.getLogger(__name__)
 
 
+@singleton
 class CalculoAlavancagem(Plugin):
-    """
-    Plugin para calcular a alavancagem ideal para cada operação, considerando a volatilidade e as Regras de Ouro.
-    """
+    """Plugin para cálculos de alavancagem."""
 
-    def __init__(self):  # Voltando ao construtor original sem parâmetros
+    def __init__(self):
         """Inicializa o plugin CalculoAlavancagem."""
         super().__init__()
-        self.nome = "Cálculo Alavancagem"
-        self.descricao = "Calcula alavancagem baseada em risco"
-        self.gerente = None  # Será setado pelo gerente de plugins
-        self.banco_dados = None
-        self.cache_volatilidade = {}  # Inicializa o cache de volatilidade
+        self.nome = "Cálculo de Alavancagem"
+        self.descricao = "Plugin para cálculos de alavancagem"
+        self._config = None
+        self.cache_volatilidade = {}  # Adicionado cache
+        self.gerente = GerentePlugin()
+
+    def inicializar(self, config):
+        """Inicializa as dependências do plugin."""
+        if not self._config:  # Só inicializa uma vez
+            super().inicializar(config)
+            self._config = config
+            self._validador = ValidadorDados()
+            logger.info(f"Plugin {self.nome} inicializado com sucesso")
 
     def set_gerente(self, gerente):
         self.gerente = gerente
 
     def obter_exchange(self):
-        """Obtém a exchange através do gerente."""
+        """Obtém instância da exchange."""
         try:
-            if not self.gerente:
-                raise ValueError("Gerente não inicializado")
-            return self.gerente.obter_conexao()
+            conexao = self.gerente._singleton_plugins.get("conexao")
+            if conexao:
+                return conexao.exchange
+            return None
         except Exception as e:
             logger.error(f"Erro ao obter exchange: {e}")
             return None
@@ -46,67 +55,61 @@ class CalculoAlavancagem(Plugin):
 
     def calcular_alavancagem(self, dados, symbol, timeframe, config):
         """
-        Calcula a alavancagem ideal para a operação, considerando a volatilidade e as Regras de Ouro.
+        Calcula a alavancagem baseada na volatilidade.
 
         Args:
-            dados (list): Lista de candles.
-            symbol (str): Par de moedas.
-            timeframe (str): Timeframe dos candles.
-            config (ConfigParser): Objeto com as configurações do bot.
+            dados: numpy array com dados OHLCV
+            symbol: str com o par de trading
+            timeframe: str com o timeframe
+            config: objeto de configuração
 
         Returns:
-            int: Alavancagem ideal para a operação.
+            int: alavancagem calculada
         """
-        # Verifica se a volatilidade já foi calculada para o symbol e timeframe
-        chave_cache = f"{symbol}-{timeframe}"
-        if chave_cache not in self.cache_volatilidade:
-            # Obter o histórico de preços do ativo
-            historico = self.obter_exchange().fetch_ohlcv(symbol, timeframe, limit=500)
+        try:
+            chave_cache = f"{symbol}_{timeframe}"
+            if chave_cache not in self.cache_volatilidade:
+                # Calcula ATR
+                atr = self.calcular_atr(dados)
+                if atr is None:
+                    return 1  # Alavancagem mínima em caso de erro
 
-            # Calcular a volatilidade do ativo (exemplo com ATR)
-            self.cache_volatilidade[chave_cache] = self.calcular_atr(historico)
+                # Usa o último valor do ATR
+                atr_atual = atr[-1]
 
-        # Obter a volatilidade do cache
-        volatilidade = self.cache_volatilidade[chave_cache]
+                # Calcula volatilidade como percentual do preço
+                preco_atual = dados[-1][4]  # Último preço de fechamento
+                volatilidade = atr_atual / preco_atual
 
-        # Definir a alavancagem máxima (Regra de Ouro: Seguro)
-        alavancagem_maxima = config.getint(
-            "Geral", "NIVEL_ALAVANCAGEM"
-        )  # Obtém do config.ini
+                # Cache o resultado
+                self.cache_volatilidade[chave_cache] = volatilidade
+            else:
+                volatilidade = self.cache_volatilidade[chave_cache]
 
-        # Calcular a alavancagem ideal com base na volatilidade (Regra de Ouro: Criterioso e Dinamismo)
-        # Ajuste o fator 10 conforme necessário para sua estratégia e perfil de risco
-        alavancagem = int(alavancagem_maxima / (volatilidade * 10))
+            # Obtém alavancagem máxima da config
+            alavancagem_maxima = config.getint(
+                "trading", "alavancagem_maxima", fallback=20
+            )
 
-        # Garantir que a alavancagem seja pelo menos 1 (Regra de Ouro: Seguro)
-        alavancagem = max(1, alavancagem)
+            # Calcula alavancagem inversa à volatilidade
+            alavancagem = int(alavancagem_maxima / (float(volatilidade) * 10))
 
-        # Log da alavancagem calculada (Regra de Ouro: Clareza)
-        logger.debug(
-            f"Alavancagem calculada para {symbol} - {timeframe}: {alavancagem}"
-        )
+            # Limita entre 1 e alavancagem_maxima
+            return max(1, min(alavancagem, alavancagem_maxima))
 
-        return alavancagem
+        except Exception as e:
+            logger.error(f"Erro no cálculo de alavancagem: {e}")
+            return 1  # Retorna alavancagem mínima em caso de erro
 
-    def calcular_atr(self, historico):
-        """
-        Calcula o Average True Range (ATR) do histórico de candles usando TA-Lib.
+    def calcular_atr(self, dados):
+        """Calcula o ATR (Average True Range)."""
+        try:
+            dados_np = np.array(dados, dtype=np.float64)  # Força tipo double
+            high = dados_np[:, 2]
+            low = dados_np[:, 3]
+            close = dados_np[:, 4]
 
-        Args:
-            historico (list): Lista de candles.
-
-        Returns:
-            float: Valor do ATR.
-        """
-        # Extrai os valores de high, low e close do histórico
-        high = [candle for candle in historico]
-        low = [candle for candle in historico]
-        close = [candle for candle in historico]
-
-        # Calcula o ATR usando a função ATR do TA-Lib (Regra de Ouro: Eficiente)
-        atr = talib.ATR(
-            high, low, close, timeperiod=14
-        )  # timeperiod é o período do ATR (padrão: 14)
-
-        # Retorna o último valor do ATR
-        return atr[-1]
+            return talib.ATR(high, low, close, timeperiod=14)
+        except Exception as e:
+            logger.error(f"Erro ao calcular ATR: {e}")
+            return None

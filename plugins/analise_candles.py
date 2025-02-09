@@ -1,88 +1,58 @@
 import logging
+import numpy as np
+from plugins import gerenciador_banco
+from plugins.validador_dados import ValidadorDados
+import talib
+from utils.padroes_candles import PADROES_CANDLES
+from utils.singleton import singleton
+from plugins.plugin import Plugin
+from plugins.gerente_plugin import GerentePlugin, obter_calculo_alavancagem
 
 logger = logging.getLogger(__name__)
 
-from plugins.plugin import Plugin
-from plugins.gerente_plugin import obter_calculo_alavancagem
-import talib
-from utils.padroes_candles import PADROES_CANDLES
-import numpy as np
-from plugins.gerenciador_banco import gerenciador_banco
-from plugins.validador_dados import ValidadorDados
 
-
+@singleton
 class AnaliseCandles(Plugin):
-    """
-    Plugin para analisar os candles e identificar padrões.
-    """
+    """Plugin para analisar os candles e identificar padrões."""
 
     def __init__(self):
+        """Inicializa o plugin AnaliseCandles."""
         super().__init__()
         self.nome = "Análise de Candles"
         self.descricao = "Plugin para análise de padrões de candles"
-        self.calculo_alavancagem = obter_calculo_alavancagem()
-        self.validador = ValidadorDados()
+        self._config = None
+        self.cache_padroes = {}
+        self.gerente = GerentePlugin()
 
-    def identificar_padrao(self, candle):
-        """
-        Identifica o padrão do candle usando TA-Lib.
+    def inicializar(self, config):
+        """Inicializa as dependências do plugin."""
+        if not self._config:  # Só inicializa uma vez
+            super().inicializar(config)
+            self._config = config
+            self._calculo_alavancagem = obter_calculo_alavancagem()
+            self._validador = ValidadorDados()
+            logger.info(f"Plugin {self.nome} inicializado com sucesso")
 
-        Args:
-            candle (list): Lista com dados OHLC do candle
-                [timestamp, open, high, low, close, volume]
-
-        Returns:
-            str: Nome do padrão identificado ou None
-        """
-        if not isinstance(candle, (list, tuple)) or len(candle) < 6:
-            logger.warning(f"Dados de candle inválidos: {candle}")
-            return None
-
+    def identificar_padrao(self, dados):
+        """Identifica padrões de candlestick nos dados."""
         try:
-            # Debug log para verificar a estrutura dos dados
-            logger.debug(f"Dados do candle recebidos: {candle}")
-
-            # Extrair valores OHLC do candle, garantindo que são números
-            try:
-                # Assegurar que estamos pegando os índices corretos
-                open_price = float(candle[2])  # Ajustado do índice 1 para 2
-                high_price = float(candle[3])  # Ajustado do índice 2 para 3
-                low_price = float(candle[4])  # Ajustado do índice 3 para 4
-                close_price = float(candle[5])  # Ajustado do índice 4 para 5
-            except (IndexError, ValueError) as e:
-                logger.error(f"Erro ao converter valores OHLC: {e}")
+            if dados is None or len(dados) < 3:
+                logger.warning("Dados de candle inválidos: None")
                 return None
 
-            # Criar arrays numpy para os dados OHLC
-            opens = np.array([open_price], dtype=np.float64)
-            highs = np.array([high_price], dtype=np.float64)
-            lows = np.array([low_price], dtype=np.float64)
-            closes = np.array([close_price], dtype=np.float64)
+            dados_np = np.array(dados, dtype=np.float64)
+            open_prices = dados_np[:, 1]
+            high_prices = dados_np[:, 2]
+            low_prices = dados_np[:, 3]
+            close_prices = dados_np[:, 4]
 
-            # Itera pelas funções do grupo "Pattern Recognition"
-            for nome_funcao in talib.get_function_groups()["Pattern Recognition"]:
-                try:
-                    funcao_talib = getattr(talib, nome_funcao)
-                    resultado_padrao = funcao_talib(opens, highs, lows, closes)
+            # Chama funções do TALib para identificar padrões
+            resultado = talib.CDL2CROWS(
+                open_prices, high_prices, low_prices, close_prices
+            )
 
-                    if resultado_padrao[0] != 0:
-                        nome_padrao = (
-                            nome_funcao[3:].lower()
-                            if nome_funcao.startswith("CDL")
-                            else nome_funcao.lower()
-                        )
-                        logger.debug(f"Padrão identificado: {nome_padrao}")
-                        return nome_padrao
+            return resultado[-1] if resultado is not None else None
 
-                except Exception as e:
-                    logger.error(f"Erro ao processar padrão {nome_funcao}: {e}")
-                    continue
-
-            return None
-
-        except (ValueError, IndexError) as e:
-            logger.error(f"Erro ao converter dados do candle: {e}")
-            return None
         except Exception as e:
             logger.error(f"Erro ao identificar padrão: {e}")
             return None
@@ -112,43 +82,35 @@ class AnaliseCandles(Plugin):
             logger.error(f"Erro ao classificar candle: {e}")
             return "indecisão"
 
-    def gerar_sinal(self, candle, padrao, classificacao, symbol, timeframe, config):
-        """
-        Gera sinal baseado no padrão e classificação do candle.
-        """
+    def gerar_sinal(self, dados, symbol, timeframe):
+        """Gera um sinal de trading baseado na análise dos candles."""
         try:
-            if not padrao or not classificacao:
-                return self._sinal_padrao()
+            padrao = self.identificar_padrao(dados)
+            if padrao is None:
+                return {
+                    "sinal": None,
+                    "padrao": None,
+                    "stop_loss": None,
+                    "take_profit": None,
+                    "forca": 0.0,
+                    "confianca": 0.0,
+                }
 
-            # Busca o padrão no PADROES_CANDLES
-            chave_padrao = f"{padrao}_{classificacao}"
-            if chave_padrao not in PADROES_CANDLES:
-                return self._sinal_padrao()
-
-            padrao_info = PADROES_CANDLES[chave_padrao]
-
-            # Calcula stop loss e take profit
-            try:
-                alavancagem = self.calculo_alavancagem.calcular_alavancagem(
-                    candle, symbol, timeframe, config
-                )
-                stop_loss = padrao_info["stop_loss"](candle, alavancagem)
-                take_profit = padrao_info["take_profit"](candle, alavancagem)
-            except Exception as e:
-                logger.error(f"Erro ao calcular níveis: {e}")
-                return self._sinal_padrao()
+            forca = self.calcular_forca_padrao(dados)
+            confianca = self.calcular_confianca(dados)
 
             return {
-                "sinal": padrao_info["sinal"],
-                "stop_loss": stop_loss,
-                "take_profit": take_profit,
-                "forca": self.calcular_forca_padrao(candle, padrao),
-                "confianca": self.calcular_confianca(candle, padrao),
+                "sinal": "COMPRA" if padrao > 0 else "VENDA" if padrao < 0 else None,
+                "padrao": "CDL2CROWS",
+                "stop_loss": self._calcular_stop_loss(dados, padrao),
+                "take_profit": self._calcular_take_profit(dados, padrao),
+                "forca": forca,
+                "confianca": confianca,
             }
 
         except Exception as e:
             logger.error(f"Erro ao gerar sinal: {e}")
-            return self._sinal_padrao()
+            return None
 
     def _sinal_padrao(self):
         """Retorna um sinal padrão vazio."""
@@ -200,54 +162,59 @@ class AnaliseCandles(Plugin):
 
         return tamanho_relativo, multiplicador
 
-    def calcular_forca_padrao(self, candle, padrao):
-        """
-        Calcula a força do padrão identificado.
-        """
+    def calcular_forca_padrao(self, dados):
+        """Calcula a força do padrão baseado em volume e movimento de preço."""
         try:
-            tamanho_relativo, multiplicador = (
-                self._calcular_tamanho_relativo_e_multiplicador(candle, padrao)
-            )
-            forca = min(100, tamanho_relativo * multiplicador)
-            logger.debug(f"Força do padrão {padrao}: {forca:.2f}")
-            return forca
+            if dados is None or len(dados) < 3:
+                return 0.0
+
+            dados_np = np.array(dados, dtype=np.float64)
+            variacao_preco = abs(dados_np[-1, 4] - dados_np[-1, 1]) / dados_np[-1, 1]
+            volume_relativo = dados_np[-1, 5] / np.mean(dados_np[:, 5])
+
+            forca = float(variacao_preco * volume_relativo)
+            return min(max(forca, 0.0), 1.0)  # Limita entre 0 e 1
 
         except Exception as e:
             logger.error(f"Erro ao calcular força do padrão: {e}")
-            return 0
+            return 0.0
 
-    def calcular_confianca(self, candle, padrao):
-        """
-        Calcula a confiança do padrão identificado.
-        """
+    def calcular_confianca(self, dados):
+        """Calcula a confiança do padrão identificado."""
         try:
-            tamanho_relativo, multiplicador = (
-                self._calcular_tamanho_relativo_e_multiplicador(candle, padrao)
-            )
-            confianca = min(100, tamanho_relativo * multiplicador)
-            logger.debug(f"Confiança do padrão {padrao}: {confianca:.2f}")
-            return confianca
+            if dados is None or len(dados) < 3:
+                return 0.0
+
+            dados_np = np.array(dados, dtype=np.float64)
+            volatilidade = np.std(
+                dados_np[:, 4]
+            )  # Desvio padrão dos preços de fechamento
+            volume_medio = np.mean(dados_np[:, 5])
+
+            # Normaliza os valores entre 0 e 1
+            confianca = float((volatilidade * volume_medio) / (100 * volume_medio))
+            return min(max(confianca, 0.0), 1.0)  # Limita entre 0 e 1
 
         except Exception as e:
             logger.error(f"Erro ao calcular confiança do padrão: {e}")
-            return 0
+            return 0.0
 
     def analisar_candles(self, dados, symbol, timeframe):
         """Analisa os candles recebidos."""
         try:
             # Valida parâmetros individualmente
-            if not self.validador.validar_symbol(symbol):
+            if not self._validador.validar_symbol(symbol):
                 return None
 
-            if not self.validador.validar_timeframe(timeframe):
+            if not self._validador.validar_timeframe(timeframe):
                 return None
 
-            if not self.validador.validar_estrutura(dados):
+            if not self._validador.validar_estrutura(dados):
                 return None
 
             # Processa apenas candles válidos
             candles_validos = [
-                candle for candle in dados if self.validador.validar_candle(candle)
+                candle for candle in dados if self._validador.validar_candle(candle)
             ]
 
             if not candles_validos:
@@ -302,7 +269,12 @@ class AnaliseCandles(Plugin):
             if padrao_candle:
                 classificacao = self.classificar_candle(candle)
                 sinal = self.gerar_sinal(
-                    candle, padrao_candle, classificacao, symbol, timeframe, self.config
+                    candle,
+                    padrao_candle,
+                    classificacao,
+                    symbol,
+                    timeframe,
+                    self._config,
                 )
                 if sinal:
                     sinais.append(sinal)
@@ -325,3 +297,27 @@ class AnaliseCandles(Plugin):
                 gerenciador_banco.inserir_dados("analise_candles", dados)
         except Exception as e:
             logger.error(f"Erro ao salvar resultados: {e}")
+
+    def _calcular_stop_loss(self, dados, padrao):
+        """Calcula o nível de stop loss baseado no padrão."""
+        try:
+            dados_np = np.array(dados, dtype=np.float64)
+            return (
+                float(np.min(dados_np[-3:, 3]))
+                if padrao > 0
+                else float(np.max(dados_np[-3:, 2]))
+            )
+        except Exception:
+            return None
+
+    def _calcular_take_profit(self, dados, padrao):
+        """Calcula o nível de take profit baseado no padrão."""
+        try:
+            dados_np = np.array(dados, dtype=np.float64)
+            return (
+                float(np.max(dados_np[-3:, 2]))
+                if padrao > 0
+                else float(np.min(dados_np[-3:, 3]))
+            )
+        except Exception:
+            return None

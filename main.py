@@ -1,137 +1,147 @@
-# main.py
-
 """
-Módulo principal do bot de trading.
+Bot de análise de mercado cripto seguindo as Regras de Ouro.
+
+Author: Marcus Aben-Athar
+Date: 2025-02-08
+Repository: https://github.com/MarcusAbenAthar/Bybit_Watcher
+
+Regras de Ouro implementadas:
+1. Autonomo - Análise e decisões automáticas
+2. Criterioso - Validações rigorosas
+3. Seguro - Tratamento de erros e logs
+4. Certeiro - Alta precisão nas análises
+5. Eficiente - Otimizado e rápido
+6. Clareza - Código limpo e legível
+7. Modular - Arquitetura em plugins
+8. Plugins - Sistema extensível
+9. Testável - 100% cobertura
+10. Documentado - Docstrings completas
 """
 
-import os
-import time
-import sys
-import signal
+# Imports stdlib
 import logging
-import logging.config
-from configparser import ConfigParser
-from dotenv import load_dotenv
-from logging_config import LOGGING_CONFIG
-from sinais_logging import SINAIS_LOGGING_CONFIG
-from plugins.gerenciador_banco import gerenciador_banco
-from plugins.validador_dados import ValidadorDados
-from plugins.gerente_plugin import (
-    gerente_plugin,
-    obter_conexao,
-    obter_banco_dados,
-    inicializar_banco_dados,
-)
-from plugins.gerenciador_bot import GerenciadorBot
+import signal
+import sys
+from typing import Optional
 
-# Configuração do logger
-logging.config.dictConfig(LOGGING_CONFIG)
-logging.config.dictConfig(SINAIS_LOGGING_CONFIG)
+# Imports terceiros
+from dotenv import load_dotenv
+import os
+
+# Imports locais
+from plugins.gerente_plugin import GerentePlugin
+
+# Configuração inicial
+load_dotenv()
 logger = logging.getLogger(__name__)
 
-# Configurações iniciais
-logs_dir = "logs"
-if not os.path.exists(logs_dir):
-    os.makedirs(logs_dir)
+# Configuração de logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
+)
 
-# Carrega variáveis de ambiente
-load_dotenv()
+# Plugins essenciais
+PLUGINS_ESSENCIAIS = ["conexao", "banco_dados", "gerenciador_bot"]
 
-
-def load_config_from_file(filename):
-    """Carrega configurações do arquivo."""
-    try:
-        config = ConfigParser()
-        config.read(filename)
-        return config
-    except Exception as e:
-        logger.error(f"Erro ao carregar configurações: {e}")
-        raise
-
-
-def signal_handler(signum, frame):
-    """Handler para encerramento gracioso."""
-    try:
-        logger.info("Recebido sinal de interrupção...")
-        gerenciador_banco.fechar_conexao()
-        sys.exit(0)
-    except Exception as e:
-        logger.error(f"Erro ao encerrar bot: {e}")
-        sys.exit(1)
+# Plugins adicionais
+PLUGINS_ADICIONAIS = [
+    "analise_candles",
+    "calculo_alavancagem",
+    "calculo_risco",
+    "execucao_ordens",
+    "gerenciador_banco",
+    "indicadores.indicadores_osciladores",
+    "indicadores.indicadores_tendencia",
+    "indicadores.indicadores_volatilidade",
+    "indicadores.indicadores_volume",
+    "indicadores.outros_indicadores",
+    "medias_moveis",
+    "price_action",
+    "sinais_plugin",
+    "validador_dados",
+]
 
 
-def processar_par(symbol, timeframe, validador, exchange):
+def signal_handler(signum: int, frame: Optional[object]) -> None:
+    """Handler para sinais de interrupção."""
+    logger.info("Recebido sinal de interrupção...")
+    sys.exit(0)
+
+
+def carregar_config() -> dict:
     """
-    Processa um par específico.
-
-    Args:
-        symbol (str): Símbolo do par
-        timeframe (str): Timeframe para análise
-        validador (ValidadorDados): Instância do validador
-        exchange (Exchange): Instância da exchange
+    Carrega a configuração do bot de forma segura.
 
     Returns:
-        list: Lista de candles válidos ou None
+        dict: Configuração carregada
+    """
+    config = {"timeframes": ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]}
+    return config
+
+
+def inicializar_bot() -> GerentePlugin:
+    """
+    Inicializa o bot de forma segura.
+
+    Returns:
+        GerentePlugin: Gerenciador inicializado
+
+    Raises:
+        RuntimeError: Se falhar a inicialização
     """
     try:
-        logger.debug(f"Processando {symbol} - {timeframe}")
+        # Carrega config
+        config = carregar_config()
 
-        dados = exchange.fetch_ohlcv(symbol, timeframe)
+        # Inicializa gerente
+        gerente = GerentePlugin()
+        gerente.inicializar(config)
 
-        if not validador.validar_dados_completos(dados, symbol, timeframe):
-            return None
+        # Carrega plugins essenciais
+        if not gerente.carregar_plugins("plugins", config):
+            raise RuntimeError("Falha ao carregar plugins essenciais")
 
-        logger.debug(f"Dados válidos obtidos para {symbol}")
-        return dados
+        # Validação final
+        if not gerente.verificar_plugins_essenciais():
+            raise RuntimeError("Plugins essenciais não inicializados")
+
+        return gerente
 
     except Exception as e:
-        logger.error(f"Erro ao processar {symbol}-{timeframe}: {e}")
-        return None
+        logger.error(f"Erro na inicialização: {e}")
+        raise RuntimeError(f"Falha ao inicializar bot: {e}")
 
 
-def main():
+def main() -> None:
     """Função principal do bot."""
     try:
+        # Setup inicial
         logger.info("Iniciando bot...")
+        signal.signal(signal.SIGINT, signal_handler)
 
-        # Inicializações
-        config = load_config_from_file("config.ini")
-        gerenciador = GerenciadorBot(config)
-
-        # Carrega plugins e conexões
-        plugins = gerente_plugin.carregar_plugins("plugins", config)
-        conexao_bybit = obter_conexao()
-        conexao_bybit.inicializar(config)
-
+        # Inicialização
+        gerente = inicializar_bot()
         logger.info("Bot iniciado com sucesso")
 
         # Loop principal
         while True:
             try:
-                mercados = conexao_bybit.carregar_mercados()
-                for symbol, dados in mercados.items():
-                    if gerenciador.validar_mercado(dados):
-                        for timeframe in gerenciador.timeframes:
-                            dados = gerenciador.processar_par(
-                                symbol, timeframe, conexao_bybit.exchange
-                            )
-                            if dados:
-                                gerenciador.processar_plugins(
-                                    plugins, dados, symbol, timeframe
-                                )
+                if not gerente.executar_ciclo():
+                    logger.warning("Falha no ciclo de execução")
+                    continue
 
-                time.sleep(30)
-
-            except KeyboardInterrupt:
-                logger.info("Interrupção do teclado detectada")
-                gerenciador_banco.fechar_conexao()
-                sys.exit(0)
+            except Exception as e:
+                logger.error(f"Erro no ciclo: {e}")
+                continue
 
     except Exception as e:
-        logger.exception(f"Erro fatal no bot: {e}")
+        logger.error(f"Erro fatal: {e}")
         sys.exit(1)
+
+    finally:
+        if "gerente" in locals():
+            gerente.interromper_execucao()
 
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGINT, signal_handler)
     main()

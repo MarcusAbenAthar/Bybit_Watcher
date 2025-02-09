@@ -6,23 +6,42 @@ Responsável por coordenar todas as operações do bot.
 import logging
 import time
 import ccxt
+from utils.singleton import singleton
 from plugins.plugin import Plugin
 from plugins.validador_dados import ValidadorDados
 
 logger = logging.getLogger(__name__)
 
 
+@singleton
 class GerenciadorBot(Plugin):
-    """Gerenciador principal do bot."""
+    """Plugin responsável pelo gerenciamento geral do bot."""
 
-    def __init__(self, config=None):
+    def __init__(self):
+        """Inicializa o GerenciadorBot."""
         super().__init__()
-        self.nome = "Gerenciador Bot"
-        self.descricao = "Gerencia operações principais do bot"
-        self.config = config
+        self.nome = "Gerenciador do Bot"
+        self.descricao = "Plugin para gerenciamento central do bot"
+        self._config = None
+        self._status = "parado"
+        self._plugins_ativos = {}
         self.validador = ValidadorDados()
         self.pares_processados = set()
         self.timeframes = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+
+    def inicializar(self, config):
+        """
+        Inicializa o plugin com as configurações fornecidas.
+
+        Args:
+            config: Objeto de configuração
+        """
+        if not self._config:  # Só inicializa uma vez
+            super().inicializar(config)
+            self._config = config
+            self._status = "parado"
+            self._plugins_ativos = {}
+            logger.info(f"Plugin {self.nome} inicializado com sucesso")
 
     def validar_mercado(self, dados):
         """

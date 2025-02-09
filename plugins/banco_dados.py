@@ -2,32 +2,39 @@ import psycopg2
 import logging
 from plugins.plugin import Plugin
 from typing import List, Tuple
+from utils.singleton import singleton
 
 
 logger = logging.getLogger(__name__)
 
 
+@singleton
 class BancoDados(Plugin):
     """
-    Plugin para gerenciar o banco de dados PostgreSQL.
+    Plugin para gerenciamento do banco de dados.
 
-    Este plugin é responsável por estabelecer a conexão com o banco de dados,
-    criar as tabelas necessárias e executar operações de busca e inserção de dados.
+    Este plugin é responsável por:
+    - Estabelecer conexão com PostgreSQL
+    - Criar e gerenciar tabelas
+    - Executar operações CRUD
+
+    Attributes:
+        nome (str): Nome do plugin
+        config (dict): Configurações do banco
+        conexao: Conexão com PostgreSQL
     """
 
-    def __init__(self, config):
-        """Inicializa o plugin BancoDados."""
+    def __init__(self):
         super().__init__()
         self.nome = "Banco de Dados"
-        self.descricao = "Gerencia conexões e operações com banco de dados"
-        self.conexao = None
-        self.config = config
-        self.conectar(
-            config.get("database", "database"),
-            config.get("database", "user"),
-            config.get("database", "password"),
-            config.get("database", "host"),
-        )
+        self.descricao = "Plugin para gerenciamento do banco de dados"
+        self._conn = None
+
+    def inicializar(self, config):
+        """Inicializa o banco de dados."""
+        super().inicializar(config)
+        self.conectar()
+        return True
 
     def conectar(self, db_name, db_user, db_password, db_host="localhost"):
         """
@@ -62,11 +69,15 @@ class BancoDados(Plugin):
 
     def inicializar(self, config):
         """
-        Inicializa o banco de dados, criando-o se não existir e estabelecendo a conexão.
+        Inicializa a conexão com o banco.
 
         Args:
-            config (ConfigParser): Objeto com as configurações do bot.
+            config (dict): Configurações de conexão
+
+        Raises:
+            Exception: Se falhar ao conectar
         """
+        super().inicializar(config)
         try:
             # Obtém as configurações do objeto config
             db_host = config.get("database", "host")
@@ -396,14 +407,51 @@ class BancoDados(Plugin):
             logger.error(f"Erro ao buscar dados na tabela {tabela}: {error}")
             return  # Retorna uma lista vazia em caso de erro
 
+    def validar_dados_klines(self, dados: List[Tuple]) -> bool:
+        """
+        Valida o formato dos dados de klines antes da inserção.
+
+        Args:
+            dados: Lista de tuplas com dados de klines
+
+        Returns:
+            bool: True se os dados são válidos
+
+        Raises:
+            ValueError: Se os dados estiverem inválidos
+        """
+        if not dados:
+            raise ValueError("Lista de dados vazia")
+
+        for dado in dados:
+            if len(dado) != 8:
+                raise ValueError(f"Formato inválido: {dado}")
+
+            if not all(isinstance(x, (str, int, float)) for x in dado):
+                raise ValueError(f"Tipos inválidos: {dado}")
+
+        return True
+
     def inserir_dados_klines(self, dados: List[Tuple]) -> None:
         """
         Insere dados de klines no banco de dados.
 
         Args:
             dados: Lista de tuplas contendo (symbol, timeframe, timestamp, open, high, low, close, volume)
+
+        Raises:
+            ValueError: Se os dados não estiverem no formato esperado
+            psycopg2.Error: Se houver erro no banco de dados
+
+        Examples:
+            >>> db.inserir_dados_klines([
+            ...     ("BTC/USDT:USDT", "1h", 1643673600, 42000.0, 42100.0, 41900.0, 42050.0, 100.0)
+            ... ])
         """
         try:
+            # Normaliza os symbols nos dados
+            dados_normalizados = [(normalizar_symbol(d[0]), *d[1:]) for d in dados]
+
             query = """
                 INSERT INTO klines (symbol, timeframe, timestamp, open, high, low, close, volume)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -416,15 +464,14 @@ class BancoDados(Plugin):
                     volume = EXCLUDED.volume;
             """
 
-            # Verifica se dados é uma lista de tuplas
             if not isinstance(dados, list):
                 raise ValueError("Dados deve ser uma lista de tuplas")
 
-            # Executa a query para cada linha de dados
             with self.conn.cursor() as cursor:
-                cursor.executemany(query, dados)
+                cursor.executemany(query, dados_normalizados)
 
             self.conn.commit()
+            logger.info(f"Inseridos {len(dados)} registros de klines com sucesso")
 
         except Exception as erro:
             logger.error(f"Erro ao inserir dados na tabela klines: {str(erro)}")
@@ -432,8 +479,20 @@ class BancoDados(Plugin):
             raise
 
     def inserir_dados_analise_candles(self, dados):
-        """Insere dados na tabela analise_candles."""
+        """
+        Insere dados na tabela analise_candles.
+
+        Args:
+            dados (dict): Dicionário com os dados da análise
+                {
+                    "symbol": str,
+                    "timeframe": str,
+                    "timestamp": int,
+                    ...
+                }
+        """
         try:
+            dados["symbol"] = normalizar_symbol(dados["symbol"])
             cursor = self.conn.cursor()
             sql = f"""
                 INSERT INTO analise_candles (symbol timeframe, timestamp, padrao, classificacao, sinal, stop_loss, take_profit)
@@ -698,3 +757,22 @@ class BancoDados(Plugin):
         except Exception as e:
             logger.error(f"Erro ao fechar conexão com banco: {e}")
             raise
+
+
+def normalizar_symbol(symbol: str) -> str:
+    """
+    Normaliza o formato do símbolo para o padrão do banco de dados.
+
+    Args:
+        symbol (str): Símbolo no formato original (ex: "BTC/USDT:USDT")
+
+    Returns:
+        str: Símbolo normalizado (ex: "BTCUSDT")
+
+    Examples:
+        >>> normalizar_symbol("BTC/USDT:USDT")
+        'BTCUSDT'
+        >>> normalizar_symbol("ETH/USDT")
+        'ETHUSDT'
+    """
+    return symbol.replace("/", "").replace(":USDT", "")

@@ -1,23 +1,36 @@
-from plugins.plugin import Plugin
-from plugins.gerente_plugin import obter_conexao
 import logging
+from utils.singleton import singleton
+from plugins.plugin import Plugin
+from plugins.gerente_plugin import GerentePlugin
 
 logger = logging.getLogger(__name__)
 
 
+@singleton
 class ExecucaoOrdens(Plugin):
-    """
-    Plugin para exibir sinais de trading.
-
-    Este plugin é responsável por receber sinais de trading gerados por outros plugins
-    e exibi-los de forma organizada no console.
-    """
+    """Plugin para execução de ordens de trading."""
 
     def __init__(self):
         """Inicializa o plugin ExecucaoOrdens."""
         super().__init__()
-        self.conexao = obter_conexao()
         self.nome = "Execução de Ordens"
+        self.descricao = "Plugin para execução de ordens de trading"
+        self._config = None
+        self.gerente = GerentePlugin()
+        self._ordens_pendentes = {}
+
+    def inicializar(self, config):
+        """
+        Inicializa o plugin com as configurações fornecidas.
+
+        Args:
+            config: Objeto de configuração
+        """
+        if not self._config:  # Só inicializa uma vez
+            super().inicializar(config)
+            self._config = config
+            self._ordens_pendentes = {}
+            logger.info(f"Plugin {self.nome} inicializado com sucesso")
 
     def exibir_sinal(self, sinal):
         """

@@ -1,18 +1,32 @@
-from plugins.plugin import Plugin
-import numpy as np
 import logging
+import numpy as np
+from utils.singleton import singleton
+from plugins.plugin import Plugin
+from plugins.gerente_plugin import GerentePlugin
 
 logger = logging.getLogger(__name__)
 
 
+@singleton
 class ValidadorDados(Plugin):
-    "Plugin para validação de dados OHLCV."
+    """Plugin para validação de dados de trading."""
 
     def __init__(self):
+        """Inicializa o plugin ValidadorDados."""
         super().__init__()
         self.nome = "Validador de Dados"
-        self.descricao = "Validação robusta de dados OHLCV"
-        self.min_candles = 20  # Mínimo de candles para análise
+        self.descricao = "Plugin para validação de dados de trading"
+        self._config = None
+        self.gerente = GerentePlugin()
+        self.cache_validacoes = {}
+
+    def inicializar(self, config):
+        """Inicializa o plugin com as configurações fornecidas."""
+        if not self._config:
+            super().inicializar(config)
+            self._config = config
+            self.cache_validacoes = {}
+            logger.info(f"Plugin {self.nome} inicializado com sucesso")
 
     def validar_estrutura(self, dados):
         "Valida estrutura básica dos dados."
@@ -214,3 +228,37 @@ class ValidadorDados(Plugin):
         except Exception as e:
             logger.error(f"Erro na validação completa dos dados: {e}")
             return False
+
+    def validar_dados(self, dados):
+        """
+        Valida um conjunto de dados.
+
+        Args:
+            dados: numpy.ndarray com os dados a serem validados
+
+        Returns:
+            bool: True se os dados são válidos
+
+        Raises:
+            ValueError: Se os dados são inválidos
+        """
+        try:
+            if dados is None or len(dados) == 0:
+                raise ValueError("Dados vazios ou nulos")
+
+            # Converte para numpy array se não for
+            dados_np = np.array(dados)
+
+            # Verifica shape dos dados
+            if len(dados_np.shape) != 2 or dados_np.shape[1] != 6:
+                raise ValueError("Formato de dados inválido")
+
+            # Verifica valores inválidos
+            if np.any(np.isnan(dados_np)) or np.any(np.isinf(dados_np)):
+                raise ValueError("Dados contêm valores NaN ou Inf")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro na validação de dados: {e}")
+            raise ValueError(str(e))

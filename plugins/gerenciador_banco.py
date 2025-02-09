@@ -40,6 +40,7 @@ class GerenciadorBanco(Plugin):
 
     def inicializar(self, config):
         """Inicializa o gerenciador com as configurações."""
+        super().inicializar(config)
         try:
             self._config = config
             if self._conexao is None:
