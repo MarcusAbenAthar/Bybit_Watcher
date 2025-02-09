@@ -1,7 +1,7 @@
 import psycopg2
 import logging
 from plugins.plugin import Plugin
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from utils.singleton import singleton
 
 
@@ -13,39 +13,44 @@ class BancoDados(Plugin):
     """
     Plugin para gerenciamento do banco de dados.
 
-    Este plugin é responsável por:
-    - Estabelecer conexão com PostgreSQL
-    - Criar e gerenciar tabelas
-    - Executar operações CRUD
-
-    Attributes:
-        nome (str): Nome do plugin
-        config (dict): Configurações do banco
-        conexao: Conexão com PostgreSQL
+    Regras de Ouro:
+    2 - Criterioso: Validação rigorosa das operações
+    3 - Seguro: Tratamento de erros e singleton
+    6 - Clareza: Documentação clara
+    7 - Modular: Responsabilidade única
+    9 - Testável: Métodos bem definidos
+    10 - Documentado: Docstrings completos
     """
 
     def __init__(self):
+        """Inicializa o plugin de banco de dados."""
         super().__init__()
-        self.nome = "Banco de Dados"
-        self.descricao = "Plugin para gerenciamento do banco de dados"
+        self.nome = "banco_dados"
+        self.descricao = "Gerenciamento de banco de dados"
         self._conn = None
+        self._config = None
+        self.inicializado = False
 
-    def inicializar(self, config):
-        """Inicializa o banco de dados."""
-        super().inicializar(config)
-        self.conectar()
-        return True
-
-    def conectar(self, db_name, db_user, db_password, db_host="localhost"):
+    def inicializar(self, config: dict) -> bool:
         """
-        Estabelece a conexão com o banco de dados PostgreSQL.
+        Inicializa a conexão com o banco.
 
         Args:
-            db_name (str): Nome do banco de dados.
-            db_user (str): Nome do usuário do banco de dados.
-            db_password (str): Senha do usuário do banco de dados.
-            db_host (str): Host do banco de dados.
+            config (dict): Configurações do banco
+
+        Returns:
+            bool: True se inicializado com sucesso
         """
+        try:
+            self._config = config
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao inicializar banco: {e}")
+            return False
+
+    def conectar(
+        self, db_host: str, db_name: str, db_user: str, db_password: str
+    ) -> bool:
         try:
             self.conn = psycopg2.connect(
                 host=db_host,
@@ -53,19 +58,13 @@ class BancoDados(Plugin):
                 user=db_user,
                 password=db_password,
                 client_encoding="utf8",
+                options="-c client_encoding=utf8",
             )
-            logger.info(
-                f"Conexão com o banco de dados '{db_name}' estabelecida com sucesso."
-            )
-            return self.conn  # Retorna a conexão estabelecida
-
-        except psycopg2.OperationalError as e:
-            logger.error(f"Erro ao conectar ao PostgreSQL: {e}")
-            raise
-
+            self.conn.autocommit = True
+            return True
         except Exception as e:
-            # Registra a exceção original com logger.exception()
-            logger.exception(f"Erro ao conectar ao banco de dados: {e}")
+            logger.error(f"Erro ao conectar ao banco: {e}")
+            return False
 
     def inicializar(self, config):
         """

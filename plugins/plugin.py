@@ -4,12 +4,14 @@ class Plugin:
     def __init__(self):
         self.nome = "Plugin Base"
         self.descricao = "Classe base para plugins"
+        self.inicializado = False
         self._config = None
         self.gerente = None
 
     def inicializar(self, config):
         """Inicializa o plugin com configurações."""
         self._config = config
+        self.inicializado = True
         return True
 
     def obter_pares_usdt(self):

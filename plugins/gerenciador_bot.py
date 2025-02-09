@@ -1,188 +1,177 @@
 """
 Gerenciador principal do bot.
-Responsável por coordenar todas as operações do bot.
+
+Regras de Ouro:
+1. Autonomo - Decisões automáticas
+2. Criterioso - Validações rigorosas
+3. Seguro - Tratamento de erros
+4. Certeiro - Análises precisas 
+5. Eficiente - Otimizado
+6. Clareza - Bem documentado
+7. Modular - Responsabilidade única
+8. Plugins - Interface padronizada
+9. Testável - Métodos isolados
+10. Documentado - Docstrings completos
 """
 
 import logging
 import time
-import ccxt
-from utils.singleton import singleton
+from typing import Dict, List, Optional
 from plugins.plugin import Plugin
-from plugins.validador_dados import ValidadorDados
+from utils.singleton import singleton
 
 logger = logging.getLogger(__name__)
 
 
 @singleton
 class GerenciadorBot(Plugin):
-    """Plugin responsável pelo gerenciamento geral do bot."""
+    """
+    Gerenciador central do bot.
+
+    Responsável por:
+    - Coordenar execução dos plugins
+    - Gerenciar ciclo de vida do bot
+    - Validar dados e resultados
+    """
 
     def __init__(self):
-        """Inicializa o GerenciadorBot."""
+        """Inicializa o gerenciador."""
         super().__init__()
-        self.nome = "Gerenciador do Bot"
-        self.descricao = "Plugin para gerenciamento central do bot"
+        self.nome = "gerenciador_bot"
+        self.descricao = "Gerenciamento central do bot"
         self._config = None
         self._status = "parado"
-        self._plugins_ativos = {}
-        self.validador = ValidadorDados()
-        self.pares_processados = set()
+        self.inicializado = False
         self.timeframes = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+        self._plugins_ativos: Dict[str, Plugin] = {}
 
-    def inicializar(self, config):
+    def inicializar(self, config: dict) -> bool:
         """
-        Inicializa o plugin com as configurações fornecidas.
+        Inicializa o gerenciador.
 
         Args:
-            config: Objeto de configuração
-        """
-        if not self._config:  # Só inicializa uma vez
-            super().inicializar(config)
-            self._config = config
-            self._status = "parado"
-            self._plugins_ativos = {}
-            logger.info(f"Plugin {self.nome} inicializado com sucesso")
-
-    def validar_mercado(self, dados):
-        """
-        Valida se o mercado está apto para análise.
-
-        Args:
-            dados (dict): Dados do mercado da Bybit
+            config: Configurações do bot
 
         Returns:
-            bool: True se mercado válido para análise
+            bool: True se inicializado com sucesso
         """
         try:
-            symbol = dados.get("symbol", "Unknown")
-            type_mercado = dados.get("type", "Unknown")
-            volume = float(dados.get("baseVolume", 0))
-            is_active = dados.get("active", False)
+            if self.inicializado:
+                return True
 
-            # Filtrar apenas mercados swap
-            if type_mercado != "swap":
-                logger.debug(f"Mercado ignorado (não é swap): {symbol}")
-                return False
-
-            # Normalizar o símbolo (remover /USDT:USDT)
-            symbol_normalizado = symbol.replace("/USDT:USDT", "")
-
-            logger.info(
-                f"Analisando mercado:"
-                f"\n\tSymbol: {symbol_normalizado}"
-                f"\n\tTipo: {type_mercado}"
-                f"\n\tVolume: {volume}"
-                f"\n\tAtivo: {is_active}"
-            )
-
-            # Outras validações...
-            if not is_active:
-                logger.debug(f"{symbol_normalizado}: Mercado inativo")
-                return False
-
-            if volume < 1000:  # Volume mínimo de 1000 USDT
-                logger.debug(f"{symbol_normalizado}: Volume insuficiente ({volume})")
-                return False
-
-            logger.info(f"Mercado válido: {symbol_normalizado}")
+            self._config = config
+            self._status = "iniciando"
+            self.inicializado = True
+            logger.info(f"Plugin {self.nome} inicializado")
             return True
 
         except Exception as e:
-            logger.error(
-                f"Erro ao validar mercado {dados.get('symbol', 'Unknown')}: {e}"
-            )
+            logger.error(f"Erro ao inicializar gerenciador: {e}")
             return False
 
-    def processar_par(self, symbol, timeframe, exchange):
+    def registrar_plugin(self, plugin: Plugin) -> bool:
         """
-        Processa um par específico.
+        Registra um plugin para uso.
 
         Args:
-            symbol (str): Símbolo do par
-            timeframe (str): Timeframe para análise
-            exchange (Exchange): Instância da exchange
+            plugin: Plugin a ser registrado
 
         Returns:
-            list: Dados validados ou None se inválidos
+            bool: True se registrado com sucesso
         """
         try:
-            # Verifica se já foi processado recentemente
-            par_key = f"{symbol}-{timeframe}"
-            if par_key in self.pares_processados:
-                logger.debug(f"Par {par_key} já processado recentemente")
-                return None
+            if not plugin.inicializado:
+                logger.error(f"Plugin {plugin.nome} não inicializado")
+                return False
 
-            logger.info(f"Coletando dados de {symbol} em {timeframe}")
-
-            # Coleta dados com retry em caso de rate limit
-            max_retries = 3
-            retry_count = 0
-            while retry_count < max_retries:
-                try:
-                    dados = exchange.fetch_ohlcv(
-                        symbol, timeframe, params={"category": "linear", "limit": 200}
-                    )
-                    break
-                except ccxt.RateLimitExceeded:
-                    retry_count += 1
-                    wait_time = 5 * retry_count
-                    logger.warning(
-                        f"Rate limit atingido para {symbol}, tentativa {retry_count}. Aguardando {wait_time}s"
-                    )
-                    time.sleep(wait_time)
-                    continue
-                except Exception as e:
-                    logger.error(f"Erro ao coletar dados de {symbol}: {e}")
-                    return None
-
-            if not dados or len(dados) < 200:
-                logger.warning(f"Dados insuficientes para {symbol}-{timeframe}")
-                return None
-
-            # Adiciona ao set de processados
-            self.pares_processados.add(par_key)
-
-            logger.info(f"Dados coletados com sucesso para {symbol}-{timeframe}")
-            return dados
+            self._plugins_ativos[plugin.nome] = plugin
+            logger.info(f"Plugin {plugin.nome} registrado")
+            return True
 
         except Exception as e:
-            logger.error(f"Erro ao processar {symbol}-{timeframe}: {e}")
-            return None
+            logger.error(f"Erro ao registrar plugin {plugin.nome}: {e}")
+            return False
 
-    def processar_plugins(self, plugins, dados, symbol, timeframe):
+    def executar_ciclo(self) -> bool:
         """
-        Processa dados através dos plugins na ordem correta.
+        Executa um ciclo do bot.
 
-        Args:
-            plugins (list): Lista de plugins
-            dados (list): Dados OHLCV
-            symbol (str): Símbolo do par
-            timeframe (str): Timeframe
+        Returns:
+            bool: True se ciclo executado com sucesso
         """
         try:
-            resultados = {}
+            if self._status != "rodando":
+                return True
 
-            # 1. Processa indicadores
-            for plugin in plugins:
-                if plugin.nome in ["Indicadores de Tendência", "Médias Móveis"]:
-                    resultado = plugin.executar(dados, symbol, timeframe)
-                    if resultado:
-                        chave = plugin.nome.lower().replace(" ", "_").replace("ê", "e")
-                        resultados[chave] = resultado
+            # Executa plugins na ordem correta
+            ordem_execucao = [
+                "conexao",
+                "banco_dados",
+                "analise_candles",
+                "indicadores_tendencia",
+                "indicadores_osciladores",
+                "indicadores_volatilidade",
+                "indicadores_volume",
+                "medias_moveis",
+                "price_action",
+                "sinais_plugin",
+            ]
 
-            # 2. Processa sinais
-            for plugin in plugins:
-                if plugin.nome == "Sinais" and resultados:
-                    plugin.executar(resultados, symbol, timeframe)
+            for nome_plugin in ordem_execucao:
+                if nome_plugin in self._plugins_ativos:
+                    plugin = self._plugins_ativos[nome_plugin]
+                    if not plugin.executar():
+                        logger.error(f"Falha ao executar {nome_plugin}")
+                        return False
 
-            # 3. Processa outros plugins
-            for plugin in plugins:
-                if plugin.nome not in [
-                    "Indicadores de Tendência",
-                    "Médias Móveis",
-                    "Sinais",
-                ]:
-                    plugin.executar(dados, symbol, timeframe)
+            return True
 
         except Exception as e:
-            logger.error(f"Erro ao processar plugins: {e}")
+            logger.error(f"Erro no ciclo: {e}")
+            return False
+
+    def iniciar(self) -> bool:
+        """
+        Inicia execução do bot.
+
+        Returns:
+            bool: True se iniciado com sucesso
+        """
+        try:
+            if not self.inicializado:
+                logger.error("Gerenciador não inicializado")
+                return False
+
+            self._status = "rodando"
+            logger.info("Bot iniciado")
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro ao iniciar bot: {e}")
+            return False
+
+    def parar(self) -> bool:
+        """
+        Para execução do bot.
+
+        Returns:
+            bool: True se parado com sucesso
+        """
+        try:
+            self._status = "parado"
+            logger.info("Bot parado")
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro ao parar bot: {e}")
+            return False
+
+    def finalizar(self):
+        """Finaliza o gerenciador."""
+        try:
+            self.parar()
+            self._plugins_ativos.clear()
+            logger.info("Gerenciador finalizado")
+
+        except Exception as e:
+            logger.error(f"Erro ao finalizar gerenciador: {e}")

@@ -3,48 +3,111 @@
 """
 Gerenciador de plugins para o bot de trading.
 
-Este módulo é responsável por carregar e fornecer acesso aos plugins do bot,
-seguindo as Regras de Ouro para garantir a clareza, modularidade e 
-testabilidade do código.
-
+Regras de Ouro:
+1. Autonomo - Gerencia plugins de forma independente
+2. Criterioso - Validações rigorosas
+3. Seguro - Tratamento de erros
+4. Certeiro - Verificações precisas
+5. Eficiente - Carregamento otimizado
+6. Clareza - Bem documentado
+7. Modular - Responsabilidade única
+8. Plugins - Sistema dinâmico
+9. Testável - Métodos isolados
+10. Documentado - Docstrings completos
 """
 
 import os
 import importlib
 import logging
+from typing import Optional, Dict
 from plugins.plugin import Plugin
+from utils.singleton import singleton
 
 logger = logging.getLogger(__name__)
 
 
+@singleton
 class GerentePlugin:
+    """Gerenciador central de plugins."""
+
     def __init__(self):
-        self.plugins = {}
+        """Inicializa o gerenciador."""
+        self.plugins: Dict[str, Plugin] = {}
+        self.config = None
+        self.initialized = False
 
-    def inicializar(self, config):
-        """Inicializa o gerente de plugins com a configuração fornecida."""
-        self.config = config
+    def inicializar(self, config: dict) -> bool:
+        """
+        Inicializa o gerenciador com configurações.
 
-    def carregar_plugins(self, caminho_plugins: str, config=None) -> bool:
-        """Carrega plugins apenas se ainda não foram carregados."""
-        if self.plugins:
-            logger.info("Plugins já carregados anteriormente")
-            return True
+        Args:
+            config: Configurações do sistema
 
+        Returns:
+            bool: True se inicializado com sucesso
+        """
         try:
+            self.config = config
+            self.initialized = True
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao inicializar gerente: {e}")
+            return False
+
+    def carregar_plugins(self, caminho_plugins: str) -> bool:
+        """
+        Carrega plugins do diretório especificado.
+
+        Args:
+            caminho_plugins: Caminho do diretório de plugins
+
+        Returns:
+            bool: True se plugins carregados com sucesso
+        """
+        try:
+            # Só carrega uma vez
+            if self.plugins:
+                logger.info("Plugins já carregados")
+                return True
+
             plugins_carregados = []
 
+            # Lista arquivos
             if os.path.isdir(caminho_plugins):
-                arquivos = os.listdir(caminho_plugins)
+                # Ordena plugins para garantir carregamento correto
+                ordem_plugins = [
+                    "conexao.py",
+                    "banco_dados.py",
+                    "gerenciador_banco.py",
+                    "gerenciador_bot.py",
+                    "analise_candles.py",
+                    "indicadores_tendencia.py",
+                    "indicadores_osciladores.py",
+                    "indicadores_volatilidade.py",
+                    "indicadores_volume.py",
+                    "medias_moveis.py",
+                    "price_action.py",
+                    "sinais_plugin.py",
+                ]
+
+                # Filtra e ordena arquivos
+                arquivos = []
+                for plugin in ordem_plugins:
+                    if plugin in os.listdir(caminho_plugins):
+                        arquivos.append(plugin)
+
+                # Adiciona outros plugins não listados
+                for arquivo in os.listdir(caminho_plugins):
+                    if arquivo not in arquivos and self._eh_plugin_valido(arquivo):
+                        arquivos.append(arquivo)
             else:
                 arquivos = [caminho_plugins]
 
+            # Carrega plugins
             for arquivo in arquivos:
                 if self._eh_plugin_valido(arquivo):
-                    nome_modulo = os.path.splitext(os.path.basename(arquivo))[
-                        0
-                    ]  # Remove .py
-                    plugin = self._carregar_plugin(nome_modulo, config)
+                    nome_modulo = os.path.splitext(arquivo)[0]
+                    plugin = self._carregar_plugin(nome_modulo)
 
                     if plugin:
                         plugins_carregados.append(plugin)
@@ -52,20 +115,31 @@ class GerentePlugin:
                         logger.info(f"Plugin carregado: {plugin.nome}")
 
             if not plugins_carregados:
-                logger.warning("Nenhum plugin foi carregado")
+                logger.warning("Nenhum plugin carregado")
                 return False
 
-            logger.info(f"Total de plugins carregados: {len(plugins_carregados)}")
+            logger.info(f"Total de plugins: {len(plugins_carregados)}")
             return True
 
         except Exception as e:
-            logger.error(f"Erro no carregamento de plugins: {e}")
+            logger.error(f"Erro ao carregar plugins: {e}")
             return False
 
-    def _carregar_plugin(self, nome_modulo: str, config=None):
-        """Carrega um plugin específico."""
+    def _carregar_plugin(self, nome_modulo: str) -> Optional[Plugin]:
+        """
+        Carrega um plugin específico.
+
+        Args:
+            nome_modulo: Nome do módulo do plugin
+
+        Returns:
+            Plugin ou None se falhar
+        """
         try:
+            logger.debug(f"Carregando: {nome_modulo}")
             modulo = importlib.import_module(f"plugins.{nome_modulo}")
+
+            # Busca classe do plugin
             for nome_item in dir(modulo):
                 item = getattr(modulo, nome_item)
                 if (
@@ -73,112 +147,80 @@ class GerentePlugin:
                     and issubclass(item, Plugin)
                     and item != Plugin
                 ):
-                    instancia = item()
-                    instancia.inicializar(config)
-                    return instancia
+
+                    # Instancia e inicializa
+                    plugin = item()
+                    if self.config:
+                        plugin.inicializar(self.config)
+                    return plugin
+
+            logger.warning(f"Nenhuma classe plugin em {nome_modulo}")
             return None
+
         except Exception as e:
-            logger.error(f"Erro ao carregar módulo {nome_modulo}: {e}")
+            logger.error(f"Erro ao carregar {nome_modulo}: {e}")
             return None
 
     def _eh_plugin_valido(self, arquivo: str) -> bool:
-        """Verifica se o arquivo é um plugin válido."""
+        """
+        Verifica se arquivo é um plugin válido.
+
+        Args:
+            arquivo: Nome do arquivo
+
+        Returns:
+            bool: True se for plugin válido
+        """
         return arquivo.endswith(".py") and not arquivo.startswith("__")
 
     def verificar_plugins_essenciais(self) -> bool:
-        """Verifica se todos os plugins essenciais estão carregados."""
-        for plugin in ["conexao", "banco_dados", "gerenciador_bot"]:
-            if plugin not in self.plugins:
-                logger.error(f"Plugin essencial não carregado: {plugin}")
+        """
+        Verifica se plugins essenciais estão carregados.
+
+        Returns:
+            bool: True se todos plugins essenciais OK
+        """
+        essenciais = {
+            "conexao": "Conexão com a Bybit",
+            "banco_dados": "Banco de Dados",
+            "gerenciador_banco": "Gerenciador do Banco",
+            "gerenciador_bot": "Gerenciador do Bot",
+        }
+
+        for nome, descricao in essenciais.items():
+            if nome not in self.plugins:
+                logger.error(f"Plugin essencial faltando: {descricao} ({nome})")
                 return False
+
+            if not self.plugins[nome].inicializado:
+                logger.error(f"Plugin não inicializado: {descricao} ({nome})")
+                return False
+
         return True
 
+    def executar_ciclo(self) -> bool:
+        """
+        Executa um ciclo em todos os plugins.
 
-def inicializar_banco_dados(config):
-    """
-    Inicializa o banco de dados e cria as tabelas.
-    """
-    logger.debug("Inicializando banco de dados...")
+        Returns:
+            bool: True se ciclo executado com sucesso
+        """
+        try:
+            for plugin in self.plugins.values():
+                if not plugin.executar():
+                    return False
+            return True
+        except Exception as e:
+            logger.error(f"Erro no ciclo: {e}")
+            return False
 
-    conectar_banco_dados(config)
-    banco_dados = obter_banco_dados(config)
-
-    # Cria o banco de dados
-    banco_dados.criar_banco_dados(
-        config.get("database", "database"),
-        config.get("database", "user"),
-        config.get("database", "password"),
-    )
-
-    # Conecta ao banco de dados
-    banco_dados.conectar(
-        config.get("database", "database"),
-        config.get("database", "user"),
-        config.get("database", "password"),
-        config.get("database", "host"),
-    )
-    # Cria as tabelas
-    banco_dados.criar_tabela("klines")
-    banco_dados.criar_tabela("analise_candles")
-    banco_dados.criar_tabela("medias_moveis")
-    banco_dados.criar_tabela("indicadores_osciladores")
-    banco_dados.criar_tabela("indicadores_tendencia")
-    banco_dados.criar_tabela("indicadores_volatilidade")
-    banco_dados.criar_tabela("indicadores_volume")
-    banco_dados.criar_tabela("outros_indicadores")
-
-    logger.debug(
-        "Banco de dados inicializado com sucesso!"
-    )  # Adiciona um log no final da função
-
-
-def conectar_banco_dados(config):
-    """
-    Conecta ao banco de dados usando o plugin BancoDados.
-
-    Args:
-        config (ConfigParser): Objeto com as configurações do bot.
-    """
-    try:
-        # Obtém a instância da classe BancoDados
-        banco_dados = obter_banco_dados(config)
-
-        # Obtém as configurações do objeto config
-        db_host = config.get("database", "host")
-        db_name = config.get("database", "database")
-        db_user = config.get("database", "user")
-        db_password = config.get("database", "password")
-
-        # Conecta ao banco de dados
-        banco_dados.conectar(db_name, db_user, db_password, db_host)
-
-    except Exception as e:
-        logger.error(f"Erro ao conectar ao banco de dados: {e}")
-        raise
-
-
-def armazenar_dados(config, dados, symbol, timeframe):
-    """
-    Armazena os dados no banco de dados usando o plugin BancoDados.
-
-    Args:
-        config (ConfigParser): Objeto com as configurações do bot.
-        dados (list): Lista de dados a serem armazenados.
-        symbol (str): Par de moedas.
-        timeframe (str): Timeframe dos dados.
-    """
-    try:
-        banco_dados = obter_banco_dados()
-        banco_dados.inserir_dados(
-            "klines",
-            {
-                "symbol": symbol,
-                "timeframe": timeframe,
-                "dados": dados,
-            },
-        )
-    except Exception as e:
-        logger.error(f"Erro ao armazenar dados: {e}")
+    def finalizar(self):
+        """Finaliza todos os plugins."""
+        for plugin in self.plugins.values():
+            try:
+                plugin.finalizar()
+            except Exception as e:
+                logger.error(f"Erro ao finalizar {plugin.nome}: {e}")
 
 
 def obter_conexao():
@@ -197,20 +239,40 @@ def obter_conexao():
 def obter_banco_dados(config=None):
     """
     Retorna a conexão única com o banco de dados.
-    """
-    from plugins.gerenciador_banco import gerenciador_banco
 
-    if config:
-        gerenciador_banco.inicializar(config)
-    return gerenciador_banco.get_conexao()
+    Returns:
+        BancoDados: Instância do plugin de banco de dados
+    """
+    from plugins.banco_dados import BancoDados
+    from dotenv import load_dotenv
+    import os
+
+    # Carrega variáveis do .env
+    load_dotenv()
+
+    # Se não passou config, usa do .env
+    if not config:
+        config = {
+            "database": {
+                "host": os.getenv("DB_HOST"),
+                "database": os.getenv("DB_NAME"),
+                "user": os.getenv("DB_USER"),
+                "password": os.getenv("DB_PASSWORD"),
+            }
+        }
+
+    banco = BancoDados()
+    banco.inicializar(config)
+    return banco
 
 
 def finalizar_conexao():
     """
     Fecha a conexão com o banco quando o bot for encerrado.
     """
-    from plugins.gerenciador_banco import gerenciador_banco
+    from plugins.gerenciador_banco import GerenciadorBanco
 
+    gerenciador_banco = GerenciadorBanco()
     gerenciador_banco.fechar_conexao()
 
 
@@ -349,3 +411,27 @@ if __name__ == "__main__":
         print("Plugins carregados:", len(gerente.plugins))
     else:
         print("Falha no carregamento")
+
+
+# plugins/banco_dados.py
+@singleton
+class BancoDados(Plugin):
+    def __init__(self):
+        super().__init__()
+        self.nome = "banco_dados"  # Corresponde ao nome do arquivo
+
+
+# plugins/gerenciador_banco.py
+@singleton
+class GerenciadorBanco(Plugin):
+    def __init__(self):
+        super().__init__()
+        self.nome = "gerenciador_banco"
+
+
+# plugins/gerenciador_bot.py
+@singleton
+class GerenciadorBot(Plugin):
+    def __init__(self):
+        super().__init__()
+        self.nome = "gerenciador_bot"

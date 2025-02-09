@@ -14,13 +14,14 @@ class Conexao(Plugin):
     def __init__(self):
         """Inicializa o plugin de conexão."""
         super().__init__()
-        self.nome = "Conexão Bybit"
+        self.nome = "conexao"  # Nome correto para o gerenciador identificar
         self.descricao = "Plugin para conexão com a Bybit"
         self._config = None
         self.exchange = None
         self._testnet = True
         self._mercado = "swap"
         self._pares_usdt = []
+        self.inicializado = False  # Atributo necessário para verificação
 
     def inicializar(self, config):
         """Inicializa a conexão com a Bybit."""
@@ -37,12 +38,13 @@ class Conexao(Plugin):
                 # Filtra pares USDT
                 self._pares_usdt = self.filtrar_pares_usdt()
 
+                self.inicializado = True  # Marca como inicializado
                 logger.info("Conexão estabelecida com sucesso!")
-                logger.info(f"Mercado conectado: {self._mercado}")
+                return True
 
         except Exception as e:
             logger.error(f"Erro ao inicializar conexão: {e}")
-            raise
+            return False
 
     def validar(self):
         """Valida se a conexão está funcionando."""
