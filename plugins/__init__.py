@@ -14,9 +14,9 @@ from plugins.plugin import Plugin
 
 # Plugins essenciais em ordem de dependência
 from plugins.conexao import Conexao  # Sem dependências
-from plugins.gerenciador_banco import GerenciadorBanco  # Sem dependências
+from plugins.gerenciadores.gerenciador_banco import GerenciadorBanco  # Sem dependências
 from plugins.banco_dados import BancoDados  # Depende de gerenciador_banco
-from plugins.gerenciador_bot import (
+from plugins.gerenciadores.gerenciador_bot import (
     GerenciadorBot,
 )  # Depende de banco_dados e gerenciador_banco
 

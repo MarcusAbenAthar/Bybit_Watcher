@@ -97,7 +97,7 @@ class BancoDados(Plugin):
             tentativa = 0
             while tentativa < max_tentativas:
                 try:
-                    from plugins.gerente_plugin import GerentePlugin
+                    from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 
                     gerente = GerentePlugin()
                     gerenciador_banco = gerente.plugins.get("gerenciador_banco")
@@ -863,7 +863,7 @@ class BancoDados(Plugin):
                 return False
 
             # Obtém gerenciador de banco
-            from plugins.gerente_plugin import GerentePlugin
+            from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 
             gerente = GerentePlugin()
             gerenciador_banco = gerente.plugins.get("gerenciador_banco")
@@ -922,7 +922,7 @@ class BancoDados(Plugin):
         """
         try:
             # Obtém gerenciador de banco
-            from plugins.gerente_plugin import GerentePlugin
+            from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 
             gerente = GerentePlugin()
             gerenciador_banco = gerente.plugins.get("gerenciador_banco")

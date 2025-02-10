@@ -1,5 +1,8 @@
 import unittest
-from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
+from plugins.gerenciadores.gerenciador_plugins import (
+    obter_calculo_alavancagem,
+    obter_banco_dados,
+)
 from configparser import ConfigParser
 from unittest.mock import patch, Mock
 

@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import Mock, patch
-from plugins.gerenciador_bot import GerenciadorBot
+from plugins.gerenciadores.gerenciador_bot import GerenciadorBot
 
 
 class TestGerenciadorBot(unittest.TestCase):

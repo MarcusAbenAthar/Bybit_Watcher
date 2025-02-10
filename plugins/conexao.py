@@ -1,5 +1,3 @@
-# plugins/conexao.py
-
 """
 Plugin para conexão com a Bybit.
 
@@ -15,19 +13,17 @@ Regras de Ouro:
 9. Testável - Métodos isolados
 10. Documentado - Docstrings completos
 """
-# plugins/conexao.py
 
+import logging
 import os
-import time
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional
 import ccxt
 import requests
 from plugins.plugin import Plugin
 from utils.singleton import singleton
 from utils.logging_config import get_logger
 
-
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class Conexao(Plugin):
@@ -50,10 +46,15 @@ class Conexao(Plugin):
     def __init__(self):
         """Inicializa o plugin de conexão."""
         super().__init__()
+        # Atributos obrigatórios da classe base
+        self.nome = "conexao"  # Nome deve corresponder ao arquivo
         self.descricao = "Plugin de conexão com a Bybit"
+
+        # Atributos específicos deste plugin
         self.exchange = None
-        self._mercado = "swap"
+        self._mercado = os.getenv("BYBIT_MARKET", "swap")
         self._pares_usdt = []
+        self.inicializado = False  # Atributo necessário para verificação
 
     def inicializar(self, config: dict) -> bool:
         """
@@ -66,111 +67,22 @@ class Conexao(Plugin):
             bool: True se inicializado com sucesso
         """
         try:
-            logger.info("Iniciando conexão com Bybit...")
-            super().inicializar(config)
-
-            # Configura mercado
-            self._mercado = os.getenv("BYBIT_MARKET", "swap")
-
-            # Conecta com a exchange
-            if not self.conectar_bybit():
+            # Inicializa classe base
+            if not super().inicializar(config):
                 return False
 
-            # Carrega mercados disponíveis
-            self._pares_usdt = self.filtrar_pares_usdt()
+            # Conecta com a exchange
+            if not self._conectar_bybit():
+                return False
 
-            self.inicializado = True
-            logger.info("Conexão Bybit inicializada com sucesso")
+            logger.info("Plugin Conexao inicializado com sucesso")
             return True
 
         except Exception as e:
             logger.error(f"Erro ao inicializar conexão: {e}")
             return False
 
-    def _sincronizar_timestamp(self) -> Tuple[bool, int]:
-        """
-        Sincroniza timestamp com o servidor da Bybit.
-
-        Returns:
-            Tuple[bool, int]: (sucesso, diferença de tempo em ms)
-        """
-        try:
-            # Obtém timestamp do servidor
-            response = requests.get("https://api.bybit.com/v5/market/time")
-            if response.status_code != 200:
-                return False, 0
-
-            server_time = response.json()["time"]
-            local_time = int(time.time() * 1000)
-            time_offset = int(server_time) - local_time
-
-            logger.info(f"Diferença de tempo: {time_offset}ms")
-            return True, time_offset
-
-        except Exception as e:
-            logger.error(f"Erro ao sincronizar timestamp: {e}")
-            return False, 0
-
-    def _conectar_com_retry(self, max_tentativas: int = 3) -> Optional[ccxt.Exchange]:
-        """
-        Tenta conectar à Bybit com retry e backoff exponencial.
-
-        Args:
-            max_tentativas: Número máximo de tentativas
-
-        Returns:
-            Optional[ccxt.Exchange]: Instância da exchange ou None se falhar
-        """
-        tentativa = 0
-        while tentativa < max_tentativas:
-            try:
-                # Obtém credenciais
-                api_key = os.getenv("BYBIT_API_KEY")
-                api_secret = os.getenv("BYBIT_API_SECRET")
-
-                if not api_key or not api_secret:
-                    raise ValueError("Credenciais Bybit não encontradas no .env")
-
-                # Sincroniza timestamp primeiro
-                sincronizado, time_offset = self._sincronizar_timestamp()
-                if not sincronizado:
-                    raise Exception("Falha ao sincronizar timestamp")
-
-                # Configura cliente com diferença de tempo
-                exchange = ccxt.bybit(
-                    {
-                        "apiKey": api_key,
-                        "secret": api_secret,
-                        "enableRateLimit": True,
-                        "options": {
-                            "defaultType": self._mercado,
-                            "recvWindow": 60000,  # 60 segundos
-                            "adjustForTimeDifference": True,
-                            "timeDifference": time_offset,
-                        },
-                    }
-                )
-
-                # Testa conexão
-                exchange.load_markets()
-                logger.info("Conexão estabelecida com Bybit (Produção)")
-                return exchange
-
-            except Exception as e:
-                tentativa += 1
-                if tentativa < max_tentativas:
-                    wait_time = 2**tentativa  # Backoff exponencial
-                    logger.warning(
-                        f"Tentativa {tentativa} falhou: {e}. Aguardando {wait_time}s..."
-                    )
-                    time.sleep(wait_time)
-                else:
-                    logger.error(f"Todas as tentativas falharam: {e}")
-                    return None
-
-        return None
-
-    def conectar_bybit(self) -> bool:
+    def _conectar_bybit(self) -> bool:
         """
         Estabelece conexão com a Bybit.
 
@@ -178,156 +90,89 @@ class Conexao(Plugin):
             bool: True se conectado com sucesso
         """
         try:
-            # Tenta conectar com retry
-            exchange = self._conectar_com_retry()
-            if not exchange:
-                return False
+            # Obtém credenciais
+            api_key = os.getenv("BYBIT_API_KEY")
+            api_secret = os.getenv("BYBIT_API_SECRET")
 
-            self.exchange = exchange
-            return True
+            if not api_key or not api_secret:
+                raise ValueError("Credenciais da API não encontradas")
 
-        except Exception as e:
-            logger.error(f"Erro ao conectar na Bybit: {e}")
-            return False
-
-    def filtrar_pares_usdt(self) -> List[str]:
-        """
-        Filtra pares USDT válidos.
-
-        Returns:
-            List[str]: Lista de pares válidos
-        """
-        try:
-            if not self.exchange:
-                return []
-
-            pares = []
-            mercados = self.exchange.load_markets()
-
-            for simbolo, dados in mercados.items():
-                if self.validar_mercado(dados):
-                    pares.append(simbolo)
-
-            logger.info(f"Pares USDT encontrados: {len(pares)}")
-            return pares
-
-        except Exception as e:
-            logger.error(f"Erro ao filtrar pares: {e}")
-            return []
-
-    def validar_mercado(self, dados: Dict) -> bool:
-        """
-        Valida se mercado atende critérios.
-
-        Args:
-            dados: Dados do mercado
-
-        Returns:
-            bool: True se mercado válido
-        """
-        try:
-            volume_min = float(os.getenv("VOLUME_MIN", "1000000"))
-            return (
-                dados.get("type") == "swap"
-                and dados.get("quote") == "USDT"
-                and dados.get("active") is True
-                and float(dados.get("baseVolume", 0)) > volume_min
+            # Configura cliente
+            self.exchange = ccxt.bybit(
+                {
+                    "apiKey": api_key,
+                    "secret": api_secret,
+                    "enableRateLimit": True,
+                    "options": {"defaultType": self._mercado},
+                }
             )
-        except Exception as e:
-            logger.error(f"Erro na validação: {e}")
-            return False
 
-    def executar(self) -> bool:
-        """
-        Executa ciclo do plugin.
+            # Carrega mercados
+            self.exchange.load_markets()
 
-        Returns:
-            bool: True se executado com sucesso
-        """
-        try:
-            if not self.exchange:
-                return False
+            # Atualiza pares USDT
+            self._pares_usdt = [
+                symbol for symbol in self.exchange.symbols if symbol.endswith("/USDT")
+            ]
 
-            # Verifica conexão
-            self.exchange.fetch_balance()
+            logger.info("Conexão estabelecida com Bybit")
             return True
 
         except Exception as e:
-            logger.error(f"Erro no ciclo de execução: {e}")
+            logger.error(f"Erro ao conectar com Bybit: {e}")
             return False
 
-    def obter_pares(self) -> List[str]:
+    def obter_pares_usdt(self) -> List[str]:
         """
-        Retorna lista de pares USDT disponíveis.
+        Obtém lista de pares USDT disponíveis.
 
         Returns:
             List[str]: Lista de pares USDT
         """
-        try:
-            if not self._pares_usdt:
-                self._pares_usdt = self.filtrar_pares_usdt()
-            return self._pares_usdt
+        return self._pares_usdt
 
-        except Exception as e:
-            logger.error(f"Erro ao obter pares: {e}")
-            return []
-
-    def obter_klines(self, symbol: str, timeframe: str) -> List[Tuple]:
+    def validar_mercado(self, dados):
         """
-        Obtém dados OHLCV do par.
+        Valida se um mercado atende aos critérios rigorosos de análise.
+
+        Regras de Ouro aplicadas:
+        - Criterioso: Validação rigorosa dos dados
+        - Seguro: Checagem de todos os parâmetros
+        - Certeiro: Apenas mercados que atendam 100% dos critérios
 
         Args:
-            symbol: Par de trading
-            timeframe: Intervalo de tempo
+            dados (dict): Dados do mercado da Bybit
 
         Returns:
-            List[Tuple]: Lista de candles OHLCV
+            bool: True se o mercado é válido para análise
         """
         try:
-            if not self.exchange:
-                return []
+            # Validação criteriosa dos dados básicos
+            if not all(k in dados for k in ["type", "quote", "active", "baseVolume"]):
+                logger.warning("Dados incompletos do mercado")
+                return False
 
-            # Obtém últimos 100 candles usando API v5
-            params = {
-                "category": "linear",
-                "symbol": symbol,
-                "interval": timeframe,
-                "limit": 100,
+            # Regras rigorosas de validação
+            regras = {
+                "tipo_mercado": dados["type"] == "swap",
+                "moeda_quote": dados["quote"] == "USDT",
+                "mercado_ativo": dados["active"] is True,
+                "volume_minimo": float(dados["baseVolume"])
+                > 1000000,  # Volume mínimo 1M USDT
             }
-            response = requests.get(
-                "https://api.bybit.com/v5/market/kline", params=params
-            )
 
-            if response.status_code != 200:
-                logger.error(f"Erro ao obter klines: Status {response.status_code}")
-                return []
+            # Checagem detalhada
+            for regra, resultado in regras.items():
+                if not resultado:
+                    logger.debug(f"Mercado falhou na regra: {regra}")
+                    return False
 
-            data = response.json()
-            if data["retCode"] != 0:
-                logger.error(f"Erro ao obter klines: {data['retMsg']}")
-                return []
+            logger.info(f"Mercado validado com sucesso: {dados['symbol']}")
+            return True
 
-            # Formata dados
-            dados = []
-            for k in data["result"]["list"]:
-                dados.append(
-                    (
-                        symbol,
-                        timeframe,
-                        int(k[0]),  # timestamp
-                        float(k[1]),  # open
-                        float(k[2]),  # high
-                        float(k[3]),  # low
-                        float(k[4]),  # close
-                        float(k[5]),  # volume
-                    )
-                )
-
-            return dados
-
-        except Exception as e:
-            logger.error(f"Erro ao obter klines de {symbol} {timeframe}: {e}")
-            return []
+        except Exception as erro:
+            logger.error(f"Erro na validação do mercado: {str(erro)}")
+            return False
 
     def finalizar(self):
         """Finaliza a conexão com a exchange."""
@@ -336,7 +181,7 @@ class Conexao(Plugin):
                 self.exchange = None
 
             self.inicializado = False
-            logger.info("Conexão Bybit finalizada com sucesso")
+            logger.info("Conexão finalizada com sucesso")
 
         except Exception as e:
             logger.error(f"Erro ao finalizar conexão: {e}")

@@ -107,6 +107,10 @@ def configurar_logging():
     try:
         logging.config.dictConfig(BASE_CONFIG)
         logger = logging.getLogger(__name__)
+        # Bloqueia completamente logs de bibliotecas externas
+        logging.getLogger("urllib3").setLevel(logging.CRITICAL)
+        logging.getLogger("ccxt").setLevel(logging.CRITICAL)
+        logging.getLogger("requests").setLevel(logging.CRITICAL)
         logger.info("Sistema de logging inicializado")
     except Exception as e:
         print(f"Erro ao configurar logging: {e}")

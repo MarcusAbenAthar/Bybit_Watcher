@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 
 
 from plugins.plugin import Plugin
-from plugins.gerente_plugin import obter_banco_dados
+from plugins.gerenciadores.gerenciador_plugins import obter_banco_dados
 
 
 class IndicadoresTendencia(Plugin):

@@ -1,5 +1,8 @@
 import psycopg2
-from plugins.gerente_plugin import obter_calculo_alavancagem, obter_banco_dados
+from plugins.gerenciadores.gerenciador_plugins import (
+    obter_calculo_alavancagem,
+    obter_banco_dados,
+)
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)

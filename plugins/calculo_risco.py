@@ -5,7 +5,7 @@ import numpy as np
 import talib
 from utils.singleton import singleton
 from plugins.plugin import Plugin
-from plugins.gerente_plugin import GerentePlugin
+from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 
 
 @singleton

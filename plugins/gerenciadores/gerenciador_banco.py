@@ -44,7 +44,7 @@ class GerenciadorBanco(Plugin):
     def __init__(self):
         """Inicializa o gerenciador."""
         super().__init__()
-        self.nome = "gerenciador_banco"
+        self.nome = self.PLUGIN_NAME
         self.descricao = "Gerenciamento do banco de dados"
         self._pool = None
         self._config = None
@@ -192,9 +192,9 @@ class GerenciadorBanco(Plugin):
                     "CREATE INDEX IF NOT EXISTS idx_sinais_symbol_timeframe ON sinais(symbol, timeframe)",
                     "CREATE INDEX IF NOT EXISTS idx_sinais_timestamp ON sinais(timestamp DESC)",
                     "CREATE INDEX IF NOT EXISTS idx_sinais_confianca ON sinais(confianca DESC)",
-                    "CREATE INDEX IF NOT EXISTS idx_sinais_volume ON sinais(volume_24h DESC)"
+                    "CREATE INDEX IF NOT EXISTS idx_sinais_volume ON sinais(volume_24h DESC)",
                 ]
-                
+
                 for idx in indices:
                     conn.execute(idx)
 
@@ -219,7 +219,7 @@ class GerenciadorBanco(Plugin):
                 indices_analise = [
                     "CREATE INDEX IF NOT EXISTS idx_analises_symbol_timeframe ON analises(symbol, timeframe)",
                     "CREATE INDEX IF NOT EXISTS idx_analises_timestamp ON analises(timestamp DESC)",
-                    "CREATE INDEX IF NOT EXISTS idx_analises_tipo ON analises(tipo_analise)"
+                    "CREATE INDEX IF NOT EXISTS idx_analises_tipo ON analises(tipo_analise)",
                 ]
 
                 for idx in indices_analise:
@@ -263,7 +263,9 @@ class GerenciadorBanco(Plugin):
             logger.error(f"Erro ao criar banco PostgreSQL: {e}")
             raise
 
-    def executar_query(self, query: str, params: tuple = None, commit: bool = False) -> Optional[list]:
+    def executar_query(
+        self, query: str, params: tuple = None, commit: bool = False
+    ) -> Optional[list]:
         """
         Executa query no banco de forma segura.
 
@@ -285,11 +287,11 @@ class GerenciadorBanco(Plugin):
             with conn:
                 cur = conn.cursor()
                 cur.execute(query, params)
-                
+
                 if commit:
                     conn.commit()
                     return []
-                    
+
                 if cur.description:
                     return cur.fetchall()
                 return []
@@ -302,7 +304,14 @@ class GerenciadorBanco(Plugin):
             if not self._usando_sqlite and conn:
                 self._pool.putconn(conn)
 
-    def salvar_analise(self, symbol: str, timeframe: str, tipo: str, resultado: str, detalhes: str = None) -> bool:
+    def salvar_analise(
+        self,
+        symbol: str,
+        timeframe: str,
+        tipo: str,
+        resultado: str,
+        detalhes: str = None,
+    ) -> bool:
         """
         Salva resultado de uma análise.
 
@@ -329,8 +338,13 @@ class GerenciadorBanco(Plugin):
             logger.error(f"Erro ao salvar análise: {e}")
             return False
 
-    def obter_analises_recentes(self, symbol: str = None, timeframe: str = None, 
-                              tipo: str = None, limite: int = 100) -> List[Dict]:
+    def obter_analises_recentes(
+        self,
+        symbol: str = None,
+        timeframe: str = None,
+        tipo: str = None,
+        limite: int = 100,
+    ) -> List[Dict]:
         """
         Obtém análises mais recentes com filtros opcionais.
 
@@ -377,7 +391,7 @@ class GerenciadorBanco(Plugin):
                     "tipo_analise": r[3],
                     "resultado": r[4],
                     "detalhes": r[5],
-                    "timestamp": r[6]
+                    "timestamp": r[6],
                 }
                 for r in resultados
             ]

@@ -29,7 +29,7 @@ from dotenv import load_dotenv
 import os
 
 # Imports locais
-from plugins.gerente_plugin import GerentePlugin
+from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 from utils.logging_config import configurar_logging
 
 # Configuração inicial
@@ -44,9 +44,9 @@ logging.basicConfig(
 # Plugins essenciais em ordem de dependência
 PLUGINS_ESSENCIAIS = [
     "conexao",  # Sem dependências
-    "gerenciador_banco",  # Sem dependências
-    "banco_dados",  # Depende de gerenciador_banco
-    "gerenciador_bot",  # Depende de banco_dados e gerenciador_banco
+    "gerenciadores.gerenciador_banco",  # Sem dependências
+    "gerenciadores.banco_dados",  # Depende de gerenciador_banco
+    "gerenciadores.gerenciador_bot",  # Depende de banco_dados e gerenciador_banco
 ]
 
 # Plugins adicionais
@@ -110,9 +110,10 @@ def inicializar_bot() -> GerentePlugin:
         gerente = GerentePlugin()
         gerente.inicializar(config)
 
-        # Carrega plugins essenciais
-        if not gerente.carregar_plugins("plugins"):  # Removido argumento config
-            raise RuntimeError("Falha ao carregar plugins essenciais")
+        # Carrega plugins essenciais na ordem de dependência
+        for plugin_name in PLUGINS_ESSENCIAIS:
+            if not gerente.carregar_plugin(plugin_name):
+                raise RuntimeError(f"Falha ao carregar plugin essencial: {plugin_name}")
 
         # Validação final
         if not gerente.verificar_plugins_essenciais():
