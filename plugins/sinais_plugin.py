@@ -73,22 +73,30 @@ class SinaisPlugin(Plugin):
             bool: True se os dados são válidos, False caso contrário
         """
         try:
-            for indicador, valores in dados.items():
-                if not isinstance(valores, dict):
-                    return False
+            # Verifica se tem pelo menos um indicador
+            if not dados or not isinstance(dados, dict):
+                logger.error("Dados inválidos: não é um dicionário")
+                return False
 
-                # Verifica valores NaN
-                for valor in valores.values():
-                    if isinstance(valor, (int, float)) and str(valor).lower() == "nan":
-                        return False
+            # Verifica se tem os indicadores necessários
+            indicadores_necessarios = ["tendencia", "medias_moveis"]
+            if not any(ind in dados for ind in indicadores_necessarios):
+                logger.error("Dados inválidos: faltam indicadores necessários")
+                return False
 
-                # Verifica direção válida
-                if "direcao" in valores and valores["direcao"] not in [
-                    "ALTA",
-                    "BAIXA",
-                    "NEUTRO",
-                ]:
-                    return False
+            # Verifica se os resultados são válidos
+            for indicador, resultado in dados.items():
+                if not isinstance(resultado, dict):
+                    logger.error(f"Resultado inválido para {indicador}")
+                    continue
+
+                # Adapta o formato do resultado se necessário
+                if "sinal" in resultado:
+                    dados[indicador] = {
+                        "direcao": resultado["sinal"],
+                        "forca": resultado.get("forca", "MÉDIA"),
+                        "confianca": resultado.get("confianca", 50),
+                    }
 
             return True
 

@@ -34,16 +34,28 @@ class GerenciadorBot(Plugin):
     - Validar dados e resultados
     """
 
+    # Identificadores do plugin
+    PLUGIN_NAME = "gerenciador_bot"
+    PLUGIN_TYPE = "essencial"
+
+    _instance = None
+
+    def __new__(cls):
+        """Implementa o padrão singleton."""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance.inicializado = False
+        return cls._instance
+
     def __init__(self):
         """Inicializa o gerenciador."""
-        super().__init__()
-        self.nome = "gerenciador_bot"
-        self.descricao = "Gerenciamento central do bot"
-        self._config = None
-        self._status = "parado"
-        self.inicializado = False
-        self.timeframes = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
-        self._plugins_ativos: Dict[str, Plugin] = {}
+        if not self.inicializado:
+            super().__init__()
+            self.descricao = "Gerenciamento central do bot"
+            self._config = None
+            self._status = "parado"
+            self.timeframes = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+            self._plugins_ativos: Dict[str, Plugin] = {}
 
     def inicializar(self, config: dict) -> bool:
         """
@@ -59,10 +71,16 @@ class GerenciadorBot(Plugin):
             if self.inicializado:
                 return True
 
+            # Inicializa classe base primeiro
+            if not super().inicializar(config):
+                return False
+
             self._config = config
             self._status = "iniciando"
+
+            # Só marca como inicializado se tudo der certo
             self.inicializado = True
-            logger.info(f"Plugin {self.nome} inicializado")
+            logger.info(f"Plugin {self.PLUGIN_NAME} inicializado")
             return True
 
         except Exception as e:
@@ -81,16 +99,71 @@ class GerenciadorBot(Plugin):
         """
         try:
             if not plugin.inicializado:
-                logger.error(f"Plugin {plugin.nome} não inicializado")
+                logger.error(f"Plugin {plugin.PLUGIN_NAME} não inicializado")
                 return False
 
-            self._plugins_ativos[plugin.nome] = plugin
-            logger.info(f"Plugin {plugin.nome} registrado")
+            self._plugins_ativos[plugin.PLUGIN_NAME] = plugin
+            logger.info(f"Plugin {plugin.PLUGIN_NAME} registrado")
             return True
 
         except Exception as e:
-            logger.error(f"Erro ao registrar plugin {plugin.nome}: {e}")
+            logger.error(f"Erro ao registrar plugin {plugin.PLUGIN_NAME}: {e}")
             return False
+
+    def _validar_plugins_essenciais(self) -> bool:
+        """
+        Valida se todos os plugins essenciais estão registrados e ativos.
+
+        Returns:
+            bool: True se todos os plugins essenciais estão ok
+        """
+        plugins_essenciais = ["conexao", "banco_dados", "sinais_plugin"]
+        for plugin in plugins_essenciais:
+            if plugin not in self._plugins_ativos:
+                logger.error(f"Plugin essencial {plugin} não encontrado")
+                return False
+            if not self._plugins_ativos[plugin].inicializado:
+                logger.error(f"Plugin {plugin} não inicializado")
+                return False
+        return True
+
+    def _executar_analises(
+        self, dados_ohlcv: list, symbol: str, timeframe: str
+    ) -> dict:
+        """
+        Executa todas as análises disponíveis para um par/timeframe.
+
+        Args:
+            dados_ohlcv: Dados OHLCV do par
+            symbol: Par de trading
+            timeframe: Timeframe da análise
+
+        Returns:
+            dict: Resultados das análises
+        """
+        resultados = {}
+        plugins_analise = {
+            "analise_candles": "candles",
+            "medias_moveis": "medias_moveis",
+            "price_action": "price_action",
+            "indicadores_tendencia": "tendencia",
+        }
+
+        for plugin, chave in plugins_analise.items():
+            if plugin in self._plugins_ativos:
+                try:
+                    if plugin == "indicadores_tendencia":
+                        resultados[chave] = self._plugins_ativos[plugin].executar(
+                            dados_ohlcv, symbol, timeframe, self._config
+                        )
+                    else:
+                        resultados[chave] = self._plugins_ativos[plugin].executar(
+                            dados_ohlcv, symbol, timeframe
+                        )
+                except Exception as e:
+                    logger.error(f"Erro ao executar {plugin}: {e}")
+
+        return resultados
 
     def executar_ciclo(self) -> bool:
         """
@@ -103,26 +176,48 @@ class GerenciadorBot(Plugin):
             if self._status != "rodando":
                 return True
 
-            # Executa plugins na ordem correta
-            ordem_execucao = [
-                "conexao",
-                "banco_dados",
-                "analise_candles",
-                "indicadores_tendencia",
-                "indicadores_osciladores",
-                "indicadores_volatilidade",
-                "indicadores_volume",
-                "medias_moveis",
-                "price_action",
-                "sinais_plugin",
-            ]
+            # Valida plugins essenciais
+            if not self._validar_plugins_essenciais():
+                return False
 
-            for nome_plugin in ordem_execucao:
-                if nome_plugin in self._plugins_ativos:
-                    plugin = self._plugins_ativos[nome_plugin]
-                    if not plugin.executar():
-                        logger.error(f"Falha ao executar {nome_plugin}")
-                        return False
+            conexao = self._plugins_ativos["conexao"]
+            sinais_plugin = self._plugins_ativos["sinais_plugin"]
+
+            # Obtém apenas pares USDT
+            pares_usdt = conexao.obter_pares()
+            if not pares_usdt:
+                logger.warning("Nenhum par USDT disponível")
+                return False
+
+            logger.info(f"Analisando {len(pares_usdt)} pares USDT")
+
+            # Para cada par e timeframe
+            for symbol in pares_usdt:
+                for timeframe in self.timeframes:
+                    try:
+                        # Coleta dados OHLCV
+                        dados_ohlcv = conexao.obter_klines(symbol, timeframe)
+                        if not dados_ohlcv:
+                            logger.warning(f"Sem dados para {symbol} {timeframe}")
+                            continue
+
+                        # Executa todas as análises disponíveis
+                        resultados = self._executar_analises(
+                            dados_ohlcv, symbol, timeframe
+                        )
+
+                        # Gera sinais se houver resultados
+                        if resultados:
+                            try:
+                                sinais_plugin.executar(resultados, symbol, timeframe)
+                            except Exception as e:
+                                logger.error(
+                                    f"Erro ao gerar sinais para {symbol} {timeframe}: {e}"
+                                )
+
+                    except Exception as e:
+                        logger.error(f"Erro ao processar {symbol} {timeframe}: {e}")
+                        continue
 
             return True
 

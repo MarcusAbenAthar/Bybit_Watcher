@@ -1,5 +1,3 @@
-# plugins/gerente_plugin.py
-
 """
 Gerenciador de plugins para o bot de trading.
 
@@ -18,12 +16,12 @@ Regras de Ouro:
 
 import os
 import importlib
+from typing import Optional, Dict
+from utils.singleton import singleton
 from utils.logging_config import get_logger
+from plugins.plugin import Plugin
 
 logger = get_logger(__name__)
-from typing import Optional, Dict
-from plugins.plugin import Plugin
-from utils.singleton import singleton
 
 
 @singleton
@@ -69,37 +67,63 @@ class GerentePlugin:
             caminho_base = os.path.abspath(caminho_plugins)
             logger.info(f"Buscando plugins em: {caminho_base}")
 
-            # Lista de plugins essenciais na ordem de carregamento
-            plugins_essenciais = [
-                "conexao",
-                "banco_dados",
-                "gerenciador_banco",
-                "gerenciador_bot",
-            ]
+            # Lista de plugins em ordem de dependência
+            plugins_ordem = {
+                # Nível 1 - Infraestrutura básica
+                1: ["conexao", "gerenciador_banco"],
+                
+                # Nível 2 - Gerenciamento de dados
+                2: ["banco_dados", "validador_dados"],
+                
+                # Nível 3 - Gerenciamento central
+                3: ["gerenciador_bot"],
+                
+                # Nível 4 - Análise técnica básica
+                4: [
+                    "analise_candles",
+                    "medias_moveis",
+                    "price_action"
+                ],
+                
+                # Nível 5 - Indicadores
+                5: [
+                    "indicadores/indicadores_tendencia",
+                    "indicadores/indicadores_osciladores",
+                    "indicadores/indicadores_volatilidade",
+                    "indicadores/indicadores_volume",
+                    "indicadores/outros_indicadores"
+                ],
+                
+                # Nível 6 - Análise avançada
+                6: [
+                    "calculo_risco",
+                    "calculo_alavancagem"
+                ],
+                
+                # Nível 7 - Geração de sinais
+                7: ["sinais_plugin"]
+            }
 
-            # Lista de plugins adicionais
-            plugins_adicionais = [
-                "analise_candles",
-                "calculo_alavancagem",
-                "calculo_risco",
-                "execucao_ordens",
-                "medias_moveis",
-                "price_action",
-                "sinais_plugin",
-                "validador_dados",
-            ]
+            # Carrega plugins em ordem
+            for nivel in sorted(plugins_ordem.keys()):
+                logger.info(f"Carregando plugins nível {nivel}...")
+                plugins_nivel = plugins_ordem[nivel]
+                
+                for plugin_name in plugins_nivel:
+                    logger.debug(f"Tentando carregar plugin: {plugin_name}")
+                    
+                    # Plugins de nível 1-3 são essenciais
+                    if nivel <= 3:
+                        if not self.carregar_plugin(plugin_name):
+                            logger.error(f"Falha ao carregar plugin essencial: {plugin_name}")
+                            return False
+                    else:
+                        self.carregar_plugin(plugin_name)
 
-            logger.info("Iniciando carregamento de plugins essenciais...")
-            for plugin_name in plugins_essenciais:
-                logger.debug(f"Tentando carregar plugin essencial: {plugin_name}")
-                if not self.carregar_plugin(plugin_name):
-                    logger.error(f"Falha ao carregar plugin essencial: {plugin_name}")
-                    return False
-
-            logger.info("Iniciando carregamento de plugins adicionais...")
-            for plugin_name in plugins_adicionais:
-                logger.debug(f"Tentando carregar plugin adicional: {plugin_name}")
-                self.carregar_plugin(plugin_name)
+            # Verifica plugins essenciais
+            if not self.verificar_plugins_essenciais():
+                logger.error("Falha na verificação de plugins essenciais")
+                return False
 
             if not self.plugins:
                 logger.warning("Nenhum plugin carregado")
@@ -123,6 +147,7 @@ class GerentePlugin:
             bool: True se carregado com sucesso
         """
         try:
+            logger.debug(f"carregar_plugin chamado com {nome_plugin}")
             # Remove 'plugins.' do nome se presente
             nome_plugin = nome_plugin.replace("plugins.", "")
 
@@ -148,27 +173,60 @@ class GerentePlugin:
             for attr_name in dir(modulo):
                 attr = getattr(modulo, attr_name)
 
-                # Verifica se é uma classe que herda de Plugin
-                if (
+                # Primeiro verifica se é uma classe e herda de Plugin
+                if not (
                     isinstance(attr, type)
                     and issubclass(attr, Plugin)
                     and attr != Plugin
                 ):
-                    # Tenta instanciar para verificar o nome
-                    try:
-                        instance = attr()
-                        if (
-                            hasattr(instance, "nome")
-                            and instance.nome.lower() == nome_plugin.lower()
-                        ):
-                            plugin_class = attr
-                            logger.debug(
-                                f"Classe plugin válida encontrada: {attr_name}"
-                            )
-                            break  # Encontrou a classe, pode sair do loop
-                    except Exception as e:
-                        logger.error(f"Erro ao instanciar {attr_name}: {e}")
-                        continue
+                    continue
+
+                logger.debug(f"Encontrada classe que herda de Plugin: {attr_name}")
+
+                # Log detalhado da classe sendo inspecionada
+                logger.debug(f"Inspecionando classe: {attr_name}")
+                logger.debug(f"Herda de Plugin: {issubclass(attr, Plugin)}")
+
+                # Verifica atributos PLUGIN_NAME e PLUGIN_TYPE
+                if hasattr(attr, "PLUGIN_NAME") and hasattr(attr, "PLUGIN_TYPE"):
+                    plugin_name = getattr(attr, "PLUGIN_NAME", "").lower()
+                    plugin_type = getattr(attr, "PLUGIN_TYPE", "").lower()
+                    logger.debug(
+                        f"PLUGIN_NAME={plugin_name}, PLUGIN_TYPE={plugin_type}"
+                    )
+                    logger.debug(f"Comparando com nome_plugin={nome_plugin.lower()}")
+
+                    # Verifica correspondência exata com nome do plugin
+                    if plugin_name == nome_plugin.lower():
+                        logger.info(f"Plugin encontrado via PLUGIN_NAME: {attr_name}")
+                        plugin_class = attr
+                        break
+                else:
+                    logger.debug(
+                        f"Classe {attr_name} não tem PLUGIN_NAME ou PLUGIN_TYPE"
+                    )
+
+                # Se não encontrou por PLUGIN_NAME, tenta pelo nome da classe
+                if not plugin_class:
+                    class_name = attr_name.lower()
+                    if class_name == nome_plugin.lower():
+                        logger.info(
+                            f"Plugin encontrado via nome da classe: {attr_name}"
+                        )
+                        plugin_class = attr
+                        break
+
+                    # Converte CamelCase para snake_case como última tentativa
+                    snake_case = "".join(
+                        [
+                            "_" + c.lower() if c.isupper() else c.lower()
+                            for c in attr_name
+                        ]
+                    ).lstrip("_")
+                    if snake_case == nome_plugin.lower():
+                        logger.info(f"Plugin encontrado via snake_case: {attr_name}")
+                        plugin_class = attr
+                        break
 
             if not plugin_class:
                 logger.warning(f"Nenhuma classe plugin encontrada em {nome_plugin}")
@@ -189,53 +247,6 @@ class GerentePlugin:
         except Exception as e:
             logger.error(f"Erro ao carregar plugin {nome_plugin}: {e}", exc_info=True)
             return False
-
-    def _carregar_plugin(self, nome_modulo: str) -> Optional[Plugin]:
-        """
-        Carrega um plugin específico.
-
-        Args:
-            nome_modulo: Nome do módulo do plugin (sem .py)
-
-        Returns:
-            Optional[Plugin]: Instância do plugin ou None se falhar
-        """
-        try:
-            # Importa o módulo
-            modulo = importlib.import_module(f"plugins.{nome_modulo}")
-
-            # Procura pela classe que herda de Plugin
-            for item_name in dir(modulo):
-                item = getattr(modulo, item_name)
-
-                # Verifica se é uma classe que herda de Plugin
-                if (
-                    isinstance(item, type)
-                    and issubclass(item, Plugin)
-                    and item != Plugin
-                ):
-
-                    # Instancia o plugin
-                    plugin = item()
-
-                    # Verifica se o nome corresponde
-                    if plugin.nome == nome_modulo:
-                        # Inicializa o plugin
-                        if self.config:
-                            plugin.inicializar(self.config)
-
-                        logger.info(f"Plugin {nome_modulo} carregado com sucesso")
-                        return plugin
-
-            logger.warning(f"Plugin {nome_modulo} não encontrado")
-            return None
-
-        except ImportError as e:
-            logger.error(f"Erro ao importar plugin {nome_modulo}: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Erro ao carregar plugin {nome_modulo}: {e}")
-            return None
 
     def _eh_plugin_valido(self, arquivo: str) -> bool:
         """
@@ -316,187 +327,6 @@ class GerentePlugin:
             logger.error(f"Erro ao listar plugins: {e}")
 
 
-def obter_conexao():
-    """
-    Fornece acesso ao plugin de Conexão.
-
-    Returns:
-        Conexao: Instância do plugin de Conexão.
-    """
-    from plugins.conexao import Conexao
-
-    conexao = Conexao()
-    return conexao
-
-
-def obter_banco_dados(config=None):
-    """
-    Retorna a conexão única com o banco de dados.
-
-    Returns:
-        BancoDados: Instância do plugin de banco de dados
-    """
-    from plugins.banco_dados import BancoDados
-    from dotenv import load_dotenv
-    import os
-
-    # Carrega variáveis do .env
-    load_dotenv()
-
-    # Se não passou config, usa do .env
-    if not config:
-        config = {
-            "database": {
-                "host": os.getenv("DB_HOST"),
-                "database": os.getenv("DB_NAME"),
-                "user": os.getenv("DB_USER"),
-                "password": os.getenv("DB_PASSWORD"),
-            }
-        }
-
-    banco = BancoDados()
-    banco.inicializar(config)
-    return banco
-
-
-def finalizar_conexao():
-    """
-    Fecha a conexão com o banco quando o bot for encerrado.
-    """
-    from plugins.gerenciador_banco import GerenciadorBanco
-
-    gerenciador_banco = GerenciadorBanco()
-    gerenciador_banco.fechar_conexao()
-
-
-def obter_analise_candles():
-    """
-    Fornece acesso ao plugin de Análise de Candles.
-
-    Returns:
-        AnaliseCandles: Instância do plugin de Análise de Candles.
-    """
-    from plugins.analise_candles import AnaliseCandles
-
-    analise_candles = AnaliseCandles()
-    return analise_candles
-
-
-def obter_calculo_alavancagem():
-    """
-    Fornece acesso ao plugin de Cálculo de Alavancagem.
-
-    Returns:
-        CalculoAlavancagem: Instância do plugin de Cálculo de Alavancagem.
-    """
-    from plugins.calculo_alavancagem import CalculoAlavancagem
-
-    return CalculoAlavancagem()
-
-
-def obter_execucao_ordens():
-    """
-    Fornece acesso ao plugin de Execução de Ordens.
-
-    Returns:
-        ExecucaoOrdens: Instância do plugin de Execução de Ordens.
-    """
-    from plugins.execucao_ordens import ExecucaoOrdens
-
-    execucao_ordens = ExecucaoOrdens()
-    return execucao_ordens
-
-
-def obter_medias_moveis():
-    """
-    Fornece acesso ao plugin de Médias Móveis.
-
-    Returns:
-        MediasMoveis: Instância do plugin de Médias Móveis.
-    """
-    from plugins.medias_moveis import MediasMoveis
-
-    medias_moveis = MediasMoveis()
-    return medias_moveis
-
-
-def obter_price_action():
-    """
-    Fornece acesso ao plugin de Price Action.
-
-    Returns:
-        PriceAction: Instância do plugin de Price Action.
-    """
-    from plugins.price_action import PriceAction
-
-    return PriceAction()
-
-
-def obter_indicadores_osciladores():
-    """
-    Fornece acesso ao plugin de Indicadores Osciladores.
-
-    Returns:
-        IndicadoresOsciladores: Instância do plugin de Indicadores Osciladores.
-    """
-    from plugins.indicadores.indicadores_osciladores import IndicadoresOsciladores
-
-    indicadores_osciladores = IndicadoresOsciladores()
-    return indicadores_osciladores
-
-
-def obter_indicadores_tendencia():
-    """
-    Fornece acesso ao plugin de Indicadores de Tendência.
-
-    Returns:
-        IndicadoresTendencia: Instância do plugin de Indicadores de Tendência.
-    """
-    from plugins.indicadores.indicadores_tendencia import IndicadoresTendencia
-
-    indicadores_tendencia = IndicadoresTendencia()
-    return indicadores_tendencia
-
-
-def obter_indicadores_volatilidade():
-    """
-    Fornece acesso ao plugin de Indicadores de Volatilidade.
-
-    Returns:
-        IndicadoresVolatilidade: Instância do plugin de Indicadores de Volatilidade.
-    """
-    from plugins.indicadores.indicadores_volatilidade import IndicadoresVolatilidade
-
-    indicadores_volatilidade = IndicadoresVolatilidade()
-    return indicadores_volatilidade
-
-
-def obter_indicadores_volume():
-    """
-    Fornece acesso ao plugin de Indicadores de Volume.
-
-    Returns:
-        IndicadoresVolume: Instância do plugin de Indicadores de Volume.
-    """
-    from plugins.indicadores.indicadores_volume import IndicadoresVolume
-
-    indicadores_volume = IndicadoresVolume()
-    return indicadores_volume
-
-
-def obter_outros_indicadores():
-    """
-    Fornece acesso ao plugin de Outros Indicadores.
-
-    Returns:
-        OutrosIndicadores: Instância do plugin de Outros Indicadores.
-    """
-    from plugins.indicadores.outros_indicadores import OutrosIndicadores
-
-    outros_indicadores = OutrosIndicadores()
-    return outros_indicadores
-
-
 if __name__ == "__main__":
     gerente = GerentePlugin()
     sucesso = gerente.carregar_plugins("plugins")
@@ -504,27 +334,3 @@ if __name__ == "__main__":
         print("Plugins carregados:", len(gerente.plugins))
     else:
         print("Falha no carregamento")
-
-
-# plugins/banco_dados.py
-@singleton
-class BancoDados(Plugin):
-    def __init__(self):
-        super().__init__()
-        self.nome = "banco_dados"  # Corresponde ao nome do arquivo
-
-
-# plugins/gerenciador_banco.py
-@singleton
-class GerenciadorBanco(Plugin):
-    def __init__(self):
-        super().__init__()
-        self.nome = "gerenciador_banco"
-
-
-# plugins/gerenciador_bot.py
-@singleton
-class GerenciadorBot(Plugin):
-    def __init__(self):
-        super().__init__()
-        self.nome = "gerenciador_bot"

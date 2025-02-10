@@ -6,21 +6,19 @@ from functools import wraps
 
 def singleton(cls):
     """
-    Decorator para implementar o padrão Singleton.
+    Decorator para garantir que uma classe tenha apenas uma instância.
 
     Args:
-        cls: Classe a ser decorada
+        cls: A classe a ser decorada.
 
     Returns:
-        Instância única da classe
+        A instância única da classe.
     """
     instances = {}
 
-    @wraps(cls)
-    def get_instance(*args, **kwargs):
+    def getinstance(*args, **kwargs):
         if cls not in instances:
             instances[cls] = cls(*args, **kwargs)
-            logger.debug(f"Criada nova instância de {cls.__name__}")
         return instances[cls]
 
-    return get_instance
+    return getinstance

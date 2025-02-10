@@ -46,8 +46,8 @@ BASE_CONFIG = {
         # Handler para console
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "simples",
-            "level": "INFO",
+            "formatter": "detalhado",  # Changed to detailed format
+            "level": "DEBUG",
         },
         # Handler para log geral
         "arquivo": {
@@ -81,15 +81,21 @@ BASE_CONFIG = {
         # Logger raiz
         "": {
             "handlers": ["console", "arquivo", "erros"],
-            "level": "INFO",
+            "level": "DEBUG",
             "propagate": True,
         },
         # Logger específico para sinais
         "sinais": {"handlers": ["sinais"], "level": "INFO", "propagate": False},
         # Loggers específicos para cada plugin
         "plugins": {
-            "level": "INFO",
+            "level": "DEBUG",
             "handlers": ["console", "arquivo", "erros"],
+            "propagate": False,
+        },
+        # Logger específico para gerente_plugin
+        "plugins.gerente_plugin": {
+            "level": "DEBUG",
+            "handlers": ["console", "arquivo"],
             "propagate": False,
         },
     },

@@ -182,6 +182,14 @@ class IndicadoresTendencia(Plugin):
             else:
                 return {"sinal": "NEUTRO", "confianca": 0}
 
+            # Determina força do sinal
+            forca = "FRACA"
+            if total_indicadores >= 2:
+                if confianca_compra >= 0.8 or confianca_venda >= 0.8:
+                    forca = "FORTE"
+                elif confianca_compra >= 0.6 or confianca_venda >= 0.6:
+                    forca = "MÉDIA"
+
             # Gera sinal final com base na confiança mínima
             if confianca_compra >= self.config["min_confianca"]:
                 # Calcula níveis de TP/SL para compra
@@ -191,8 +199,9 @@ class IndicadoresTendencia(Plugin):
                 take_profit = preco_atual + (atr * 2)
 
                 return {
-                    "sinal": "COMPRA",
-                    "confianca": confianca_compra,
+                    "direcao": "ALTA",
+                    "forca": forca,
+                    "confianca": confianca_compra * 100,  # Converte para percentual
                     "stop_loss": stop_loss,
                     "take_profit": take_profit,
                 }
@@ -205,13 +214,14 @@ class IndicadoresTendencia(Plugin):
                 take_profit = preco_atual - (atr * 2)
 
                 return {
-                    "sinal": "VENDA",
-                    "confianca": confianca_venda,
+                    "direcao": "BAIXA",
+                    "forca": forca,
+                    "confianca": confianca_venda * 100,  # Converte para percentual
                     "stop_loss": stop_loss,
                     "take_profit": take_profit,
                 }
 
-            return {"sinal": "NEUTRO", "confianca": 0}
+            return {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0}
 
         except Exception as e:
             logger.error(f"Erro ao gerar sinal: {e}")
@@ -279,10 +289,10 @@ class IndicadoresTendencia(Plugin):
             logger.debug(f"Sinal gerado: {sinal}")
 
             # Loga resultado
-            if sinal["sinal"] != "NEUTRO":
+            if sinal["direcao"] != "NEUTRO":
                 logger.info(
-                    f"{symbol} - {timeframe} - Sinal: {sinal['sinal']} "
-                    f"(Confiança: {sinal['confianca']:.2%})"
+                    f"{symbol} - {timeframe} - Direção: {sinal['direcao']} "
+                    f"(Força: {sinal['forca']}, Confiança: {sinal['confianca']:.2f}%)"
                 )
 
                 if "stop_loss" in sinal:
@@ -296,7 +306,8 @@ class IndicadoresTendencia(Plugin):
                 symbol=symbol,
                 timeframe=timeframe,
                 tipo="tendencia",
-                sinal=sinal["sinal"],
+                sinal=sinal["direcao"],
+                forca=sinal["forca"],
                 confianca=sinal["confianca"],
                 stop_loss=sinal.get("stop_loss"),
                 take_profit=sinal.get("take_profit"),

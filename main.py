@@ -30,6 +30,7 @@ import os
 
 # Imports locais
 from plugins.gerente_plugin import GerentePlugin
+from utils.logging_config import configurar_logging
 
 # Configuração inicial
 load_dotenv()
@@ -37,11 +38,16 @@ logger = logging.getLogger(__name__)
 
 # Configuração de logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
+    level=logging.DEBUG, format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 )
 
-# Plugins essenciais
-PLUGINS_ESSENCIAIS = ["conexao", "banco_dados", "gerenciador_bot"]
+# Plugins essenciais em ordem de dependência
+PLUGINS_ESSENCIAIS = [
+    "conexao",  # Sem dependências
+    "gerenciador_banco",  # Sem dependências
+    "banco_dados",  # Depende de gerenciador_banco
+    "gerenciador_bot",  # Depende de banco_dados e gerenciador_banco
+]
 
 # Plugins adicionais
 PLUGINS_ADICIONAIS = [
@@ -49,7 +55,6 @@ PLUGINS_ADICIONAIS = [
     "calculo_alavancagem",
     "calculo_risco",
     "execucao_ordens",
-    "gerenciador_banco",
     "indicadores.indicadores_osciladores",
     "indicadores.indicadores_tendencia",
     "indicadores.indicadores_volatilidade",
@@ -73,9 +78,17 @@ def carregar_config() -> dict:
     Carrega a configuração do bot de forma segura.
 
     Returns:
-        dict: Configuração carregada
+        dict: Configuração carregada com timeframes e configurações do banco
     """
-    config = {"timeframes": ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]}
+    config = {
+        "timeframes": ["1m", "5m", "15m", "30m", "1h", "4h", "1d"],
+        "database": {
+            "host": os.getenv("DB_HOST", "localhost"),
+            "database": os.getenv("DB_NAME", "bybit_watcher_db"),
+            "user": os.getenv("DB_USER", "postgres"),
+            "password": os.getenv("DB_PASSWORD", "12345"),
+        },
+    }
     return config
 
 
@@ -116,6 +129,7 @@ def main() -> None:
     """Função principal do bot."""
     try:
         # Setup inicial
+        configurar_logging()  # Initialize logging
         logger.info("Iniciando bot...")
         signal.signal(signal.SIGINT, signal_handler)
 

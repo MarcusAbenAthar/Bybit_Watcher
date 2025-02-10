@@ -167,14 +167,43 @@ class MediasMoveis(Plugin):
             # Calcular alavancagem baseada na volatilidade
             self.alavancagem = self._calcular_alavancagem(closes)
 
-            # Gerar sinal
+            # Calcula distância percentual entre médias
+            distancia = abs(ma20[-1] - ma50[-1]) / ma50[-1] * 100
+
+            # Determina força do sinal baseada na distância
+            if distancia >= 2.0:  # 2% ou mais de distância
+                forca = "FORTE"
+            elif distancia >= 1.0:  # Entre 1% e 2%
+                forca = "MÉDIA"
+            else:
+                forca = "FRACA"
+
+            # Calcula consistência do movimento (últimos 5 períodos)
+            tendencia_alta = sum(1 for i in range(-5, 0) if ma20[i] > ma50[i])
+            tendencia_baixa = sum(1 for i in range(-5, 0) if ma20[i] < ma50[i])
+
+            # Calcula confiança baseada na consistência
+            if tendencia_alta > tendencia_baixa:
+                confianca = (tendencia_alta / 5) * 100
+                direcao = "ALTA"
+            elif tendencia_baixa > tendencia_alta:
+                confianca = (tendencia_baixa / 5) * 100
+                direcao = "BAIXA"
+            else:
+                confianca = 0
+                direcao = "NEUTRO"
+
+            # Gera sinal no formato padrão
             sinal = {
-                "symbol": symbol,
-                "timeframe": timeframe,
-                "ma20": ma20[-1],
-                "ma50": ma50[-1],
-                "alavancagem": self.alavancagem,
-                "direcao": "compra" if ma20[-1] > ma50[-1] else "venda",
+                "direcao": direcao,
+                "forca": forca,
+                "confianca": confianca,
+                "indicadores": {
+                    "ma20": ma20[-1],
+                    "ma50": ma50[-1],
+                    "distancia": distancia,
+                    "alavancagem": self.alavancagem,
+                },
             }
 
             return sinal
