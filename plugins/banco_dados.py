@@ -59,9 +59,7 @@ class BancoDados(Plugin, metaclass=Singleton):
                     from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 
                     gerente = GerentePlugin()
-                    gerenciador_banco = gerente.plugins.get(
-                        "gerenciadores.gerenciador_banco"
-                    )
+                    gerenciador_banco = gerente.plugins.get("gerenciador_banco")
 
                     if gerenciador_banco and gerenciador_banco.inicializado:
                         # Usa conexão do gerenciador

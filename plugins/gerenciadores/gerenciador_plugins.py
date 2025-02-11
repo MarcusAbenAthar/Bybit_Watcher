@@ -113,9 +113,9 @@ class GerentePlugin(metaclass=Singleton):
                 logger.error(f"Falha ao inicializar {nome_plugin}")
                 return False
 
-            # Registra o plugin usando o nome completo
-            self.plugins[nome_plugin] = plugin
-            logger.info(f"Plugin {nome_plugin} carregado com sucesso")
+            # Registra o plugin usando o nome base
+            self.plugins[nome_base] = plugin
+            logger.info(f"Plugin {nome_base} carregado com sucesso")
             return True
 
         except Exception as e:
@@ -189,18 +189,20 @@ class GerentePlugin(metaclass=Singleton):
             bool: True se todos plugins essenciais OK
         """
         essenciais = {
-            "conexao": "Conexão com a Bybit",
+            "gerenciador_banco": "Gerenciador do Banco",
             "banco_dados": "Banco de Dados",
-            "gerenciadores.gerenciador_banco": "Gerenciador do Banco",
-            "gerenciadores.gerenciador_bot": "Gerenciador do Bot",
+            "conexao": "Conexão com a Bybit",
+            "gerenciador_bot": "Gerenciador do Bot",
         }
 
         for nome, descricao in essenciais.items():
-            if nome not in self.plugins:
+            # Extrai o nome base do plugin
+            nome_base = nome.split(".")[-1]
+            if nome_base not in self.plugins:
                 logger.error(f"Plugin essencial faltando: {descricao} ({nome})")
                 return False
 
-            if not self.plugins[nome].inicializado:
+            if not self.plugins[nome_base].inicializado:
                 logger.error(f"Plugin não inicializado: {descricao} ({nome})")
                 return False
 

@@ -75,17 +75,108 @@ class GerenciadorBanco(Plugin, metaclass=Singleton):
             # Conecta ao banco
             self._conectar_banco()
             self.inicializado = True
+
+            # Inicializa schema e tabelas
+            if not self._inicializar_schema():
+                return False
+
             return True
 
         except Exception as e:
             logger.error(f"Erro ao inicializar gerenciador: {e}")
             return False
 
+    def _criar_database(self) -> bool:
+        """
+        Cria o banco de dados se não existir.
+
+        Returns:
+            bool: True se o banco existe ou foi criado com sucesso
+        """
+        try:
+            # Conecta ao postgres para verificar/criar o banco
+            conn = psycopg2.connect(
+                host=self._config["database"]["host"],
+                database="postgres",  # Banco padrão mais estável
+                user=self._config["database"]["user"],
+                password=self._config["database"]["password"],
+                connect_timeout=5,
+                client_encoding="LATIN1",
+                options="-c client_encoding=LATIN1 -c standard_conforming_strings=on",
+            )
+            conn.autocommit = True  # Necessário para criar database
+
+            with conn.cursor() as cur:
+                # Verifica se o banco existe
+                cur.execute(
+                    "SELECT 1 FROM pg_database WHERE datname = %s",
+                    (self._config["database"]["database"],),
+                )
+                exists = cur.fetchone()
+
+                if not exists:
+                    # Cria o banco de dados
+                    db_name = self._config["database"]["database"]
+                    # Escapa o nome do banco para evitar SQL injection
+                    cur.execute(
+                        f"""
+                        CREATE DATABASE "{db_name}"
+                        WITH 
+                            ENCODING = 'UTF8'
+                            LC_COLLATE = 'Portuguese_Brazil.1252'
+                            LC_CTYPE = 'Portuguese_Brazil.1252'
+                            TEMPLATE template0
+                            CONNECTION LIMIT = -1
+                        """
+                    )
+                    logger.info(f"Banco de dados {db_name} criado com sucesso")
+
+            conn.close()
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro ao criar banco de dados: {type(e).__name__} - {str(e)}")
+            return False
+
+    def _inicializar_schema(self) -> bool:
+        """
+        Inicializa o schema e tabelas necessárias.
+
+        Returns:
+            bool: True se o schema foi inicializado com sucesso
+        """
+        try:
+            # Cria schema se não existir
+            self.executar_query("CREATE SCHEMA IF NOT EXISTS public", commit=True)
+
+            # Cria as tabelas necessárias
+            tabelas = [
+                "klines",
+                "sinais",
+                "analises",
+                "indicadores_tendencia",
+                "indicadores_osciladores",
+                "indicadores_volatilidade",
+                "indicadores_volume",
+                "outros_indicadores",
+            ]
+            for tabela in tabelas:
+                if not self.criar_tabela(tabela):
+                    logger.error(f"Falha ao criar tabela {tabela}")
+                    return False
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro ao inicializar schema: {type(e).__name__} - {str(e)}")
+            return False
+
     def _conectar_banco(self) -> bool:
         """Estabelece conexao com o banco PostgreSQL."""
         try:
-            # Tenta conectar ao banco usando caminho absoluto
-            import pathlib
+            # Primeiro tenta criar o banco se não existir
+            if not self._criar_database():
+                return False
 
             # Tenta conectar ao banco
             self._conn = psycopg2.connect(
@@ -94,8 +185,8 @@ class GerenciadorBanco(Plugin, metaclass=Singleton):
                 user=self._config["database"]["user"],
                 password=self._config["database"]["password"],
                 connect_timeout=5,
-                client_encoding="utf8",  # Corrigir o encoding
-                options="-c client_encoding=utf8",  # Corrigir o encoding
+                client_encoding="LATIN1",
+                options="-c client_encoding=LATIN1 -c standard_conforming_strings=on",
             )
             return True
 
@@ -224,6 +315,122 @@ class GerenciadorBanco(Plugin, metaclass=Singleton):
                         resultado TEXT NOT NULL,
                         detalhes TEXT,
                         timestamp BIGINT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE (symbol, timeframe, timestamp)
+                    )
+                    """,
+                    commit=True,
+                )
+
+            elif nome_tabela == "indicadores_tendencia":
+                self.executar_query(
+                    f"""
+                    CREATE TABLE {schema}.indicadores_tendencia (
+                        id SERIAL PRIMARY KEY,
+                        symbol TEXT NOT NULL,
+                        timeframe TEXT NOT NULL,
+                        timestamp BIGINT NOT NULL,
+                        sma REAL,
+                        ema REAL,
+                        wma REAL,
+                        dema REAL,
+                        tema REAL,
+                        trima REAL,
+                        kama REAL,
+                        mama REAL,
+                        t3 REAL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE (symbol, timeframe, timestamp)
+                    )
+                    """,
+                    commit=True,
+                )
+
+            elif nome_tabela == "indicadores_osciladores":
+                self.executar_query(
+                    f"""
+                    CREATE TABLE {schema}.indicadores_osciladores (
+                        id SERIAL PRIMARY KEY,
+                        symbol TEXT NOT NULL,
+                        timeframe TEXT NOT NULL,
+                        timestamp BIGINT NOT NULL,
+                        rsi REAL,
+                        stoch_rsi REAL,
+                        cci REAL,
+                        mfi REAL,
+                        willr REAL,
+                        ultimate_oscillator REAL,
+                        stochastic_k REAL,
+                        stochastic_d REAL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE (symbol, timeframe, timestamp)
+                    )
+                    """,
+                    commit=True,
+                )
+
+            elif nome_tabela == "indicadores_volatilidade":
+                self.executar_query(
+                    f"""
+                    CREATE TABLE {schema}.indicadores_volatilidade (
+                        id SERIAL PRIMARY KEY,
+                        symbol TEXT NOT NULL,
+                        timeframe TEXT NOT NULL,
+                        timestamp BIGINT NOT NULL,
+                        atr REAL,
+                        natr REAL,
+                        trange REAL,
+                        bollinger_upper REAL,
+                        bollinger_middle REAL,
+                        bollinger_lower REAL,
+                        keltner_upper REAL,
+                        keltner_middle REAL,
+                        keltner_lower REAL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE (symbol, timeframe, timestamp)
+                    )
+                    """,
+                    commit=True,
+                )
+
+            elif nome_tabela == "indicadores_volume":
+                self.executar_query(
+                    f"""
+                    CREATE TABLE {schema}.indicadores_volume (
+                        id SERIAL PRIMARY KEY,
+                        symbol TEXT NOT NULL,
+                        timeframe TEXT NOT NULL,
+                        timestamp BIGINT NOT NULL,
+                        ad REAL,
+                        adosc REAL,
+                        obv REAL,
+                        volume_sma REAL,
+                        volume_ema REAL,
+                        vwap REAL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE (symbol, timeframe, timestamp)
+                    )
+                    """,
+                    commit=True,
+                )
+
+            elif nome_tabela == "outros_indicadores":
+                self.executar_query(
+                    f"""
+                    CREATE TABLE {schema}.outros_indicadores (
+                        id SERIAL PRIMARY KEY,
+                        symbol TEXT NOT NULL,
+                        timeframe TEXT NOT NULL,
+                        timestamp BIGINT NOT NULL,
+                        macd_line REAL,
+                        macd_signal REAL,
+                        macd_hist REAL,
+                        sar REAL,
+                        adx REAL,
+                        di_plus REAL,
+                        di_minus REAL,
+                        aroon_up REAL,
+                        aroon_down REAL,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         UNIQUE (symbol, timeframe, timestamp)
                     )
