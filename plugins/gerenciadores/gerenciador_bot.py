@@ -20,11 +20,10 @@ logger = get_logger(__name__)
 import time
 from typing import Dict, List, Optional
 from plugins.plugin import Plugin
-from utils.singleton import singleton
+from utils.singleton import Singleton
 
 
-@singleton
-class GerenciadorBot(Plugin):
+class GerenciadorBot(Plugin, metaclass=Singleton):
     """
     Gerenciador central do bot.
 
@@ -38,24 +37,16 @@ class GerenciadorBot(Plugin):
     PLUGIN_NAME = "gerenciador_bot"
     PLUGIN_TYPE = "essencial"
 
-    _instance = None
-
-    def __new__(cls):
-        """Implementa o padrão singleton."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance.inicializado = False
-        return cls._instance
-
     def __init__(self):
         """Inicializa o gerenciador."""
-        if not self.inicializado:
-            super().__init__()
-            self.descricao = "Gerenciamento central do bot"
-            self._config = None
-            self._status = "parado"
-            self.timeframes = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
-            self._plugins_ativos: Dict[str, Plugin] = {}
+        super().__init__()
+        self.nome = self.PLUGIN_NAME
+        self.descricao = "Gerenciamento central do bot"
+        self._config = None
+        self._status = "parado"
+        self.timeframes = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+        self._plugins_ativos: Dict[str, Plugin] = {}
+        self.inicializado = False
 
     def inicializar(self, config: dict) -> bool:
         """
@@ -117,14 +108,21 @@ class GerenciadorBot(Plugin):
         Returns:
             bool: True se todos os plugins essenciais estão ok
         """
-        plugins_essenciais = ["conexao", "banco_dados", "sinais_plugin"]
-        for plugin in plugins_essenciais:
-            if plugin not in self._plugins_ativos:
-                logger.error(f"Plugin essencial {plugin} não encontrado")
+        plugins_essenciais = {
+            "conexao": "Conexão com a Bybit",
+            "banco_dados": "Banco de Dados",
+            "sinais_plugin": "Gerador de Sinais",
+        }
+
+        for nome, descricao in plugins_essenciais.items():
+            if nome not in self._plugins_ativos:
+                logger.error(f"Plugin essencial faltando: {descricao} ({nome})")
                 return False
-            if not self._plugins_ativos[plugin].inicializado:
-                logger.error(f"Plugin {plugin} não inicializado")
+
+            if not self._plugins_ativos[nome].inicializado:
+                logger.error(f"Plugin não inicializado: {descricao} ({nome})")
                 return False
+
         return True
 
     def _executar_analises(

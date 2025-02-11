@@ -4,21 +4,18 @@ logger = get_logger(__name__)
 from functools import wraps
 
 
-def singleton(cls):
+class Singleton(type):
     """
-    Decorator para garantir que uma classe tenha apenas uma instância.
+    Metaclasse para implementar o padrão Singleton.
 
-    Args:
-        cls: A classe a ser decorada.
-
-    Returns:
-        A instância única da classe.
+    Uso:
+        class MinhaClasse(metaclass=Singleton):
+            pass
     """
-    instances = {}
 
-    def getinstance(*args, **kwargs):
-        if cls not in instances:
-            instances[cls] = cls(*args, **kwargs)
-        return instances[cls]
+    _instances = {}
 
-    return getinstance
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super().__call__(*args, **kwargs)
+        return cls._instances[cls]

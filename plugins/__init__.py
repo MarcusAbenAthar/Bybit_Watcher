@@ -22,8 +22,8 @@ from plugins.gerenciadores.gerenciador_bot import (
 
 # Exporta as classes para serem encontradas pelo gerente de plugins
 __all__ = [
-    "Plugin",
     # Plugins essenciais em ordem de dependência
+    "Plugin",  # Base
     "Conexao",  # Sem dependências
     "GerenciadorBanco",  # Sem dependências
     "BancoDados",  # Depende de gerenciador_banco

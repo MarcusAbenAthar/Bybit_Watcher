@@ -44,9 +44,9 @@ logging.basicConfig(
 # Plugins essenciais em ordem de dependência
 PLUGINS_ESSENCIAIS = [
     "conexao",  # Sem dependências
-    "gerenciadores.gerenciador_banco",  # Sem dependências
-    "gerenciadores.banco_dados",  # Depende de gerenciador_banco
-    "gerenciadores.gerenciador_bot",  # Depende de banco_dados e gerenciador_banco
+    "gerenciadores/gerenciador_banco",  # Sem dependências
+    "banco_dados",  # Depende de gerenciador_banco
+    "gerenciadores/gerenciador_bot",  # Depende de banco_dados e gerenciador_banco
 ]
 
 # Plugins adicionais

@@ -20,28 +20,18 @@ from typing import List, Dict, Optional
 import ccxt
 import requests
 from plugins.plugin import Plugin
-from utils.singleton import singleton
+from utils.singleton import Singleton
 from utils.logging_config import get_logger
 
 logger = logging.getLogger(__name__)
 
 
-class Conexao(Plugin):
+class Conexao(Plugin, metaclass=Singleton):
     """Plugin para conexão com a Bybit."""
 
     # Identificador explícito do plugin
     PLUGIN_NAME = "conexao"
     PLUGIN_TYPE = "essencial"
-
-    # Singleton instance
-    _instance = None
-
-    def __new__(cls):
-        """Implementa o padrão Singleton."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance.inicializado = False
-        return cls._instance
 
     def __init__(self):
         """Inicializa o plugin de conexão."""
