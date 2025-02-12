@@ -44,8 +44,6 @@ Bybit_Watcher/
 │   ├── plugin.py           # Classe base para plugins
 │   ├── conexao.py          # Plugin de conexão com Bybit
 │   ├── banco_dados.py      # Plugin de operações básicas do banco
-│   ├── gerenciador_banco.py # Gerenciador de banco de dados
-│   ├── gerenciador_bot.py  # Gerenciador do bot
 │   ├── calculo_alavancagem.py # Cálculos de alavancagem
 │   ├── calculo_risco.py    # Cálculos de risco
 │   ├── analise_candles.py  # Análise de candles
@@ -54,13 +52,20 @@ Bybit_Watcher/
 │   ├── validador_dados.py  # Validação de dados
 │   ├── sinais_plugin.py    # Geração de sinais
 │   │
-│   └── indicadores/        # Subpacote de indicadores
-│       ├── __init__.py
-│       ├── indicadores_tendencia.py
-│       ├── indicadores_osciladores.py
-│       ├── indicadores_volatilidade.py
-│       ├── indicadores_volume.py
-│       └── outros_indicadores.py
+│   ├── indicadores/        # Subpacote de indicadores
+│   │    ├── __init__.py
+│   │    ├── indicadores_tendencia.py
+│   │    ├── indicadores_osciladores.py
+│   │    ├── indicadores_volatilidade.py
+│   │    ├── indicadores_volume.py
+│   │    └── outros_indicadores.py
+│   │
+│   └── gerenciadores/      # Subpacote dos gerenciadores
+│         ├── __init__.py
+│         ├── gerenciador_banco.py # Gerenciador de banco de dados
+│         ├── gerenciador_bot.py  # Gerenciador do bot
+│         └── gerenciador_plugins.py # Gerenciador dos plugins
+│
 │
 ├── utils/                  # Utilitários
 │   ├── __init__.py

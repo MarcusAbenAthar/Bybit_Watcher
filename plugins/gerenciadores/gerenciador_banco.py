@@ -255,7 +255,6 @@ class GerenciadorBanco(Plugin, metaclass=Singleton):
             )
 
             if exists and exists[0][0]:
-                logger.info(f"Tabela {schema}.{nome_tabela} ja existe")
                 return True
 
             # Cria a tabela apropriada

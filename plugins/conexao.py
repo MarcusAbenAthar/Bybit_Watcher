@@ -35,6 +35,7 @@ class Conexao(Plugin, metaclass=Singleton):
 
     def __init__(self):
         """Inicializa o plugin de conexão."""
+
         super().__init__()
         # Atributos obrigatórios da classe base
         self.nome = "conexao"  # Nome deve corresponder ao arquivo
@@ -64,7 +65,7 @@ class Conexao(Plugin, metaclass=Singleton):
             # Conecta com a exchange
             if not self._conectar_bybit():
                 return False
-
+            self.inicializado = True  # Correção do bug de conexão
             logger.info("Plugin Conexao inicializado com sucesso")
             return True
 
