@@ -69,7 +69,11 @@ Bybit_Watcher/
 │
 ├── utils/                  # Utilitários
 │   ├── __init__.py
+│   ├── config.py           # Implementação do config.py
+│   ├── handlers.py         # Implementação do handlers
 │   ├── logging_config.py   # Configuração de logs
+│   ├── padroes_candles.py  # Implementação do padroes_candles
+│   ├── sinais_logging.py   # Implementação do sinais_logging
 │   └── singleton.py        # Implementação do Singleton
 │
 ├── tests/                  # Testes unitários

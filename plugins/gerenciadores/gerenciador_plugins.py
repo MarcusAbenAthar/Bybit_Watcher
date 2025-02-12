@@ -72,11 +72,9 @@ class GerentePlugin(metaclass=Singleton):
 
             # Importa o módulo
             caminho_modulo = f"plugins.{nome_plugin}"
-            logger.info(f"Importando módulo: {caminho_modulo}")
 
             try:
                 modulo = importlib.import_module(caminho_modulo)
-                logger.info(f"Módulo importado: {modulo.__file__}")
             except ImportError as e:
                 logger.error(f"Erro ao importar {caminho_modulo}: {e}")
                 return False
@@ -97,7 +95,6 @@ class GerentePlugin(metaclass=Singleton):
                             attr, "PLUGIN_TYPE"
                         ):
                             plugin_class = attr
-                            logger.debug(f"Classe plugin encontrada: {attr.__name__}")
                             break
                 except Exception as e:
                     logger.debug(f"Erro ao verificar atributo {item}: {e}")

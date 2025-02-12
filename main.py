@@ -29,7 +29,10 @@ from dotenv import load_dotenv
 import os
 
 # Imports locais
+from plugins.gerenciadores.gerenciador_bot import GerenciadorBot
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
+from utils.config import carregar_config
+from utils.handlers import signal_handler
 from utils.logging_config import configurar_logging
 
 # Configuração inicial
@@ -67,31 +70,6 @@ PLUGINS_ADICIONAIS = [
 ]
 
 
-def signal_handler(signum: int, frame: Optional[object]) -> None:
-    """Handler para sinais de interrupção."""
-    logger.info("Recebido sinal de interrupção...")
-    sys.exit(0)
-
-
-def carregar_config() -> dict:
-    """
-    Carrega a configuração do bot de forma segura.
-
-    Returns:
-        dict: Configuração carregada com timeframes e configurações do banco
-    """
-    config = {
-        "timeframes": ["1m", "5m", "15m", "30m", "1h", "4h", "1d"],
-        "database": {
-            "host": os.getenv("DB_HOST"),
-            "database": os.getenv("DB_NAME"),
-            "user": os.getenv("DB_USER"),
-            "password": os.getenv("DB_PASSWORD"),
-        },
-    }
-    return config
-
-
 def inicializar_bot() -> GerentePlugin:
     """
     Inicializa o bot de forma segura.
@@ -106,7 +84,7 @@ def inicializar_bot() -> GerentePlugin:
         # Carrega config
         config = carregar_config()
 
-        # Inicializa gerente
+        # Inicializa o gerente
         gerente = GerentePlugin()
         gerente.inicializar(config)
 
@@ -134,23 +112,34 @@ def main() -> None:
         logger.info("Iniciando bot...")
         signal.signal(signal.SIGINT, signal_handler)
 
-        # Inicialização
-        gerente = inicializar_bot()
+        # Inicialização dos gerentes plugin e bot
+        gerente_plugin = inicializar_bot()
+        gerenciador_bot = GerenciadorBot(gerente_plugin)
         logger.info("Bot iniciado com sucesso")
+
+        # Carregar plugins adicionais
+        for plugin_name in PLUGINS_ADICIONAIS:
+            if not gerente_plugin.carregar_plugin(plugin_name):
+                logger.warning(f"Falha ao carregar plugin adicional: {plugin_name}")
 
         # Loop principal
         while True:
             try:
-                logger.debug("Iniciando ciclo de execução...")  # Log antes da execução
-                if not gerente.executar_ciclo():
+                # Inicio do ciclo de execução do bot
+                logger.debug("Iniciando ciclo de execução...")
+                gerenciador_bot.executar_ciclo()  # Executa o ciclo do bot
+
+                if not gerente_plugin.executar_ciclo():
                     logger.warning("Falha no ciclo de execução")
-                    continue
-                # Log após a execução
+                    logger.error(f"Erro no ciclo: {e}")
+                    break
+
+                # Fim do ciclo de execução do bot
                 logger.debug("Ciclo de execução concluído com sucesso")
 
             except Exception as e:
                 logger.error(f"Erro no ciclo: {e}")
-                continue
+                break
 
     except Exception as e:
         logger.error(f"Erro fatal: {e}")
@@ -158,7 +147,7 @@ def main() -> None:
 
     finally:
         if "gerente" in locals():
-            gerente.interromper_execucao()
+            gerente_plugin.interromper_execucao()
 
 
 if __name__ == "__main__":

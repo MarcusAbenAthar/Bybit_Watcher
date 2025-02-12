@@ -1,61 +1,123 @@
-# Bot de Trading para Criptomoedas
-
 <img src="assets/bybit_watcher_logo.png" alt="Logo do Bot" width="200">
 
-Este bot de trading foi desenvolvido para operar no mercado de futuros de criptomoedas da Bybit, com foco em gerar sinais de compra e venda de forma autônoma, criteriosa, segura e eficiente.
+## Bybit_Watcher
 
-O bot utiliza uma arquitetura de plugins para facilitar a implementação e a manutenção das estratégias de trading.
+**Descrição do projeto:**
 
-**Funcionalidades:**
+O Bybit_Watcher é um bot de trading automatizado para a plataforma Bybit, projetado para monitorar o mercado, analisar dados e gerar sinais de trading. O bot é construído com foco em modularidade, segurança e extensibilidade, permitindo que traders e desenvolvedores personalizem e expandam suas funcionalidades.
 
-- Coleta de dados de mercado da Bybit, usando a biblioteca CCXT.
-- Armazenamento dos dados em um banco de dados PostgreSQL.
-- Análise de candles para identificar padrões e classificá-los.
-- Cálculo de indicadores técnicos, como médias móveis, RSI, MACD, etc.
-- Geração de sinais de compra e venda com base na análise de candles e indicadores técnicos.
-- Cálculo da alavancagem ideal para cada operação, com base na volatilidade do mercado.
-- Exibição dos sinais de trading no console.
-- (Em desenvolvimento) Integração com a API Gemini do Google para complementar a análise do mercado.
-- (Futuro) Execução automática de ordens na Bybit.
-- (Futuro) Gerenciamento de risco, com stop-loss e take-profit.
+**Funcionalidades principais:**
+
+- Monitoramento de mercado em tempo real
+- Análise de candlesticks
+- Cálculo de médias móveis
+- Identificação de padrões de price action
+- Cálculo de alavancagem e risco
+- Geração de sinais de trading
+- Execução de ordens (em desenvolvimento)
+- Armazenamento de dados em banco de dados
+- Logging detalhado das atividades do bot
+
+**Público-alvo:**
+
+- Traders que desejam automatizar suas estratégias de trading na Bybit
+- Desenvolvedores que desejam criar e integrar seus próprios plugins e indicadores
+
+**Instalação e Configuração:**
+
+**Dependências:**
+
+- Python 3.7 ou superior
+- Bibliotecas Python:
+  - bybit
+  - TA-Lib
+  - mplfinance
+  - python-dotenv
+  - outras bibliotecas listadas no arquivo requirements.txt
+
+**Como instalar:**
+
+1. Clone o repositório: `git clone https://github.com/MarcusAbenAthar/Bybit_Watcher.git`
+2. Crie um ambiente virtual: `python -m venv.venv`
+3. Ative o ambiente virtual:
+   - Linux/macOS: `source.venv/bin/activate`
+   - Windows: `.venv\Scripts\activate`
+4. Instale as dependências: `pip install -r requirements.txt`
+
+**Configurações:**
+
+1. Crie um arquivo `.env` na raiz do projeto.
+2. Adicione as seguintes variáveis de ambiente ao arquivo `.env`:
+   - `BYBIT_API_KEY`: Sua chave de API da Bybit
+   - `BYBIT_API_SECRET`: Seu segredo de API da Bybit
+   - `DB_USER`: Usuário do banco de dados
+   - `DB_PASSWORD`: Senha do banco de dados
+   - `DB_NAME`: Nome do banco de dados
+   - Outras configurações relevantes para o bot
+
+**Uso:**
+
+**Como executar:**
+
+1. Ative o ambiente virtual (se ainda não estiver ativo).
+2. Execute o arquivo `main.py`: `python main.py`
+
+**Comandos e opções:**
+
+- O bot atualmente não oferece comandos ou opções adicionais.
+- Em desenvolvimento: modos de operação como backtesting e live trading.
+
+**Exemplos de uso:**
+
+- **Monitorar o mercado e gerar sinais:** Execute o bot com as configurações padrão para monitorar o mercado e gerar sinais de trading.
+- **Desenvolver novos plugins:** Crie um novo arquivo Python no diretório `plugins` e implemente a classe do plugin herdando da classe base `Plugin`.
 
 **Plugins:**
 
-- `analise_candles.py`: Analisa os candles e gera sinais de trading.
-- `banco_dados.py`: Gerencia o banco de dados PostgreSQL.
-- `calculo_alavancagem.py`: Calcula a alavancagem ideal para as operações.
-- `conexao.py`: Estabelece e gerencia a conexão com a Bybit.
-- `execucao_ordens.py`: Exibe os sinais de trading.
-- `indicadores/`:
-  - `indicadores_tendencia.py`: Calcula indicadores de tendência e gera sinais de trading.
-  - `indicadores_osciladores.py`: Calcula indicadores osciladores e gera sinais de trading.
-  - `indicadores_volatilidade.py`: Calcula indicadores de volatilidade e gera sinais de trading.
-- `outros_indicadores.py`: Calcula outros indicadores e gera sinais de trading.
-- `analise_mercado.py`: (Em desenvolvimento) Analisa o mercado usando diferentes fontes de dados.
+**Descrição dos plugins:**
 
-**Regras de Ouro:**
+- **`conexao.py`:** Gerencia a conexão com a API da Bybit.
+- **`banco_dados.py`:** Realiza operações de banco de dados.
+- **`calculo_alavancagem.py`:** Calcula a alavancagem ideal para cada operação.
+- **`calculo_risco.py`:** Calcula o risco de cada operação.
+- **`analise_candles.py`:** Analisa os candlesticks para identificar padrões e tendências.
+- **`medias_moveis.py`:** Calcula e analisa médias móveis.
+- **`price_action.py`:** Analisa o movimento dos preços para identificar suportes, resistências e padrões.
+- **`validador_dados.py`:** Valida os dados recebidos da API e de outras fontes.
+- **`sinais_plugin.py`:** Gera sinais de compra e venda.
+- **`gerenciador_banco.py`:** Gerencia as operações do banco de dados.
+- **`gerenciador_bot.py`:** Gerencia o funcionamento do bot.
+- **`gerenciador_plugins.py`:** Gerencia os plugins do bot.
 
-1. **Autônomo:** O bot deve operar de forma independente, sem intervenção humana.
-2. **Criterioso:** O bot deve ser rigoroso na análise dos dados e na tomada de decisões.
-3. **Seguro:** O bot deve priorizar a segurança do capital.
-4. **Certeiro:** O bot deve buscar a maior precisão possível na geração de sinais.
-5. **Eficiente:** O bot deve ser eficiente no uso de recursos computacionais.
-6. **Clareza:** O código do bot deve ser claro, conciso e bem organizado.
-7. **Modular:** O código deve ser dividido em módulos independentes e reutilizáveis.
-8. **Composto por plugins:** O bot deve usar uma arquitetura de plugins para facilitar a adição de novas funcionalidades.
-9. **Testável:** Cada módulo e função deve ser testável de forma independente.
-10. **Documentado:** O código deve ser documentado com clareza, usando docstrings e comentários.
-11. **Dinamismo:** O bot deve se adaptar às condições do mercado, ajustando as estratégias e parâmetros de acordo com a volatilidade, o volume e outros fatores relevantes.
+**Como criar novos plugins:**
 
-**Como executar o bot:**
+1. Crie um novo arquivo Python no diretório `plugins`.
+2. Implemente a classe do plugin herdando da classe base `Plugin`.
+3. Registre o plugin no `gerenciador_plugins.py`.
 
-1. Clone o repositório do GitHub.
-2. Crie um ambiente virtual e instale as dependências: `pip install -r requirements.txt`
-3. Configure as variáveis de ambiente no arquivo `.env`.
-4. Execute o script `main.py`: `python main.py`
+**Contribuição:**
+
+**Como contribuir:**
+
+- Sinta-se à vontade para enviar pull requests com correções de bugs, melhorias de código e novos plugins.
+- Relate bugs e sugestões de melhorias na seção de Issues do repositório.
+
+**Código de conduta:**
+
+- Seja respeitoso e colaborativo com os outros contribuidores.
+- Siga as boas práticas de desenvolvimento de software.
+
+**Outras informações relevantes:**
+
+**Licença:**
+
+- MIT License
+
+**Agradecimentos:**
+
+- Agradeço à comunidade de desenvolvedores de código aberto por fornecer ferramentas e recursos valiosos.
 
 **Observações:**
 
-- O bot ainda está em desenvolvimento e precisa de mais testes e refinamento.
-- As estratégias de trading implementadas no bot não garantem lucros e podem resultar em perdas financeiras.
-- Use o bot com cuidado e por sua conta e risco.
+- Este README.md foi gerado com base nas informações fornecidas até o momento.
+- É importante revisar e atualizar este arquivo com mais detalhes e informações relevantes sobre o projeto.

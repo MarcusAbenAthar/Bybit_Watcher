@@ -1,12 +1,12 @@
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
-from utils.singleton import singleton
+from utils.singleton import Singleton
 from plugins.plugin import Plugin
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 
 
-@singleton
+@Singleton
 class ExecucaoOrdens(Plugin):
     """Plugin para execução de ordens de trading."""
 

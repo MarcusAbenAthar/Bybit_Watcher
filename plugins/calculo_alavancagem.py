@@ -4,12 +4,12 @@ logger = get_logger(__name__)
 import numpy as np
 from plugins.validador_dados import ValidadorDados
 import talib
-from utils.singleton import singleton
+from utils.singleton import Singleton
 from plugins.plugin import Plugin
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 
 
-@singleton
+@Singleton
 class CalculoAlavancagem(Plugin):
     """Plugin para cálculos de alavancagem."""
 
