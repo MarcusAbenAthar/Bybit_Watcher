@@ -83,10 +83,10 @@ def carregar_config() -> dict:
     config = {
         "timeframes": ["1m", "5m", "15m", "30m", "1h", "4h", "1d"],
         "database": {
-            "host": os.getenv("DB_HOST", "localhost"),
-            "database": os.getenv("DB_NAME", "bybit_watcher_db"),
-            "user": os.getenv("DB_USER", "postgres"),
-            "password": os.getenv("DB_PASSWORD", "12345"),
+            "host": os.getenv("DB_HOST"),
+            "database": os.getenv("DB_NAME"),
+            "user": os.getenv("DB_USER"),
+            "password": os.getenv("DB_PASSWORD"),
         },
     }
     return config
@@ -141,9 +141,12 @@ def main() -> None:
         # Loop principal
         while True:
             try:
+                logger.debug("Iniciando ciclo de execução...")  # Log antes da execução
                 if not gerente.executar_ciclo():
                     logger.warning("Falha no ciclo de execução")
                     continue
+                # Log após a execução
+                logger.debug("Ciclo de execução concluído com sucesso")
 
             except Exception as e:
                 logger.error(f"Erro no ciclo: {e}")
