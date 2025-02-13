@@ -125,17 +125,11 @@ def main() -> None:
         # Loop principal
         while True:
             try:
-                # Inicio do ciclo de execução do bot
-                logger.debug("Iniciando ciclo de execução...")
                 gerenciador_bot.executar_ciclo()  # Executa o ciclo do bot
 
                 if not gerente_plugin.executar_ciclo():
                     logger.warning("Falha no ciclo de execução")
-                    logger.error(f"Erro no ciclo: {e}")
                     break
-
-                # Fim do ciclo de execução do bot
-                logger.debug("Ciclo de execução concluído com sucesso")
 
             except Exception as e:
                 logger.error(f"Erro no ciclo: {e}")

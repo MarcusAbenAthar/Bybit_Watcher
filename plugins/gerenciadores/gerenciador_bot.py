@@ -207,7 +207,9 @@ class GerenciadorBot(Plugin, metaclass=Singleton):
                         # Gera sinais se houver resultados
                         if resultados:
                             try:
-                                sinais_plugin.executar(resultados, symbol, timeframe)
+                                sinais_plugin.executar(
+                                    resultados, symbol, timeframe, self._config
+                                )
                             except Exception as e:
                                 logger.error(
                                     f"Erro ao gerar sinais para {symbol} {timeframe}: {e}"

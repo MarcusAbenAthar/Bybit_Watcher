@@ -1,15 +1,12 @@
 import psycopg2
-from plugins.gerenciadores.gerenciador_plugins import (
-    obter_calculo_alavancagem,
-    obter_banco_dados,
-)
+from plugins.gerenciadores.gerenciador_plugins import obter_calculo_alavancagem
+from plugins.gerenciadores.gerenciador_banco import obter_banco_dados
 from utils.logging_config import get_logger
-
-logger = get_logger(__name__)
-
-
 import talib
 from plugins.plugin import Plugin
+
+
+logger = get_logger(__name__)
 
 
 class IndicadoresVolume(Plugin):

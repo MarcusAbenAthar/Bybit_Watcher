@@ -469,3 +469,12 @@ class GerenciadorBanco(Plugin, metaclass=Singleton):
             logger.info("Gerenciador de banco finalizado")
         except Exception as e:
             logger.error(f"Erro ao finalizar gerenciador: {e}")
+
+
+def obter_banco_dados(config=None):
+    """
+    Retorna a instância do plugin BancoDados.
+    """
+    from plugins.banco_dados import BancoDados
+
+    return BancoDados(config)

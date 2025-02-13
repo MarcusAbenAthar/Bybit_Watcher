@@ -245,3 +245,12 @@ class GerentePlugin(metaclass=Singleton):
 
         except Exception as e:
             logger.error(f"Erro ao listar plugins: {e}")
+
+
+def obter_calculo_alavancagem():
+    """
+    Retorna a instância do plugin CalculoAlavancagem.
+    """
+    from plugins.calculo_alavancagem import CalculoAlavancagem
+
+    return CalculoAlavancagem()

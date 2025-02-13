@@ -24,7 +24,8 @@ Cada plugin segue:
 * Responsabilidade única
 * Interface padronizada
 * Documentação completa
-* Esta estrutura:
+
+Esta estrutura:
 
 * É modular
 * Evita dependências circulares
