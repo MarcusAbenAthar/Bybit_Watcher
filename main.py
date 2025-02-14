@@ -114,7 +114,7 @@ def main() -> None:
 
         # Inicialização dos gerentes plugin e bot
         gerente_plugin = inicializar_bot()
-        gerenciador_bot = GerenciadorBot(gerente_plugin)
+        gerenciador_bot = GerenciadorBot()
         logger.info("Bot iniciado com sucesso")
 
         # Carregar plugins adicionais
@@ -127,7 +127,7 @@ def main() -> None:
             try:
                 gerenciador_bot.executar_ciclo()  # Executa o ciclo do bot
 
-                if not gerente_plugin.executar_ciclo():
+                if not gerenciador_bot.executar_ciclo():
                     logger.warning("Falha no ciclo de execução")
                     break
 

@@ -19,12 +19,12 @@ import importlib
 from utils.logging_config import get_logger
 from typing import Optional, Dict
 from plugins.plugin import Plugin
-from utils.singleton import Singleton
+
 
 logger = get_logger(__name__)
 
 
-class GerentePlugin(metaclass=Singleton):
+class GerentePlugin:
     """Gerenciador central de plugins."""
 
     def __init__(self):
@@ -32,6 +32,7 @@ class GerentePlugin(metaclass=Singleton):
         self.plugins: Dict[str, Plugin] = {}
         self.config = None
         self.initialized = False
+        self.gerenciador_banco = None  # Armazena a instância do gerenciador de banco
 
     def inicializar(self, config: dict) -> bool:
         """
@@ -52,71 +53,50 @@ class GerentePlugin(metaclass=Singleton):
             return False
 
     def carregar_plugin(self, nome_plugin: str) -> bool:
-        """
-        Carrega um plugin específico.
-
-        Args:
-            nome_plugin: Nome do plugin a ser carregado (pode usar / ou .)
-
-        Returns:
-            bool: True se carregado com sucesso
-        """
         try:
-            # Normaliza o nome do plugin
             nome_plugin = nome_plugin.replace("plugins.", "").replace("/", ".")
-
-            # Verifica se já está carregado
             nome_base = nome_plugin.split(".")[-1]
             if nome_base in self.plugins:
                 return True
 
-            # Importa o módulo
-            caminho_modulo = f"plugins.{nome_plugin}"
+            modulo = importlib.import_module(f"plugins.{nome_plugin}")
 
-            try:
-                modulo = importlib.import_module(caminho_modulo)
-            except ImportError as e:
-                logger.error(f"Erro ao importar {caminho_modulo}: {e}")
-                return False
-
-            # Encontra a classe que herda de Plugin
             plugin_class = None
-            for item in dir(modulo):
-                try:
-                    attr = getattr(modulo, item)
-                    # Verifica se é uma classe e herda de Plugin
-                    if (
-                        isinstance(attr, type)
-                        and issubclass(attr, Plugin)
-                        and attr != Plugin
-                    ):
-                        # Verifica se tem os atributos necessários
-                        if hasattr(attr, "PLUGIN_NAME") and hasattr(
-                            attr, "PLUGIN_TYPE"
-                        ):
-                            plugin_class = attr
-                            break
-                except Exception as e:
-                    logger.debug(f"Erro ao verificar atributo {item}: {e}")
-                    continue
+            for name, obj in vars(modulo).items():
+                if isinstance(obj, type) and issubclass(obj, Plugin) and obj != Plugin:
+                    plugin_class = obj
+                    break
 
             if not plugin_class:
                 logger.error(f"Nenhuma classe plugin encontrada em {nome_plugin}")
                 return False
 
-            # Instancia e inicializa o plugin
-            plugin = plugin_class()
+            # Injeção de dependência para banco_dados
+            if nome_base == "banco_dados":
+                if self.gerenciador_banco is None:
+                    logger.error(
+                        "Gerenciador de banco não carregado. Carregue-o antes de banco_dados"
+                    )
+                    return False
+                plugin = plugin_class(gerenciador_banco=self.gerenciador_banco)
+            else:
+                plugin = plugin_class()
+            
             if not plugin.inicializar(self.config):
                 logger.error(f"Falha ao inicializar {nome_plugin}")
                 return False
 
-            # Registra o plugin usando o nome base
             self.plugins[nome_base] = plugin
-            logger.info(f"Plugin {nome_base} carregado com sucesso")
-            return True
+            # Armazena a instancia do gerenciador de banco
+            if nome_base == "gerenciador_banco":
+                self.gerenciador_banco = plugin
 
+            logger.info(f"Plugin %s carregado com sucesso", nome_base)
+            return True
         except Exception as e:
-            logger.error(f"Erro ao carregar plugin {nome_plugin}: {e}")
+            logger.exception(
+                f"Erro ao carregar plugin {nome_plugin}: {e}"
+            )  # Log full traceback
             return False
 
     def _carregar_plugin(self, nome_modulo: str) -> Optional[Plugin]:
@@ -205,20 +185,17 @@ class GerentePlugin(metaclass=Singleton):
 
         return True
 
-    def executar_ciclo(self) -> bool:
-        """
-        Executa um ciclo em todos os plugins.
-
-        Returns:
-            bool: True se ciclo executado com sucesso
-        """
+    def executar_ciclo(self, dados, symbol, timeframe, config) -> bool:
         try:
             for plugin in self.plugins.values():
-                if not plugin.executar():
+                if not plugin.executar(dados, symbol, timeframe, config):
+                    logger.error(f"Erro na execução do plugin: {plugin.nome}")
                     return False
             return True
         except Exception as e:
-            logger.error(f"Erro no ciclo: {e}")
+            logger.exception(
+                f"Erro no ciclo: {e}"
+            )  # Use logger.exception for full traceback
             return False
 
     def finalizar(self):

@@ -3,12 +3,11 @@ from utils.logging_config import get_logger
 logger = get_logger(__name__)
 import numpy as np
 import talib
-from utils.singleton import Singleton
+
 from plugins.plugin import Plugin
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 
 
-@Singleton
 class MediasMoveis(Plugin):
     """Plugin para cálculo e análise de médias móveis."""
 

@@ -20,12 +20,14 @@ from typing import List, Dict, Optional
 import ccxt
 import requests
 from plugins.plugin import Plugin
-from utils.singleton import Singleton
+
 
 logger = logging.getLogger(__name__)
 
 
-class Conexao(Plugin, metaclass=Singleton):
+class Conexao(
+    Plugin,
+):
     """Plugin para conexão com a Bybit."""
 
     # Identificador explícito do plugin

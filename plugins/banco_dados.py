@@ -10,83 +10,57 @@ Regras de Ouro:
 10 - Documentado: Docstrings completos
 """
 
+"""
+Plugin para gerenciamento do banco de dados.
+"""
+
 import time
 from typing import List, Tuple, Optional
-import psycopg2
-from utils.singleton import Singleton
+import psycopg2  # Assumindo que você usa psycopg2
+
 from utils.logging_config import get_logger
 from plugins.plugin import Plugin
 
 logger = get_logger(__name__)
 
 
-class BancoDados(Plugin, metaclass=Singleton):
+class BancoDados(Plugin):
     """Plugin para gerenciamento do banco de dados."""
 
-    # Identificadores do plugin
     PLUGIN_NAME = "banco_dados"
     PLUGIN_TYPE = "essencial"
 
-    def __init__(self):
-        """Inicializa o plugin de banco de dados."""
+    def __init__(self, gerenciador_banco):  # Injeção de dependência
         super().__init__()
         self.nome = self.PLUGIN_NAME
         self.descricao = "Gerenciamento de banco de dados"
         self._conn = None
         self._config = None
         self.inicializado = False
+        self.gerenciador_banco = gerenciador_banco  # Armazena o gerenciador
 
     def inicializar(self, config: dict) -> bool:
-        """
-        Inicializa a conexão com o banco.
-
-        Args:
-            config (dict): Configurações de conexão
-
-        Returns:
-            bool: True se inicializado com sucesso
-        """
+        """Inicializa a conexão com o banco."""
         try:
-            # Inicializa classe base
             super().inicializar(config)
             self._config = config
 
-            # Obtém gerenciador de banco com retry
-            max_tentativas = 3
-            tentativa = 0
-            while tentativa < max_tentativas:
-                try:
-                    from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
-
-                    gerente = GerentePlugin()
-                    gerenciador_banco = gerente.plugins.get("gerenciador_banco")
-
-                    if gerenciador_banco and gerenciador_banco.inicializado:
-                        # Usa conexão do gerenciador
-                        self._conn = gerenciador_banco._conn
-                        if self._conn:
-                            self.inicializado = True
-                            logger.info("Banco de dados inicializado com sucesso")
-                            return True
-
-                    tentativa += 1
-                    if tentativa < max_tentativas:
-                        logger.warning(
-                            f"Tentativa {tentativa}: Aguardando gerenciador_banco... (2s)"
-                        )
-                        time.sleep(2)
-                    else:
-                        logger.error(
-                            "Gerenciador de banco nao disponivel apos tentativas"
-                        )
-                        return False
-
-                except Exception as e:
-                    logger.error(f"Erro ao obter gerenciador_banco: {e}")
-                    return False
+            # Usa a conexão do gerenciador_banco (injetada)
+            if (
+                self.gerenciador_banco
+                and self.gerenciador_banco.inicializado
+                and self.gerenciador_banco._conn
+            ):
+                self._conn = self.gerenciador_banco._conn
+                self.inicializado = True
+                logger.info("Banco de dados inicializado com sucesso")
+                return True
+            else:
+                logger.error("Gerenciador de banco não disponível ou não inicializado.")
+                return False
 
         except Exception as e:
-            logger.error(f"Erro ao inicializar o banco de dados: {e}")
+            logger.exception(f"Erro ao inicializar o banco de dados: {e}")
             return False
 
     def executar_query(

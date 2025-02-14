@@ -6,7 +6,7 @@ from plugins.gerenciadores import gerenciador_banco
 from plugins.validador_dados import ValidadorDados
 import talib
 from utils.padroes_candles import PADROES_CANDLES
-from utils.singleton import Singleton
+
 from plugins.plugin import Plugin
 from plugins.gerenciadores.gerenciador_plugins import (
     GerentePlugin,
@@ -14,8 +14,7 @@ from plugins.gerenciadores.gerenciador_plugins import (
 )
 
 
-@Singleton
-class AnaliseCandles(Plugin, metaclass=Singleton):
+class AnaliseCandles(Plugin):
     """Plugin para analisar os candles e identificar padrões."""
 
     def __init__(self):

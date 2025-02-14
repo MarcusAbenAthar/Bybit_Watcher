@@ -20,13 +20,15 @@ import psycopg2
 from dotenv import load_dotenv
 
 from plugins.plugin import Plugin
-from utils.singleton import Singleton
+
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
-class GerenciadorBanco(Plugin, metaclass=Singleton):
+class GerenciadorBanco(
+    Plugin,
+):
     """Gerenciador de operacoes do banco de dados."""
 
     PLUGIN_NAME = "gerenciador_banco"

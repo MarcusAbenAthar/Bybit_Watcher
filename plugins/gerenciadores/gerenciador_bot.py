@@ -20,10 +20,11 @@ logger = get_logger(__name__)
 import time
 from typing import Dict, List, Optional
 from plugins.plugin import Plugin
-from utils.singleton import Singleton
 
 
-class GerenciadorBot(Plugin, metaclass=Singleton):
+class GerenciadorBot(
+    Plugin,
+):
     """
     Gerenciador central do bot.
 
