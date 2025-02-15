@@ -35,7 +35,9 @@ class CalculoAlavancagem(Plugin):
     def obter_exchange(self):
         """Obtém instância da exchange."""
         try:
-            conexao = self.gerente._singleton_plugins.get("conexao")
+            conexao = self.gerente.plugins.get(
+                "conexao"
+            )  # Acessa o dicionário 'plugins'
             if conexao:
                 return conexao.exchange
             return None
@@ -46,8 +48,25 @@ class CalculoAlavancagem(Plugin):
     def executar(self, dados, symbol, timeframe):
         """Executa cálculo de alavancagem."""
         try:
-            # ... resto do código ...
+            if not self._validador.validar_dados_completos(dados, symbol, timeframe):
+                logger.error("Dados inválidos, pulando cálculo de alavancagem")
+                return False
+
+            alavancagem = self.calcular_alavancagem(
+                dados, symbol, timeframe, self._config
+            )
+            logger.info(
+                f"Alavancagem calculada para {symbol} ({timeframe}): {alavancagem}"
+            )
+
+            # Salva a alavancagem no banco de dados
+            try:
+                self.banco_dados.salvar_alavancagem(symbol, timeframe, alavancagem)
+            except Exception as e:
+                logger.error(f"Erro ao salvar alavancagem no banco de dados: {e}")
+
             return True
+
         except Exception as e:
             logger.error(f"Erro no cálculo de alavancagem: {e}")
             return False

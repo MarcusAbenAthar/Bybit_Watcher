@@ -9,12 +9,6 @@ class TestGerenciadorBot(unittest.TestCase):
         """Configuração inicial para cada teste."""
         self.plugin = GerenciadorBot()
 
-    def test_singleton(self):
-        """Testa se o padrão singleton está funcionando."""
-        plugin1 = GerenciadorBot()
-        plugin2 = GerenciadorBot()
-        self.assertIs(plugin1, plugin2, "As instâncias devem ser as mesmas (singleton)")
-
     def test_nome_plugin(self):
         """Testa se o nome do plugin está correto."""
         self.assertEqual(self.plugin.nome, "Gerenciador do Bot")

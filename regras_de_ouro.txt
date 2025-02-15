@@ -19,7 +19,6 @@ Boas práticas ao programar o bot:
 
 Cada plugin segue:
 
-* Padrão Singleton quando apropriado
 * Herança da classe base Plugin
 * Responsabilidade única
 * Interface padronizada
