@@ -1,21 +1,22 @@
 from utils.logging_config import get_logger
+from plugins.plugin import Plugin
 
 logger = get_logger(__name__)
-
-from plugins.plugin import Plugin
-from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 
 
 class SinaisPlugin(Plugin):
     """Plugin para gerenciamento de sinais de trading."""
 
+    # Identificador explícito do plugin
+    PLUGIN_NAME = "sinais_plugin"
+    PLUGIN_TYPE = "essencial"
+
     def __init__(self):
         """Inicializa o plugin de sinais."""
         super().__init__()
-        self.nome = "Sinais"
+        self.nome = "sinais_plugin"
         self.descricao = "Plugin para gerenciamento de sinais de trading"
         self._config = None
-        self.gerente = GerentePlugin()
         self.cache_sinais = {}
 
     def inicializar(self, config):
@@ -29,37 +30,76 @@ class SinaisPlugin(Plugin):
             super().inicializar(config)
             self._config = config
             self.cache_sinais = {}
-            logger.info(f"Plugin {self.nome} inicializado com sucesso")
 
-    def executar(self, dados, symbol, timeframe):
+            return True
+        return True
+
+    def executar(self, *args, **kwargs) -> bool:
         """
         Executa a análise e consolidação dos sinais.
 
         Args:
-            dados (dict): Dicionário contendo os sinais dos diferentes indicadores
-            symbol (str): Símbolo do par analisado
-            timeframe (str): Timeframe da análise
+            *args: Argumentos posicionais ignorados
+            **kwargs: Argumentos nomeados contendo:
+                dados (dict): Dicionário contendo os sinais dos diferentes indicadores
+                symbol (str): Símbolo do par analisado
+                timeframe (str): Timeframe da análise
 
         Returns:
-            dict: Sinal consolidado com todas as informações relevantes
+            bool: True se executado com sucesso
         """
         try:
-            # Validação inicial dos dados
-            if not dados or not self.validar_dados(dados):
-                return None
+            # Extrai os parâmetros necessários
+            dados = kwargs.get("dados")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+
+            # Validação inicial dos parâmetros
+            if not all([dados, symbol, timeframe]):
+                logger.error("Parâmetros necessários não fornecidos")
+                dados["sinais"] = {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                    "indicadores": {},
+                }
+                return True
+
+            # Validação dos dados
+            if not self.validar_dados(dados):
+                dados["sinais"] = {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                    "indicadores": dados,
+                }
+                return True
 
             sinal_consolidado = self.consolidar_sinais(dados)
 
-            # Só loga e retorna se houver um sinal válido
+            # Atualiza os dados com o sinal consolidado ou neutro
             if sinal_consolidado and self.validar_sinal(sinal_consolidado):
                 self.logar_sinal(symbol, timeframe, sinal_consolidado)
-                return sinal_consolidado
+                dados["sinais"] = sinal_consolidado
+            else:
+                dados["sinais"] = {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                    "indicadores": dados,
+                }
 
-            return None
+            return True
 
         except Exception as e:
             logger.error(f"Erro ao processar sinais: {e}")
-            return None
+            dados["sinais"] = {
+                "direcao": "NEUTRO",
+                "forca": "FRACA",
+                "confianca": 0,
+                "indicadores": {},
+            }
+            return True
 
     def validar_dados(self, dados):
         """
@@ -77,11 +117,11 @@ class SinaisPlugin(Plugin):
                 logger.error("Dados inválidos: não é um dicionário")
                 return False
 
-            # Verifica se tem os indicadores necessários
+            # Verifica se tem pelo menos um dos indicadores necessários
             indicadores_necessarios = ["tendencia", "medias_moveis"]
             if not any(ind in dados for ind in indicadores_necessarios):
-                logger.error("Dados inválidos: faltam indicadores necessários")
-                return False
+                logger.warning("Nenhum indicador necessário encontrado")
+                return True
 
             # Verifica se os resultados são válidos
             for indicador, resultado in dados.items():

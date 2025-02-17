@@ -1,31 +1,38 @@
 from utils.logging_config import get_logger
-
-logger = get_logger(__name__)
 import numpy as np
 import talib
-
 from plugins.plugin import Plugin
-from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
+
+logger = get_logger(__name__)
 
 
 class CalculoRisco(Plugin):
     """Plugin para cálculos de risco."""
 
+    # Identificador explícito do plugin
+    PLUGIN_NAME = "calculo_risco"
+    PLUGIN_TYPE = "essencial"
+
     def __init__(self):
         """Inicializa o plugin CalculoRisco."""
         super().__init__()
-        self.nome = "Cálculo de Risco"
+        self.nome = "calculo_risco"
         self.descricao = "Plugin para análise e cálculo de risco"
         self._config = None
         self.cache_risco = {}  # Cache para otimização
-        self.gerente = GerentePlugin()
+        self._validador = None  # Instância do validador de dados
 
     def inicializar(self, config):
         """Inicializa as dependências do plugin."""
         if not self._config:  # Só inicializa uma vez
             super().inicializar(config)
             self._config = config
-            logger.info(f"Plugin {self.nome} inicializado com sucesso")
+            if not self._validador:
+                logger.error(f"Plugin {self.nome} requer validador_dados")
+                return False
+
+            return True
+        return True
 
     def sinal_confiavel(self, sinal):
         """Verifica se o sinal atende aos critérios de confiabilidade."""
@@ -124,31 +131,55 @@ class CalculoRisco(Plugin):
             logger.error(f"Erro ao calcular momentum: {e}")
             return 0
 
-    def executar(self, dados, symbol, timeframe):
+    def executar(self, *args, **kwargs) -> bool:
         """
         Executa análise de risco e gera sinais.
 
         Args:
-            dados (list): Lista de candles
-            symbol (str): Par de trading
-            timeframe (str): Timeframe atual
+            *args: Argumentos posicionais ignorados
+            **kwargs: Argumentos nomeados contendo:
+                dados (list): Lista de candles
+                symbol (str): Par de trading
+                timeframe (str): Timeframe atual
+                config (dict): Configurações do bot
 
         Returns:
-            dict: Dicionário com análise de risco e sinais
+            bool: True se executado com sucesso
         """
         try:
+            # Extrai os parâmetros necessários
+            dados = kwargs.get("dados")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+
+            # Validação dos parâmetros
+            if not all([dados, symbol, timeframe]):
+                logger.error("Parâmetros necessários não fornecidos")
+                dados["calculo_risco"] = {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                    "indicadores": {},
+                }
+                return True
+
             self.dados = dados
 
             # Verifica se há dados suficientes e válidos
-            if len(dados) < 50:  # Mínimo para cálculos
-                logger.debug(f"Dados insuficientes para {symbol} - {timeframe}")
-                return None
-
-            # Verifica se há valores NaN
-            closes = np.array([float(candle[4]) for candle in dados])
-            if np.isnan(closes).any():
-                logger.debug(f"Dados contém valores NaN para {symbol} - {timeframe}")
-                return None
+            if (
+                len(dados) < 50
+                or np.isnan(np.array([float(candle[4]) for candle in dados])).any()
+            ):
+                logger.debug(
+                    f"Dados insuficientes ou inválidos para {symbol} - {timeframe}"
+                )
+                dados["calculo_risco"] = {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                    "indicadores": {},
+                }
+                return True
 
             sinal = {
                 "direcao": "NEUTRO",
@@ -206,8 +237,16 @@ class CalculoRisco(Plugin):
                     f"Sinal descartado para {symbol} - {timeframe} (não atende critérios)"
                 )
 
-            return sinal
+            # Atualiza o dicionário de dados com o sinal
+            dados["calculo_risco"] = sinal
+            return True
 
         except Exception as e:
             logger.error(f"Erro na execução do cálculo de risco: {e}")
-            return None
+            dados["calculo_risco"] = {
+                "direcao": "NEUTRO",
+                "forca": "FRACA",
+                "confianca": 0,
+                "indicadores": {},
+            }
+            return True

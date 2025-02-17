@@ -1,21 +1,22 @@
 from utils.logging_config import get_logger
+from plugins.plugin import Plugin
 
 logger = get_logger(__name__)
-
-from plugins.plugin import Plugin
-from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 
 
 class ExecucaoOrdens(Plugin):
     """Plugin para execução de ordens de trading."""
 
+    # Identificador explícito do plugin
+    PLUGIN_NAME = "execucao_ordens"
+    PLUGIN_TYPE = "essencial"
+
     def __init__(self):
         """Inicializa o plugin ExecucaoOrdens."""
         super().__init__()
-        self.nome = "Execução de Ordens"
+        self.nome = "execucao_ordens"
         self.descricao = "Plugin para execução de ordens de trading"
         self._config = None
-        self.gerente = GerentePlugin()
         self._ordens_pendentes = {}
 
     def inicializar(self, config):
@@ -29,7 +30,9 @@ class ExecucaoOrdens(Plugin):
             super().inicializar(config)
             self._config = config
             self._ordens_pendentes = {}
-            logger.info(f"Plugin {self.nome} inicializado com sucesso")
+
+            return True
+        return True
 
     def exibir_sinal(self, sinal):
         """
@@ -49,21 +52,57 @@ class ExecucaoOrdens(Plugin):
             """
             logger.info(mensagem)  # Usando logger para exibir o sinal
 
-    def executar(self, dados, symbol, timeframe):
+    def executar(self, *args, **kwargs) -> bool:
         """
         Executa as ordens.
 
         Args:
-            dados (list): Dados para análise
-            symbol (str): Símbolo do par
-            timeframe (str): Timeframe dos dados
+            *args: Argumentos posicionais ignorados
+            **kwargs: Argumentos nomeados contendo:
+                dados (list): Dados para análise
+                symbol (str): Símbolo do par
+                timeframe (str): Timeframe dos dados
+                config (dict): Configurações do bot
+
+        Returns:
+            bool: True se executado com sucesso
         """
         try:
-            # Implementação da execução
-            return self.executar_ordem(dados)
+            # Extrai os parâmetros necessários
+            dados = kwargs.get("dados")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+
+            # Validação dos parâmetros
+            if not all([dados, symbol, timeframe]):
+                logger.error("Parâmetros necessários não fornecidos")
+                dados["execucao_ordens"] = {
+                    "status": "NEUTRO",
+                    "ordem": None,
+                    "resultado": None,
+                }
+                return True
+
+            # Executa a ordem
+            resultado = self.executar_ordem(dados)
+
+            # Atualiza o dicionário de dados com o resultado
+            dados["execucao_ordens"] = {
+                "status": "EXECUTADO" if resultado else "FALHA",
+                "ordem": dados.get("ordem"),
+                "resultado": resultado,
+            }
+
+            return True
+
         except Exception as e:
             logger.error(f"Erro ao executar ordem: {e}")
-            raise
+            dados["execucao_ordens"] = {
+                "status": "ERRO",
+                "ordem": None,
+                "resultado": None,
+            }
+            return True
 
     def executar_ordem(self, dados):
         """

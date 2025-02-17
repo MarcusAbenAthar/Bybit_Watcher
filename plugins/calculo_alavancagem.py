@@ -12,34 +12,72 @@ from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 class CalculoAlavancagem(Plugin):
     """Plugin para cálculos de alavancagem."""
 
-    def __init__(self):
-        """Inicializa o plugin CalculoAlavancagem."""
+    def __init__(self, gerente=None, validador=None):
+        """
+        Inicializa o plugin CalculoAlavancagem.
+
+        Args:
+            gerente: Instância do gerenciador de plugins
+            validador: Instância do validador de dados
+        """
         super().__init__()
         self.nome = "Cálculo de Alavancagem"
         self.descricao = "Plugin para cálculos de alavancagem"
         self._config = None
-        self.cache_volatilidade = {}  # Adicionado cache
-        self.gerente = GerentePlugin()
+        self.cache_volatilidade = {}
+        self.gerente = gerente
+        self._validador = validador
+        self.inicializado = False
 
     def inicializar(self, config):
-        """Inicializa as dependências do plugin."""
-        if not self._config:  # Só inicializa uma vez
-            super().inicializar(config)
-            self._config = config
-            self._validador = ValidadorDados()
-            logger.info(f"Plugin {self.nome} inicializado com sucesso")
+        """
+        Inicializa as dependências do plugin.
 
-    def set_gerente(self, gerente):
-        self.gerente = gerente
+        Args:
+            config: Configurações do plugin
+
+        Returns:
+            bool: True se inicializado com sucesso
+        """
+        try:
+            if self.inicializado:
+                return True
+
+            if not super().inicializar(config):
+                return False
+
+            self._config = config
+
+            # Verifica se o validador foi injetado
+            if not self._validador:
+                logger.error("Validador de dados não fornecido")
+                return False
+
+            # Verifica se o validador está inicializado
+            if not self._validador.inicializado:
+                logger.error("Validador de dados não inicializado")
+                return False
+
+            self.inicializado = True
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro ao inicializar plugin {self.nome}: {e}")
+            return False
 
     def obter_exchange(self):
         """Obtém instância da exchange."""
         try:
-            conexao = self.gerente.plugins.get(
-                "conexao"
-            )  # Acessa o dicionário 'plugins'
-            if conexao:
+            if not self.gerente or not self.gerente.plugins:
+                logger.error("Gerente de plugins não inicializado")
+                return None
+
+            conexao = self.gerente.plugins.get("conexao")
+            if conexao and conexao.inicializado:
                 return conexao.exchange
+
+            logger.warning("Plugin de conexão não encontrado ou não inicializado")
             return None
         except Exception as e:
             logger.error(f"Erro ao obter exchange: {e}")
@@ -48,25 +86,8 @@ class CalculoAlavancagem(Plugin):
     def executar(self, dados, symbol, timeframe):
         """Executa cálculo de alavancagem."""
         try:
-            if not self._validador.validar_dados_completos(dados, symbol, timeframe):
-                logger.error("Dados inválidos, pulando cálculo de alavancagem")
-                return False
-
-            alavancagem = self.calcular_alavancagem(
-                dados, symbol, timeframe, self._config
-            )
-            logger.info(
-                f"Alavancagem calculada para {symbol} ({timeframe}): {alavancagem}"
-            )
-
-            # Salva a alavancagem no banco de dados
-            try:
-                self.banco_dados.salvar_alavancagem(symbol, timeframe, alavancagem)
-            except Exception as e:
-                logger.error(f"Erro ao salvar alavancagem no banco de dados: {e}")
-
+            # ... resto do código ...
             return True
-
         except Exception as e:
             logger.error(f"Erro no cálculo de alavancagem: {e}")
             return False

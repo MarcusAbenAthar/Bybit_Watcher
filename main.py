@@ -49,24 +49,24 @@ PLUGINS_ESSENCIAIS = [
     "conexao",  # Sem dependências
     "gerenciadores/gerenciador_banco",  # Sem dependências
     "banco_dados",  # Depende de gerenciador_banco
+    "validador_dados",  # Base para outros plugins
+    "indicadores.indicadores_tendencia",  # Necessário para sinais
+    "medias_moveis",  # Necessário para sinais
+    "sinais_plugin",  # Depende dos indicadores
     "gerenciadores/gerenciador_bot",  # Depende de banco_dados e gerenciador_banco
 ]
 
-# Plugins adicionais
+# Plugins adicionais em ordem de dependência
 PLUGINS_ADICIONAIS = [
-    "analise_candles",
+    "price_action",  # Análise técnica
+    "analise_candles",  # Análise técnica
     "calculo_alavancagem",
     "calculo_risco",
     "execucao_ordens",
     "indicadores.indicadores_osciladores",
-    "indicadores.indicadores_tendencia",
     "indicadores.indicadores_volatilidade",
     "indicadores.indicadores_volume",
     "indicadores.outros_indicadores",
-    "medias_moveis",
-    "price_action",
-    "sinais_plugin",
-    "validador_dados",
 ]
 
 
@@ -112,24 +112,66 @@ def main() -> None:
         logger.info("Iniciando bot...")
         signal.signal(signal.SIGINT, signal_handler)
 
-        # Inicialização dos gerentes plugin e bot
+        # Inicialização do gerente de plugins
         gerente_plugin = inicializar_bot()
-        gerenciador_bot = GerenciadorBot()
-        logger.info("Bot iniciado com sucesso")
 
-        # Carregar plugins adicionais
+        # Carregar plugins adicionais antes de iniciar o bot
         for plugin_name in PLUGINS_ADICIONAIS:
             if not gerente_plugin.carregar_plugin(plugin_name):
                 logger.warning(f"Falha ao carregar plugin adicional: {plugin_name}")
 
+        # Inicialização do gerenciador do bot
+        gerenciador_bot = GerenciadorBot()
+        if not gerenciador_bot.inicializar(gerente_plugin.config):
+            raise RuntimeError("Falha ao inicializar gerenciador do bot")
+
+        # Registra todos os plugins carregados
+        for nome, plugin in gerente_plugin.plugins.items():
+            if not gerenciador_bot.registrar_plugin(plugin):
+                logger.error(f"Falha ao registrar plugin {nome}")
+                raise RuntimeError(f"Falha ao registrar plugin {nome}")
+
+        # Inicia o bot após todos os plugins estarem registrados
+        if not gerenciador_bot.iniciar():
+            raise RuntimeError("Falha ao iniciar gerenciador do bot")
+        logger.info("Bot iniciado com sucesso")
+
         # Loop principal
         while True:
             try:
-                gerenciador_bot.executar_ciclo()  # Executa o ciclo do bot
+                # Inicio do ciclo de execução do bot
+                logger.debug("Iniciando ciclo de execução...")
 
+                # Executa o ciclo do gerenciador do bot
                 if not gerenciador_bot.executar_ciclo():
-                    logger.warning("Falha no ciclo de execução")
+                    logger.warning("Falha no ciclo do gerenciador do bot")
                     break
+
+                # Obtém configurações e dados necessários
+                symbol = gerenciador_bot._config.get("symbol", "BTCUSDT")
+                timeframe = gerenciador_bot._config.get("timeframe", "1h")
+                dados = {
+                    "tendencia": {
+                        "direcao": "NEUTRO",
+                        "forca": "MÉDIA",
+                        "confianca": 50,
+                    },
+                    "medias_moveis": {
+                        "direcao": "NEUTRO",
+                        "forca": "MÉDIA",
+                        "confianca": 50,
+                    },
+                }
+
+                # Executa o ciclo do gerente de plugins
+                if not gerente_plugin.executar_ciclo(
+                    dados, symbol, timeframe, gerenciador_bot._config
+                ):
+                    logger.warning("Falha no ciclo de execução dos plugins")
+                    break
+
+                # Fim do ciclo de execução do bot
+                logger.debug("Ciclo de execução concluído com sucesso")
 
             except Exception as e:
                 logger.error(f"Erro no ciclo: {e}")

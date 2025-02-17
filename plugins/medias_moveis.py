@@ -1,23 +1,24 @@
 from utils.logging_config import get_logger
-
-logger = get_logger(__name__)
 import numpy as np
 import talib
-
 from plugins.plugin import Plugin
-from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
+
+logger = get_logger(__name__)
 
 
 class MediasMoveis(Plugin):
     """Plugin para cálculo e análise de médias móveis."""
 
+    # Identificador explícito do plugin
+    PLUGIN_NAME = "medias_moveis"
+    PLUGIN_TYPE = "essencial"
+
     def __init__(self):
         """Inicializa o plugin MediasMoveis."""
         super().__init__()
-        self.nome = "Médias Móveis"
+        self.nome = "medias_moveis"
         self.descricao = "Plugin para análise de médias móveis"
         self._config = None
-        self.gerente = GerentePlugin()
         self.cache_medias = {}
 
     def inicializar(self, config):
@@ -31,7 +32,9 @@ class MediasMoveis(Plugin):
             super().inicializar(config)
             self._config = config
             self.cache_medias = {}
-            logger.info(f"Plugin {self.nome} inicializado com sucesso")
+
+            return True
+        return True
 
     def calcular_media_movel(self, dados, periodo, tipo="simples"):
         """
@@ -138,25 +141,59 @@ class MediasMoveis(Plugin):
             logger.error(f"Erro ao gerar sinal de médias móveis: {e}")
             return {"sinal": None, "tipo": "medias_moveis", "padrao": padrao}
 
-    def executar(self, dados, symbol, timeframe):
+    def executar(self, *args, **kwargs) -> bool:
         """
         Executa a análise de médias móveis.
 
         Args:
-            dados (list): Lista de candles
-            symbol (str): Símbolo do par
-            timeframe (str): Timeframe
+            *args: Argumentos posicionais ignorados
+            **kwargs: Argumentos nomeados contendo:
+                dados (list): Lista de candles
+                symbol (str): Símbolo do par
+                timeframe (str): Timeframe
 
         Returns:
-            dict: Resultados da análise
+            bool: True se executado com sucesso
         """
         try:
+            # Extrai os parâmetros necessários
+            dados = kwargs.get("dados")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+
+            # Validação dos parâmetros
+            if not all([dados, symbol, timeframe]):
+                logger.error("Parâmetros necessários não fornecidos")
+                dados["medias_moveis"] = {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                    "indicadores": {
+                        "ma20": None,
+                        "ma50": None,
+                        "distancia": 0,
+                        "alavancagem": 1,
+                    },
+                }
+                return True
+
             # Inicializa alavancagem com valor padrão
             self.alavancagem = 1  # Valor default
 
             if not dados or len(dados) < 20:  # Mínimo de candles para análise
                 logger.warning("Dados insuficientes para análise")
-                return None
+                dados["medias_moveis"] = {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                    "indicadores": {
+                        "ma20": None,
+                        "ma50": None,
+                        "distancia": 0,
+                        "alavancagem": 1,
+                    },
+                }
+                return True
 
             # Calcular médias móveis
             closes = np.array([float(candle[4]) for candle in dados])
@@ -205,11 +242,25 @@ class MediasMoveis(Plugin):
                 },
             }
 
-            return sinal
+            # Atualiza o dicionário de dados com o sinal
+            dados["medias_moveis"] = sinal
+            return True
 
         except Exception as e:
             logger.error(f"Erro ao processar médias móveis: {e}")
-            raise
+            # Atualiza o dicionário com sinal neutro em caso de erro
+            dados["medias_moveis"] = {
+                "direcao": "NEUTRO",
+                "forca": "FRACA",
+                "confianca": 0,
+                "indicadores": {
+                    "ma20": None,
+                    "ma50": None,
+                    "distancia": 0,
+                    "alavancagem": 1,
+                },
+            }
+            return True
 
     def _calcular_alavancagem(self, closes):
         """

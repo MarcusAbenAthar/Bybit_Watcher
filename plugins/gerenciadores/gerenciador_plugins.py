@@ -27,6 +27,20 @@ logger = get_logger(__name__)
 class GerentePlugin:
     """Gerenciador central de plugins."""
 
+    # Plugins essenciais com suas descrições
+    PLUGINS_ESSENCIAIS = [
+        ("plugins.validador_dados", "Validador de Dados"),
+        ("plugins.gerenciadores.gerenciador_banco", "Gerenciador do Banco"),
+        ("plugins.banco_dados", "Banco de Dados"),
+        ("plugins.conexao", "Conexão com a Bybit"),
+        ("plugins.sinais_plugin", "Gerador de Sinais"),
+        ("plugins.analisador_mercado", "Analisador de Mercado"),
+        ("plugins.gerenciadores.gerenciador_bot", "Gerenciador do Bot"),
+    ]
+
+    # Plugins que precisam do validador_dados
+    PLUGINS_COM_VALIDADOR = ["calculo_risco", "calculo_alavancagem"]
+
     def __init__(self):
         """Inicializa o gerenciador."""
         self.plugins: Dict[str, Plugin] = {}
@@ -52,99 +66,251 @@ class GerentePlugin:
             logger.error(f"Erro ao inicializar gerente: {e}")
             return False
 
+    def _gerar_plugin_key(self, nome_plugin: str) -> str:
+        """Gera uma chave consistente para o plugin."""
+        if not nome_plugin.startswith("plugins."):
+            nome_plugin = f"plugins.{nome_plugin}"
+        return nome_plugin.replace("/", ".")
+
+    def _plugin_ja_carregado(self, plugin_key: str) -> bool:
+        """Verifica se um plugin já está carregado usando sua chave."""
+        return plugin_key in self.plugins and self.plugins[plugin_key].inicializado
+
     def carregar_plugin(self, nome_plugin: str) -> bool:
+        """Carrega um plugin e suas dependências."""
         try:
-            nome_plugin = nome_plugin.replace("plugins.", "").replace("/", ".")
-            nome_base = nome_plugin.split(".")[-1]
-            if nome_base in self.plugins:
+            # Gera chave consistente para o plugin
+            plugin_key = self._gerar_plugin_key(nome_plugin)
+
+            # Verifica se já está carregado
+            if self._plugin_ja_carregado(plugin_key):
+                logger.debug(f"Plugin {plugin_key} já carregado e inicializado")
                 return True
+            # Importa o módulo
+            try:
+                modulo = importlib.import_module(plugin_key)
+            except ImportError as e:
+                logger.error(f"Erro ao importar módulo {plugin_key}: {e}")
+                return False
 
-            modulo = importlib.import_module(f"plugins.{nome_plugin}")
-
-            plugin_class = None
-            for name, obj in vars(modulo).items():
-                if isinstance(obj, type) and issubclass(obj, Plugin) and obj != Plugin:
-                    plugin_class = obj
-                    break
+            # Encontra a classe do plugin (primeira classe que herda de Plugin)
+            plugin_class = next(
+                (
+                    obj
+                    for name, obj in vars(modulo).items()
+                    if isinstance(obj, type)
+                    and issubclass(obj, Plugin)
+                    and obj != Plugin
+                ),
+                None,
+            )
 
             if not plugin_class:
-                logger.error(f"Nenhuma classe plugin encontrada em {nome_plugin}")
+                logger.error(f"Nenhuma classe plugin encontrada em {plugin_key}")
                 return False
 
-            # Injeção de dependência para banco_dados
-            if nome_base == "banco_dados":
-                if self.gerenciador_banco is None:
-                    logger.error(
-                        "Gerenciador de banco não carregado. Carregue-o antes de banco_dados"
-                    )
-                    return False
-                plugin = plugin_class(gerenciador_banco=self.gerenciador_banco)
+            # Determina o nome do plugin
+            if hasattr(plugin_class, "PLUGIN_NAME") and plugin_class.PLUGIN_NAME:
+                plugin_name = plugin_class.PLUGIN_NAME
+            elif plugin_key.startswith("plugins.indicadores."):
+                # Para plugins de indicadores, usa o nome da classe
+                plugin_name = plugin_class.__name__
             else:
-                plugin = plugin_class()
-            
-            if not plugin.inicializar(self.config):
-                logger.error(f"Falha ao inicializar {nome_plugin}")
+                # Para outros plugins, usa a última parte do caminho
+                plugin_name = plugin_key.split(".")[-1]
+
+            # Cria instância do plugin com tratamento especial por tipo
+            try:
+                plugin = self._criar_plugin_especifico(
+                    plugin_class, plugin_name, plugin_key
+                )
+                if not plugin:
+                    return False
+
+                # Configura e inicializa o plugin
+                if not self._configurar_e_inicializar_plugin(
+                    plugin, plugin_name, plugin_key
+                ):
+                    return False
+
+                logger.info(
+                    f"Plugin {plugin_name} carregado e inicializado com sucesso"
+                )
+                return True
+
+            except Exception as e:
+                logger.error(f"Erro ao criar/configurar plugin {plugin_name}: {e}")
                 return False
-
-            self.plugins[nome_base] = plugin
-            # Armazena a instancia do gerenciador de banco
-            if nome_base == "gerenciador_banco":
-                self.gerenciador_banco = plugin
-
-            logger.info(f"Plugin %s carregado com sucesso", nome_base)
-            return True
         except Exception as e:
             logger.exception(
                 f"Erro ao carregar plugin {nome_plugin}: {e}"
             )  # Log full traceback
             return False
 
-    def _carregar_plugin(self, nome_modulo: str) -> Optional[Plugin]:
+    def _criar_plugin_especifico(
+        self, plugin_class, plugin_name: str, plugin_key: str
+    ) -> Optional[Plugin]:
+        """Cria uma instância específica do plugin com base em seu tipo."""
+        try:
+            # Plugins básicos que não precisam de parâmetros
+            if plugin_name in ["validador_dados"]:
+                return plugin_class()
+
+            # Plugins que precisam apenas do gerenciador de banco
+            if plugin_name == "banco_dados":
+                # Garante que o gerenciador_banco existe
+                if not self.gerenciador_banco:
+                    logger.info("Carregando gerenciador_banco para banco_dados")
+                    gerenciador = self.obter_plugin("gerenciadores.gerenciador_banco")
+                    if not gerenciador:
+                        logger.error("Falha ao obter gerenciador_banco")
+                        return None
+                    self.gerenciador_banco = gerenciador
+
+                # Garante que está inicializado
+                if not self.gerenciador_banco.inicializado:
+                    if not self.gerenciador_banco.inicializar(self.config):
+                        logger.error("Falha ao inicializar gerenciador_banco")
+                        return None
+
+                # Cria o banco_dados com o gerenciador inicializado
+                plugin = plugin_class(gerenciador_banco=self.gerenciador_banco)
+                if not plugin:
+                    logger.error("Falha ao criar banco_dados")
+                    return None
+
+                return plugin
+
+            # Plugins que precisam do gerente e config
+            if (
+                plugin_key.startswith("plugins.indicadores.")
+                or plugin_name == "analise_candles"
+            ):
+                return plugin_class(gerente=self, config=self.config)
+
+            # AnalisadorMercado precisa apenas do gerente
+            if plugin_name == "analisador_mercado":
+                # Carrega suas dependências primeiro
+                plugins_analise = [
+                    "plugins.analise_candles",
+                    "plugins.medias_moveis",
+                    "plugins.price_action",
+                    "plugins.indicadores.indicadores_tendencia",
+                ]
+                for plugin_dep in plugins_analise:
+                    if not self._carregar_dependencia(plugin_dep):
+                        logger.error(f"Falha ao carregar dependência {plugin_dep}")
+                        return None
+
+                return plugin_class(gerente=self)
+
+            # Gerenciador bot é um caso especial
+            if plugin_name == "gerenciador_bot":
+                # Garante que todos os plugins essenciais estejam carregados
+                for nome, _ in self.PLUGINS_ESSENCIAIS:
+                    if nome != "plugins.gerenciadores.gerenciador_bot":
+                        if not self._plugin_ja_carregado(nome):
+                            if not self.carregar_plugin(nome):
+                                logger.error(
+                                    f"Falha ao carregar plugin essencial {nome}"
+                                )
+                                return None
+
+                gerenciador = plugin_class()
+                # Inicializa primeiro para poder registrar os plugins
+                if not gerenciador.inicializar(self.config):
+                    return None
+                # Registra plugins já carregados
+                for nome, plugin in self.plugins.items():
+                    gerenciador.registrar_plugin(plugin)
+                return gerenciador
+
+            # Plugins que não recebem parâmetros no construtor
+            if plugin_name in [
+                "conexao",
+                "calculo_risco",
+                "execucao_ordens",
+                "medias_moveis",
+                "price_action",
+                "sinais_plugin",
+            ]:
+                return plugin_class()
+
+            # Gerenciador de banco é um caso especial
+            if plugin_name == "gerenciador_banco":
+                plugin = plugin_class()
+                self.gerenciador_banco = plugin
+                return plugin
+
+            # Plugins que precisam apenas do config
+            if plugin_name in ["calculo_alavancagem"]:
+                return plugin_class(self.config)
+
+            # Se não souber como criar, não passa parâmetros
+            return plugin_class()
+
+        except Exception as e:
+            logger.error(f"Erro ao criar plugin {plugin_name}: {e}")
+            return None
+
+    def _configurar_e_inicializar_plugin(
+        self, plugin: Plugin, plugin_name: str, plugin_key: str
+    ) -> bool:
+        """Configura e inicializa um plugin."""
+        try:
+            # Configura dependências especiais
+            if plugin_name in ["calculo_risco", "calculo_alavancagem"]:
+                validador_dados = self._obter_validador_dados()
+                if not validador_dados:
+                    return False
+                plugin._validador = validador_dados
+
+            # Armazena o plugin com a chave já gerada
+            self.plugins[plugin_key] = plugin
+
+            # Inicializa o plugin
+            if not plugin.inicializar(self.config):
+                logger.error(f"Falha ao inicializar {plugin_name}")
+                del self.plugins[plugin_key]
+                return False
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro ao configurar/inicializar plugin {plugin_name}: {e}")
+            return False
+
+    def _carregar_dependencia(self, nome_dependencia: str) -> bool:
+        """Carrega uma dependência se ainda não estiver carregada."""
+        plugin_key = self._gerar_plugin_key(nome_dependencia)
+        if not self._plugin_ja_carregado(plugin_key):
+            if not self.carregar_plugin(nome_dependencia):
+                logger.error(f"Falha ao carregar dependência {nome_dependencia}")
+                return False
+        return True
+
+    def obter_plugin(self, nome_plugin: str) -> Optional[Plugin]:
         """
-        Carrega um plugin específico.
+        Obtém ou carrega um plugin.
 
         Args:
-            nome_modulo: Nome do módulo do plugin (sem .py)
+            nome_plugin: Nome do plugin a ser obtido
 
         Returns:
             Optional[Plugin]: Instância do plugin ou None se falhar
         """
-        try:
-            # Importa o módulo
-            modulo = importlib.import_module(f"plugins.{nome_modulo}")
-
-            # Procura pela classe que herda de Plugin
-            for item_name in dir(modulo):
-                item = getattr(modulo, item_name)
-
-                # Verifica se é uma classe que herda de Plugin
-                if (
-                    isinstance(item, type)
-                    and issubclass(item, Plugin)
-                    and item != Plugin
-                ):
-
-                    # Instancia o plugin
-                    plugin = item()
-
-                    # Verifica se o nome corresponde
-                    if plugin.nome == nome_modulo:
-                        # Inicializa o plugin
-                        if self.config:
-                            plugin.inicializar(self.config)
-
-                        logger.info(f"Plugin {nome_modulo} carregado com sucesso")
-                        return plugin
-
-            logger.warning(f"Plugin {nome_modulo} não encontrado")
-            return None
-
-        except ImportError as e:
-            logger.error(f"Erro ao importar plugin {nome_modulo}: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Erro ao carregar plugin {nome_modulo}: {e}")
-            return None
+        plugin_key = self._gerar_plugin_key(nome_plugin)
+        plugin = self.plugins.get(plugin_key)
+        if not plugin or not plugin.inicializado:
+            logger.info(f"Carregando plugin {nome_plugin}")
+            if not self.carregar_plugin(nome_plugin):
+                logger.error(f"Falha ao carregar plugin {nome_plugin}")
+                return None
+            plugin = self.plugins[plugin_key]
+            if not plugin.inicializado:
+                logger.error(f"Plugin {nome_plugin} não está inicializado")
+                return None
+        return plugin
 
     def _eh_plugin_valido(self, arquivo: str) -> bool:
         """
@@ -165,37 +331,48 @@ class GerentePlugin:
         Returns:
             bool: True se todos plugins essenciais OK
         """
-        essenciais = {
-            "gerenciador_banco": "Gerenciador do Banco",
-            "banco_dados": "Banco de Dados",
-            "conexao": "Conexão com a Bybit",
-            "gerenciador_bot": "Gerenciador do Bot",
-        }
+        # Força o carregamento do validador_dados primeiro
+        validador_dados = self._obter_validador_dados()
+        if not validador_dados:
+            logger.error("Falha ao carregar validador_dados")
+            return False
+        logger.info("Validador de dados carregado com sucesso")
 
-        for nome, descricao in essenciais.items():
-            # Extrai o nome base do plugin
-            nome_base = nome.split(".")[-1]
-            if nome_base not in self.plugins:
+        # Verifica plugins essenciais na ordem definida
+        for nome, descricao in self.PLUGINS_ESSENCIAIS:
+            if nome not in self.plugins:
                 logger.error(f"Plugin essencial faltando: {descricao} ({nome})")
-                return False
+                if not self.carregar_plugin(nome):
+                    logger.error(f"Falha ao carregar plugin {nome}")
+                    return False
+                logger.info(f"Plugin {nome} carregado com sucesso")
 
-            if not self.plugins[nome_base].inicializado:
+            plugin = self.plugins[nome]
+            if not plugin.inicializado:
                 logger.error(f"Plugin não inicializado: {descricao} ({nome})")
-                return False
+                if not plugin.inicializar(self.config):
+                    logger.error(f"Falha ao reinicializar {nome}")
+                    return False
+                logger.info(f"Plugin {nome} reinicializado com sucesso")
 
         return True
 
     def executar_ciclo(self, dados, symbol, timeframe, config) -> bool:
+        """Executa o ciclo em todos os plugins carregados."""
         try:
+            kwargs = {
+                "dados": dados,
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "config": config,
+            }
             for plugin in self.plugins.values():
-                if not plugin.executar(dados, symbol, timeframe, config):
+                if not plugin.executar(**kwargs):
                     logger.error(f"Erro na execução do plugin: {plugin.nome}")
                     return False
             return True
         except Exception as e:
-            logger.exception(
-                f"Erro no ciclo: {e}"
-            )  # Use logger.exception for full traceback
+            logger.error(f"Erro no ciclo: {e}")
             return False
 
     def finalizar(self):
@@ -205,6 +382,14 @@ class GerentePlugin:
                 plugin.finalizar()
             except Exception as e:
                 logger.error(f"Erro ao finalizar {plugin.nome}: {e}")
+
+    def _obter_validador_dados(self) -> Optional[Plugin]:
+        """Obtém ou carrega o validador_dados."""
+        return self.obter_plugin("validador_dados")
+
+    def obter_calculo_alavancagem(self) -> Optional[Plugin]:
+        """Obtém a instância do plugin de cálculo de alavancagem."""
+        return self.obter_plugin("calculo_alavancagem")
 
     def listar_plugins(self) -> None:
         """Lista todos os plugins carregados."""
@@ -224,10 +409,5 @@ class GerentePlugin:
             logger.error(f"Erro ao listar plugins: {e}")
 
 
-def obter_calculo_alavancagem():
-    """
-    Retorna a instância do plugin CalculoAlavancagem.
-    """
-    from plugins.calculo_alavancagem import CalculoAlavancagem
-
-    return CalculoAlavancagem()
+# Função removida pois criava instâncias duplicadas.
+# Agora o plugin é obtido diretamente do gerenciador através de self.plugins

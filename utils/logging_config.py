@@ -14,7 +14,8 @@ Regras de Ouro:
 10. Documentado - Bem documentado
 """
 
-import logging.config
+import logging
+import logging.config  # Added this import
 import logging.handlers
 from datetime import datetime
 from pathlib import Path
@@ -44,7 +45,7 @@ BASE_CONFIG = {
         # Handler para console
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "detalhado",
+            "formatter": "detalhado",  # Changed to detailed format
             "level": "DEBUG",
         },
         # Handler para log geral
@@ -74,64 +75,16 @@ BASE_CONFIG = {
             "backupCount": 10,
             "level": "ERROR",
         },
-        # Handler para info
-        "info": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": f"logs/info_{datetime.now():%Y-%m-%d}.log",
-            "formatter": "detalhado",
-            "maxBytes": 10485760,  # 10MB
-            "backupCount": 10,
-            "level": "INFO",
-        },
-        # Handler para warning
-        "warning": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": f"logs/warning_{datetime.now():%Y-%m-%d}.log",
-            "formatter": "detalhado",
-            "maxBytes": 10485760,  # 10MB
-            "backupCount": 10,
-            "level": "WARNING",
-        },
-        # Handler para critical
-        "critical": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": f"logs/critical_{datetime.now():%Y-%m-%d}.log",
-            "formatter": "detalhado",
-            "maxBytes": 10485760,  # 10MB
-            "backupCount": 10,
-            "level": "CRITICAL",
-        },
     },
     "loggers": {
         # Logger raiz
         "": {
-            "handlers": ["console", "arquivo", "erros", "critical"],
+            "handlers": ["console", "arquivo", "erros"],
             "level": "DEBUG",
             "propagate": True,
         },
         # Logger específico para sinais
-        "sinais": {
-            "handlers": ["sinais"],
-            "level": "INFO",
-            "propagate": False,
-        },
-        # Logger específico para critical
-        "critical": {
-            "handlers": ["critical"],
-            "level": "CRITICAL",
-            "propagate": False,
-        },
-        # Loggers específicos para cada nível
-        "info": {
-            "handlers": ["info"],
-            "level": "INFO",
-            "propagate": False,
-        },
-        "warning": {
-            "handlers": ["warning"],
-            "level": "WARNING",
-            "propagate": False,
-        },
+        "sinais": {"handlers": ["sinais"], "level": "INFO", "propagate": False},
         # Loggers específicos para cada plugin
         "plugins": {
             "level": "DEBUG",

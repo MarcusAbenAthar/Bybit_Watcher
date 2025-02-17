@@ -1,6 +1,6 @@
 import psycopg2
-from plugins.gerenciadores.gerenciador_plugins import obter_calculo_alavancagem
 from plugins.gerenciadores.gerenciador_banco import obter_banco_dados
+from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 from utils.logging_config import get_logger
 import talib
 from plugins.plugin import Plugin
@@ -14,13 +14,20 @@ class IndicadoresVolume(Plugin):
     Plugin para calcular indicadores de volume.
     """
 
-    def __init__(self, config=None):
-        """Inicializa o plugin IndicadoresVolume."""
+    def __init__(self, gerente: GerentePlugin, config=None):
+        """
+        Inicializa o plugin IndicadoresVolume.
+
+        Args:
+            gerente: Instância do gerenciador de plugins
+            config: Configurações do sistema
+        """
         super().__init__()
         self.nome = "Indicadores de Volume"
         self.config = config
-        # Obtém o plugin de cálculo de alavancagem
-        self.calculo_alavancagem = obter_calculo_alavancagem()
+        self.gerente = gerente
+        # Acessa o plugin de cálculo de alavancagem através do gerente
+        self.calculo_alavancagem = self.gerente.obter_calculo_alavancagem()
         # Obtém o plugin de banco de dados
         self.banco_dados = obter_banco_dados(config)
 

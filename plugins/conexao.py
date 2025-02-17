@@ -25,9 +25,7 @@ from plugins.plugin import Plugin
 logger = logging.getLogger(__name__)
 
 
-class Conexao(
-    Plugin,
-):
+class Conexao(Plugin):
     """Plugin para conexão com a Bybit."""
 
     # Identificador explícito do plugin
@@ -44,7 +42,8 @@ class Conexao(
 
         # Atributos específicos deste plugin
         self.exchange = None
-        self._mercado = os.getenv("BYBIT_MARKET", "swap")
+        # Corrige para futuros perpétuos
+        self._mercado = os.getenv("BYBIT_MARKET", "linear")
         self._pares_usdt = []
         self.inicializado = False  # Atributo necessário para verificação
 
@@ -67,7 +66,7 @@ class Conexao(
             if not self._conectar_bybit():
                 return False
             self.inicializado = True  # Correção do bug de conexão
-            logger.info("Plugin Conexao inicializado com sucesso")
+            logger.info("Conexão estabelecida com sucesso")
             return True
 
         except Exception as e:
@@ -102,9 +101,11 @@ class Conexao(
             # Carrega mercados
             self.exchange.load_markets()
 
-            # Atualiza pares USDT
+            # Atualiza pares USDT (apenas futuros perpétuos)
             self._pares_usdt = [
-                symbol for symbol in self.exchange.symbols if symbol.endswith("/USDT")
+                symbol
+                for symbol in self.exchange.symbols
+                if symbol.endswith("/USDT:USDT")
             ]
 
             logger.info("Conexão estabelecida com Bybit")
@@ -122,6 +123,43 @@ class Conexao(
             List[str]: Lista de pares USDT
         """
         return self._pares_usdt
+
+    def obter_pares(self) -> List[str]:
+        """
+        Alias para obter_pares_usdt para compatibilidade.
+
+        Returns:
+            List[str]: Lista de pares USDT
+        """
+        return self.obter_pares_usdt()
+
+    def obter_klines(self, symbol: str, timeframe: str) -> Optional[List]:
+        """
+        Obtém dados OHLCV para um par e timeframe.
+
+        Args:
+            symbol: Par de trading
+            timeframe: Intervalo de tempo
+
+        Returns:
+            Optional[List]: Lista de candles OHLCV ou None se falhar
+        """
+        try:
+            if not self.exchange:
+                logger.error("Exchange não inicializada")
+                return None
+
+            # Obtém os últimos 100 candles
+            klines = self.exchange.fetch_ohlcv(symbol, timeframe, limit=100)
+            if not klines:
+                logger.warning(f"Nenhum dado OHLCV para {symbol} {timeframe}")
+                return None
+
+            return klines
+
+        except Exception as e:
+            logger.error(f"Erro ao obter klines para {symbol} {timeframe}: {e}")
+            return None
 
     def validar_mercado(self, dados):
         """
@@ -164,6 +202,30 @@ class Conexao(
 
         except Exception as erro:
             logger.error(f"Erro na validação do mercado: {str(erro)}")
+            return False
+
+    def executar(self, *args, **kwargs) -> bool:
+        """
+        Executa ciclo do plugin.
+
+        Args:
+            *args: Argumentos posicionais ignorados
+            **kwargs: Argumentos nomeados ignorados
+
+        Returns:
+            bool: True se executado com sucesso
+        """
+        try:
+            if not self.exchange:
+                logger.warning("Exchange não inicializada")
+                return False
+
+            # Verifica se a conexão está ativa
+            self.exchange.fetch_time()
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro no ciclo de execução: {e}")
             return False
 
     def finalizar(self):

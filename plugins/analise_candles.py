@@ -8,32 +8,66 @@ import talib
 from utils.padroes_candles import PADROES_CANDLES
 
 from plugins.plugin import Plugin
-from plugins.gerenciadores.gerenciador_plugins import (
-    GerentePlugin,
-    obter_calculo_alavancagem,
-)
+from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 
 
 class AnaliseCandles(Plugin):
     """Plugin para analisar os candles e identificar padrões."""
 
-    def __init__(self):
-        """Inicializa o plugin AnaliseCandles."""
+    PLUGIN_NAME = "analise_candles"
+    PLUGIN_TYPE = "adicional"
+
+    def __init__(self, gerente=None, validador=None, calculo_alavancagem=None):
+        """
+        Inicializa o plugin AnaliseCandles.
+
+        Args:
+            gerente: Instância do gerenciador de plugins
+            validador: Instância do validador de dados
+            calculo_alavancagem: Instância do cálculo de alavancagem
+        """
         super().__init__()
-        self.nome = "Análise de Candles"
+        self.nome = self.PLUGIN_NAME
         self.descricao = "Plugin para análise de padrões de candles"
         self._config = None
         self.cache_padroes = {}
-        self.gerente = GerentePlugin()
+        self.gerente = gerente
+        self._validador = validador
+        self._calculo_alavancagem = calculo_alavancagem
+        self.inicializado = False
 
     def inicializar(self, config):
         """Inicializa as dependências do plugin."""
-        if not self._config:  # Só inicializa uma vez
-            super().inicializar(config)
+        try:
+            if self.inicializado:
+                return True
+
+            if not super().inicializar(config):
+                return False
+
             self._config = config
-            self._calculo_alavancagem = obter_calculo_alavancagem()
-            self._validador = ValidadorDados()
-            logger.info(f"Plugin {self.nome} inicializado com sucesso")
+
+            # Verifica dependências
+            if not self._validador:
+                logger.error("Validador de dados não fornecido")
+                return False
+
+            if not self._validador.inicializado:
+                if not self._validador.inicializar(config):
+                    logger.error("Falha ao inicializar validador")
+                    return False
+
+            if not self._calculo_alavancagem:
+                logger.error("Cálculo de alavancagem não fornecido")
+                return False
+
+            self.inicializado = True
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro ao inicializar {self.nome}: {e}")
+            return False
 
     def identificar_padrao(self, dados):
         """Identifica padrões de candlestick nos dados."""
@@ -124,22 +158,69 @@ class AnaliseCandles(Plugin):
             "confianca": 0,
         }
 
-    def executar(self, dados, symbol, timeframe):
+    def executar(self, *args, **kwargs) -> bool:
         """
         Executa a análise dos candles.
 
         Args:
-            dados (list): Lista de candles.
-            symbol (str): Símbolo do par de moedas.
-            timeframe (str): Timeframe da análise.
+            *args: Argumentos posicionais ignorados
+            **kwargs: Argumentos nomeados contendo:
+                dados (list): Lista de candles
+                symbol (str): Símbolo do par
+                timeframe (str): Timeframe da análise
+                config (dict): Configurações do bot
+
+        Returns:
+            bool: True se executado com sucesso
         """
-        logger.debug(f"Iniciando análise de candles para {symbol} - {timeframe}")
         try:
-            # Passar symbol e timeframe para analisar_candles
-            return self.analisar_candles(dados, symbol, timeframe)
+            # Extrai os parâmetros necessários
+            dados = kwargs.get("dados")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+
+            # Validação dos parâmetros
+            if not all([dados, symbol, timeframe]):
+                logger.error("Parâmetros necessários não fornecidos")
+                dados["candles"] = {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                }
+                return True
+
+            # Verifica se há dados suficientes
+            if not dados or len(dados) < 20:  # Mínimo de candles para análise
+                logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
+                dados["candles"] = {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                }
+                return True
+
+            logger.debug(f"Iniciando análise de candles para {symbol} - {timeframe}")
+            resultados = self.analisar_candles(dados, symbol, timeframe)
+
+            if resultados:
+                dados["candles"] = resultados
+            else:
+                dados["candles"] = {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                }
+
+            return True
+
         except Exception as e:
             logger.error(f"Erro ao analisar candles: {e}")
-            raise
+            dados["candles"] = {
+                "direcao": "NEUTRO",
+                "forca": "FRACA",
+                "confianca": 0,
+            }
+            return True
 
     def _calcular_tamanho_relativo_e_multiplicador(self, candle, padrao):
         """
@@ -204,14 +285,21 @@ class AnaliseCandles(Plugin):
     def analisar_candles(self, dados, symbol, timeframe):
         """Analisa os candles recebidos."""
         try:
+            if not self.inicializado:
+                logger.error("Plugin não inicializado")
+                return None
+
             # Valida parâmetros individualmente
             if not self._validador.validar_symbol(symbol):
+                logger.error(f"Symbol inválido: {symbol}")
                 return None
 
             if not self._validador.validar_timeframe(timeframe):
+                logger.error(f"Timeframe inválido: {timeframe}")
                 return None
 
             if not self._validador.validar_estrutura(dados):
+                logger.error("Estrutura de dados inválida")
                 return None
 
             # Processa apenas candles válidos
@@ -223,8 +311,25 @@ class AnaliseCandles(Plugin):
                 logger.error("Nenhum candle válido para análise")
                 return None
 
-            # Continua processamento...
-            return self._executar_analise(candles_validos)
+            # Analisa os candles
+            resultados = self._analisar_padroes_talib(
+                self._preparar_dados_numpy(candles_validos)
+            )
+
+            # Processa os sinais
+            sinais = self._processar_sinais(
+                candles_validos, resultados, symbol, timeframe
+            )
+
+            # Salva resultados se houver sinais
+            if sinais:
+                self._salvar_resultados(sinais, symbol, timeframe)
+
+            return {
+                "sinais": sinais,
+                "resultados": resultados,
+                "candles_analisados": len(candles_validos),
+            }
 
         except Exception as e:
             logger.error(f"Erro na análise de candles: {e}")
@@ -241,7 +346,7 @@ class AnaliseCandles(Plugin):
             return np.array(dados_np, dtype=np.float64)
         except Exception as e:
             logger.error(f"Erro ao preparar dados numpy: {e}")
-            raise
+            return None
 
     def _analisar_padroes_talib(self, dados_np):
         """Analisa padrões usando TA-Lib."""

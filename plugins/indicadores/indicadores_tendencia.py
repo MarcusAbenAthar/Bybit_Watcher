@@ -11,23 +11,46 @@ Características:
 - Filtros de qualidade
 """
 
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict
 import numpy as np
 import pandas as pd
 from utils.logging_config import get_logger
 from plugins.plugin import Plugin
 from plugins.gerenciadores.gerenciador_banco import obter_banco_dados
-from plugins.gerenciadores.gerenciador_plugins import obter_calculo_alavancagem
+from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 
 logger = get_logger(__name__)
 
 
 class IndicadoresTendencia(Plugin):
-    def __init__(self, config=None):
-        """Inicializa o plugin de indicadores de tendência."""
+    def __init__(self, gerente: GerentePlugin, config=None):
+        """
+        Inicializa o plugin de indicadores de tendência.
+
+        Args:
+            gerente: Instância do gerenciador de plugins
+            config: Configurações do sistema
+        """
         super().__init__()
         self.nome = "Indicadores de Tendência"
-        self.config = config
+        # Configurações padrão
+        self.config = {
+            "sma_rapida": 9,
+            "sma_lenta": 21,
+            "ema_rapida": 12,
+            "ema_lenta": 26,
+            "macd_signal": 9,
+            "adx_periodo": 14,
+            "min_adx": 25,
+            "min_confianca": 0.8,  # Mínimo de 80% de confiança
+        }
+        # Atualiza com configurações fornecidas
+        if config:
+            self.config.update(config)
+
+        self.gerente = gerente
+        # Acessa o plugin de cálculo de alavancagem através do gerente
+        self.calculo_alavancagem = self.gerente.obter_calculo_alavancagem()
 
     def calcular_medias_moveis(self, dados: pd.DataFrame) -> Dict[str, pd.Series]:
         """
@@ -54,7 +77,12 @@ class IndicadoresTendencia(Plugin):
             }
         except Exception as e:
             logger.error(f"Erro ao calcular médias móveis: {e}")
-            return {}
+            return {
+                "sma_rapida": pd.Series(),
+                "sma_lenta": pd.Series(),
+                "ema_rapida": pd.Series(),
+                "ema_lenta": pd.Series(),
+            }
 
     def calcular_macd(self, dados: pd.DataFrame) -> Dict[str, pd.Series]:
         """
@@ -80,7 +108,11 @@ class IndicadoresTendencia(Plugin):
             return {"macd": macd_line, "signal": signal_line, "histogram": histogram}
         except Exception as e:
             logger.error(f"Erro ao calcular MACD: {e}")
-            return {}
+            return {
+                "macd": pd.Series(),
+                "signal": pd.Series(),
+                "histogram": pd.Series(),
+            }
 
     def calcular_adx(self, dados: pd.DataFrame) -> Dict[str, pd.Series]:
         """
@@ -121,7 +153,11 @@ class IndicadoresTendencia(Plugin):
             return {"adx": adx, "pdi": pdi, "ndi": ndi}
         except Exception as e:
             logger.error(f"Erro ao calcular ADX: {e}")
-            return {}
+            return {
+                "adx": pd.Series(),
+                "pdi": pd.Series(),
+                "ndi": pd.Series(),
+            }
 
     def gerar_sinal(self, dados: pd.DataFrame) -> Dict[str, any]:
         """
@@ -179,14 +215,16 @@ class IndicadoresTendencia(Plugin):
                 confianca_compra = confirmacoes_compra / total_indicadores
                 confianca_venda = confirmacoes_venda / total_indicadores
             else:
-                return {"sinal": "NEUTRO", "confianca": 0}
+                return {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0}
 
             # Determina força do sinal
             forca = "FRACA"
             if total_indicadores >= 2:
-                if confianca_compra >= 0.8 or confianca_venda >= 0.8:
+                if confianca_compra >= 0.9 or confianca_venda >= 0.9:  # 90% para FORTE
                     forca = "FORTE"
-                elif confianca_compra >= 0.6 or confianca_venda >= 0.6:
+                elif (
+                    confianca_compra >= 0.8 or confianca_venda >= 0.8
+                ):  # 80% para MÉDIA
                     forca = "MÉDIA"
 
             # Gera sinal final com base na confiança mínima
@@ -224,7 +262,7 @@ class IndicadoresTendencia(Plugin):
 
         except Exception as e:
             logger.error(f"Erro ao gerar sinal: {e}")
-            return {"sinal": "ERRO", "confianca": 0}
+            return {"direcao": "ERRO", "forca": "FRACA", "confianca": 0}
 
     def calcular_atr(self, dados: pd.DataFrame, periodo: int = 14) -> float:
         """Calcula o ATR para definição de TP/SL."""
@@ -244,29 +282,52 @@ class IndicadoresTendencia(Plugin):
             logger.error(f"Erro ao calcular ATR: {e}")
             return 0
 
-    def executar(self, dados: List[Tuple], symbol: str, timeframe: str, config) -> None:
+    def executar(self, *args, **kwargs) -> bool:
         """
-        Executa a análise de tendência e salva os resultados.
+        Executa a análise de tendência.
 
         Args:
-            dados: Lista de tuplas com dados OHLCV
-            symbol: Símbolo do par
-            timeframe: Timeframe da análise
-            config: Configurações do bot
+            *args: Argumentos posicionais ignorados
+            **kwargs: Argumentos nomeados contendo:
+                dados: Lista de tuplas com dados OHLCV
+                symbol: Símbolo do par
+                timeframe: Timeframe da análise
+                config: Configurações do bot
+
+        Returns:
+            bool: True se executado com sucesso
         """
         try:
-            # Obtém o banco de dados quando necessário
-            banco_dados = obter_banco_dados(config)
+            # Extrai os parâmetros necessários
+            dados = kwargs.get("dados")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+            config = kwargs.get("config")
 
-            logger.debug(f"Iniciando análise de tendência para {symbol} - {timeframe}")
-            logger.debug(f"Quantidade de dados recebidos: {len(dados)}")
+            # Validação dos parâmetros
+            if not all([dados, symbol, timeframe]):
+                logger.error("Parâmetros necessários não fornecidos")
+                dados["tendencia"] = {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                }
+                return True
+
+            # Verifica se há dados suficientes
+            if not dados or len(dados) < 20:  # Mínimo de candles para análise
+                logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
+                dados["tendencia"] = {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                }
+                return True
 
             # Converte dados para DataFrame
             df = pd.DataFrame(
                 dados,
                 columns=[
-                    "symbol",
-                    "timeframe",
                     "timestamp",
                     "open",
                     "high",
@@ -276,44 +337,23 @@ class IndicadoresTendencia(Plugin):
                 ],
             )
 
-            logger.debug(f"DataFrame criado com sucesso. Shape: {df.shape}")
-
             # Atualiza configurações se necessário
-            if config.has_section("indicadores_tendencia"):
+            if config and "indicadores_tendencia" in config:
                 self.config.update(config["indicadores_tendencia"])
-                logger.debug("Configurações atualizadas")
 
             # Gera sinal
             sinal = self.gerar_sinal(df)
-            logger.debug(f"Sinal gerado: {sinal}")
 
-            # Loga resultado
-            if sinal["direcao"] != "NEUTRO":
-                logger.info(
-                    f"{symbol} - {timeframe} - Direção: {sinal['direcao']} "
-                    f"(Força: {sinal['forca']}, Confiança: {sinal['confianca']:.2f}%)"
-                )
+            # Atualiza o dicionário de dados com o sinal
+            dados["tendencia"] = sinal
 
-                if "stop_loss" in sinal:
-                    logger.info(
-                        f"Stop Loss: {sinal['stop_loss']:.8f} | "
-                        f"Take Profit: {sinal['take_profit']:.8f}"
-                    )
-
-            # Salva resultado no banco de dados
-            banco_dados.salvar_sinal(
-                symbol=symbol,
-                timeframe=timeframe,
-                tipo="tendencia",
-                sinal=sinal["direcao"],
-                forca=sinal["forca"],
-                confianca=sinal["confianca"],
-                stop_loss=sinal.get("stop_loss"),
-                take_profit=sinal.get("take_profit"),
-                timestamp=df["timestamp"].iloc[-1],
-            )
-            logger.debug("Sinal salvo no banco de dados")
+            return True
 
         except Exception as e:
             logger.error(f"Erro ao executar análise de tendência: {e}")
-            logger.exception("Detalhes do erro:")
+            dados["tendencia"] = {
+                "direcao": "NEUTRO",
+                "forca": "FRACA",
+                "confianca": 0,
+            }
+            return True

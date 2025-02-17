@@ -4,7 +4,7 @@ Plugin para gerenciamento centralizado de conexoes com o banco de dados.
 Regras de Ouro:
 1. Autonomo - Gerencia conexoes automaticamente
 2. Criterioso - Validacoes rigorosas
-3. Seguro - Tratamento de erros e singleton
+3. Seguro - Tratamento de erros 
 4. Certeiro - Operacoes precisas
 5. Eficiente - Performance otimizada
 6. Clareza - Bem documentado 
@@ -33,6 +33,162 @@ class GerenciadorBanco(
 
     PLUGIN_NAME = "gerenciador_banco"
     PLUGIN_TYPE = "essencial"
+
+    # Lista de tabelas padrão
+    TABELAS_PADRAO = [
+        "klines",
+        "sinais",
+        "analises",
+        "indicadores_tendencia",
+        "indicadores_osciladores",
+        "indicadores_volatilidade",
+        "indicadores_volume",
+        "outros_indicadores",
+    ]
+
+    # Definições das tabelas
+    DEFINICOES_TABELAS = {
+        "klines": """
+            CREATE TABLE {schema}.klines (
+                id SERIAL PRIMARY KEY,
+                symbol TEXT NOT NULL,
+                timeframe TEXT NOT NULL,
+                timestamp BIGINT NOT NULL,
+                open REAL NOT NULL,
+                high REAL NOT NULL,
+                low REAL NOT NULL,
+                close REAL NOT NULL,
+                volume REAL NOT NULL,
+                UNIQUE (symbol, timeframe, timestamp)
+            )
+        """,
+        "sinais": """
+            CREATE TABLE {schema}.sinais (
+                id SERIAL PRIMARY KEY,
+                symbol TEXT NOT NULL,
+                timeframe TEXT NOT NULL,
+                tipo TEXT NOT NULL,
+                sinal TEXT NOT NULL,
+                forca TEXT NOT NULL,
+                confianca REAL NOT NULL,
+                stop_loss REAL,
+                take_profit REAL,
+                volume_24h REAL,
+                tendencia TEXT,
+                rsi REAL,
+                macd TEXT,
+                suporte REAL,
+                resistencia REAL,
+                timestamp BIGINT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (symbol, timeframe, timestamp)
+            )
+        """,
+        "analises": """
+            CREATE TABLE {schema}.analises (
+                id SERIAL PRIMARY KEY,
+                symbol TEXT NOT NULL,
+                timeframe TEXT NOT NULL,
+                tipo_analise TEXT NOT NULL,
+                resultado TEXT NOT NULL,
+                detalhes TEXT,
+                timestamp BIGINT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (symbol, timeframe, timestamp)
+            )
+        """,
+        "indicadores_tendencia": """
+            CREATE TABLE {schema}.indicadores_tendencia (
+                id SERIAL PRIMARY KEY,
+                symbol TEXT NOT NULL,
+                timeframe TEXT NOT NULL,
+                timestamp BIGINT NOT NULL,
+                sma REAL,
+                ema REAL,
+                wma REAL,
+                dema REAL,
+                tema REAL,
+                trima REAL,
+                kama REAL,
+                mama REAL,
+                t3 REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (symbol, timeframe, timestamp)
+            )
+        """,
+        "indicadores_osciladores": """
+            CREATE TABLE {schema}.indicadores_osciladores (
+                id SERIAL PRIMARY KEY,
+                symbol TEXT NOT NULL,
+                timeframe TEXT NOT NULL,
+                timestamp BIGINT NOT NULL,
+                rsi REAL,
+                stoch_rsi REAL,
+                cci REAL,
+                mfi REAL,
+                willr REAL,
+                ultimate_oscillator REAL,
+                stochastic_k REAL,
+                stochastic_d REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (symbol, timeframe, timestamp)
+            )
+        """,
+        "indicadores_volatilidade": """
+            CREATE TABLE {schema}.indicadores_volatilidade (
+                id SERIAL PRIMARY KEY,
+                symbol TEXT NOT NULL,
+                timeframe TEXT NOT NULL,
+                timestamp BIGINT NOT NULL,
+                atr REAL,
+                natr REAL,
+                trange REAL,
+                bollinger_upper REAL,
+                bollinger_middle REAL,
+                bollinger_lower REAL,
+                keltner_upper REAL,
+                keltner_middle REAL,
+                keltner_lower REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (symbol, timeframe, timestamp)
+            )
+        """,
+        "indicadores_volume": """
+            CREATE TABLE {schema}.indicadores_volume (
+                id SERIAL PRIMARY KEY,
+                symbol TEXT NOT NULL,
+                timeframe TEXT NOT NULL,
+                timestamp BIGINT NOT NULL,
+                ad REAL,
+                adosc REAL,
+                obv REAL,
+                volume_sma REAL,
+                volume_ema REAL,
+                vwap REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (symbol, timeframe, timestamp)
+            )
+        """,
+        "outros_indicadores": """
+            CREATE TABLE {schema}.outros_indicadores (
+                id SERIAL PRIMARY KEY,
+                symbol TEXT NOT NULL,
+                timeframe TEXT NOT NULL,
+                timestamp BIGINT NOT NULL,
+                macd_line REAL,
+                macd_signal REAL,
+                macd_hist REAL,
+                sar REAL,
+                adx REAL,
+                di_plus REAL,
+                di_minus REAL,
+                aroon_up REAL,
+                aroon_down REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (symbol, timeframe, timestamp)
+            )
+        """,
+    }
 
     def __init__(self):
         """Inicializa o gerenciador."""
@@ -75,13 +231,16 @@ class GerenciadorBanco(
             self._config = config
 
             # Conecta ao banco
-            self._conectar_banco()
-            self.inicializado = True
+            if not self._conectar_banco():
+                logger.error("Falha na conexão com o banco")
+                return False
 
             # Inicializa schema e tabelas
             if not self._inicializar_schema():
+                logger.error("Falha na inicialização do schema")
                 return False
 
+            self.inicializado = True
             return True
 
         except Exception as e:
@@ -137,7 +296,9 @@ class GerenciadorBanco(
             return True
 
         except Exception as e:
-            logger.error(f"Erro ao criar banco de dados: {type(e).__name__} - {str(e)}")
+            logger.error(
+                f"Erro na criação do banco de dados: {type(e).__name__} - {str(e)}"
+            )
             return False
 
     def _inicializar_schema(self) -> bool:
@@ -152,7 +313,7 @@ class GerenciadorBanco(
             self.executar_query("CREATE SCHEMA IF NOT EXISTS public", commit=True)
 
             # Cria as tabelas necessárias
-            tabelas = [
+            TABELAS_PADRAO = [
                 "klines",
                 "sinais",
                 "analises",
@@ -162,15 +323,18 @@ class GerenciadorBanco(
                 "indicadores_volume",
                 "outros_indicadores",
             ]
-            for tabela in tabelas:
+
+            for tabela in TABELAS_PADRAO:
                 if not self.criar_tabela(tabela):
-                    logger.error(f"Falha ao criar tabela {tabela}")
+                    logger.error(f"Falha na criação da tabela {tabela}")
                     return False
 
             return True
 
         except Exception as e:
-            logger.error(f"Erro ao inicializar schema: {type(e).__name__} - {str(e)}")
+            logger.error(
+                f"Erro na inicialização do schema: {type(e).__name__} - {str(e)}"
+            )
             return False
 
     def _conectar_banco(self) -> bool:
@@ -228,22 +392,22 @@ class GerenciadorBanco(
                 return []
 
         except Exception as e:
-            logger.error(f"Erro ao executar query: {e}")
+            logger.error(f"Erro na execução da query: {e}")
             return None
 
     def criar_tabela(self, nome_tabela: str, schema: str = "public") -> bool:
         """
-        Cria uma tabela no banco de dados se ela nao existir.
+        Cria uma tabela no banco de dados se ela não existir.
 
         Args:
             nome_tabela: Nome da tabela a ser criada
-            schema: Nome do schema onde a tabela sera criada
+            schema: Nome do schema onde a tabela será criada
 
         Returns:
             bool: True se criada com sucesso
         """
         try:
-            # Verifica se a tabela ja existe
+            # Verifica se a tabela já existe
             exists = self.executar_query(
                 """
                 SELECT EXISTS (
@@ -256,6 +420,7 @@ class GerenciadorBanco(
                 (schema, nome_tabela),
             )
 
+            # Se a tabela já existe, retorna
             if exists and exists[0][0]:
                 return True
 
@@ -278,6 +443,8 @@ class GerenciadorBanco(
                     """,
                     commit=True,
                 )
+                logger.info(f"Tabela {schema}.{nome_tabela} criada com sucesso")
+                return True
 
             elif nome_tabela == "sinais":
                 self.executar_query(
@@ -288,6 +455,7 @@ class GerenciadorBanco(
                         timeframe TEXT NOT NULL,
                         tipo TEXT NOT NULL,
                         sinal TEXT NOT NULL,
+                        forca TEXT NOT NULL,
                         confianca REAL NOT NULL,
                         stop_loss REAL,
                         take_profit REAL,
@@ -304,6 +472,8 @@ class GerenciadorBanco(
                     """,
                     commit=True,
                 )
+                logger.info(f"Tabela {schema}.{nome_tabela} criada com sucesso")
+                return True
 
             elif nome_tabela == "analises":
                 self.executar_query(
@@ -322,6 +492,8 @@ class GerenciadorBanco(
                     """,
                     commit=True,
                 )
+                logger.info(f"Tabela {schema}.{nome_tabela} criada com sucesso")
+                return True
 
             elif nome_tabela == "indicadores_tendencia":
                 self.executar_query(
@@ -346,6 +518,8 @@ class GerenciadorBanco(
                     """,
                     commit=True,
                 )
+                logger.info(f"Tabela {schema}.{nome_tabela} criada com sucesso")
+                return True
 
             elif nome_tabela == "indicadores_osciladores":
                 self.executar_query(
@@ -369,6 +543,8 @@ class GerenciadorBanco(
                     """,
                     commit=True,
                 )
+                logger.info(f"Tabela {schema}.{nome_tabela} criada com sucesso")
+                return True
 
             elif nome_tabela == "indicadores_volatilidade":
                 self.executar_query(
@@ -393,6 +569,8 @@ class GerenciadorBanco(
                     """,
                     commit=True,
                 )
+                logger.info(f"Tabela {schema}.{nome_tabela} criada com sucesso")
+                return True
 
             elif nome_tabela == "indicadores_volume":
                 self.executar_query(
@@ -414,6 +592,8 @@ class GerenciadorBanco(
                     """,
                     commit=True,
                 )
+                logger.info(f"Tabela {schema}.{nome_tabela} criada com sucesso")
+                return True
 
             elif nome_tabela == "outros_indicadores":
                 self.executar_query(
@@ -438,17 +618,24 @@ class GerenciadorBanco(
                     """,
                     commit=True,
                 )
+                logger.info(f"Tabela {schema}.{nome_tabela} criada com sucesso")
+                return True
 
-            logger.info(f"Tabela {schema}.{nome_tabela} criada com sucesso")
-            return True
-
-        except Exception as e:
-            logger.error(f"Erro ao criar tabela {nome_tabela}: {e}")
+            # Se chegou aqui, o nome_tabela não corresponde a nenhum caso
+            logger.error(f"Nome de tabela não reconhecido: {nome_tabela}")
             return False
 
-    def executar(self) -> bool:
+        except Exception as e:
+            logger.error(f"Erro na criação da tabela {nome_tabela}: {e}")
+            return False
+
+    def executar(self, *args, **kwargs) -> bool:
         """
         Executa ciclo do plugin.
+
+        Args:
+            *args: Argumentos posicionais ignorados
+            **kwargs: Argumentos nomeados ignorados
 
         Returns:
             bool: True se executado com sucesso
@@ -459,7 +646,7 @@ class GerenciadorBanco(
                 cur.execute("SELECT 1")
             return True
         except Exception as e:
-            logger.error(f"Erro no ciclo de execucao: {e}")
+            logger.error(f"Erro no ciclo de execução: {e}")
             return False
 
     def finalizar(self):
@@ -468,15 +655,44 @@ class GerenciadorBanco(
             if self._conn:
                 self._conn.close()
                 self._conn = None
-            logger.info("Gerenciador de banco finalizado")
+            logger.info("Gerenciador de banco finalizado com sucesso")
         except Exception as e:
-            logger.error(f"Erro ao finalizar gerenciador: {e}")
+            logger.error(f"Erro na finalização do gerenciador: {e}")
 
 
-def obter_banco_dados(config=None):
+def obter_banco_dados(config=None, gerenciador_banco=None):
     """
     Retorna a instância do plugin BancoDados.
+
+    Args:
+        config: Configurações do bot
+        gerenciador_banco: Instância do gerenciador de banco
+
+    Returns:
+        BancoDados: Instância do plugin BancoDados
     """
     from plugins.banco_dados import BancoDados
 
-    return BancoDados(config)
+    # Verifica se temos configuração
+    if not config:
+        logger.error("Configuração necessária para inicializar banco")
+        return None
+
+    # Verifica se o gerenciador existe
+    if not gerenciador_banco:
+        logger.error("Gerenciador de banco não fornecido")
+        return None
+
+    # Inicializa o gerenciador se necessário
+    if not gerenciador_banco.inicializado:
+        if not gerenciador_banco.inicializar(config):
+            logger.error("Falha ao inicializar gerenciador de banco")
+            return None
+
+    # Cria e inicializa o banco de dados
+    banco = BancoDados(gerenciador_banco)
+    if not banco.inicializar(config):
+        logger.error("Falha ao inicializar banco de dados")
+        return None
+
+    return banco

@@ -22,9 +22,7 @@ from typing import Dict, List, Optional
 from plugins.plugin import Plugin
 
 
-class GerenciadorBot(
-    Plugin,
-):
+class GerenciadorBot(Plugin):
     """
     Gerenciador central do bot.
 
@@ -94,8 +92,10 @@ class GerenciadorBot(
                 logger.error(f"Plugin {plugin.PLUGIN_NAME} não inicializado")
                 return False
 
-            self._plugins_ativos[plugin.PLUGIN_NAME] = plugin
-            logger.info(f"Plugin {plugin.PLUGIN_NAME} registrado")
+            # Gera chave consistente para o plugin
+            plugin_key = f"plugins.{plugin.PLUGIN_NAME}"
+            self._plugins_ativos[plugin_key] = plugin
+            logger.info(f"Plugin {plugin_key} registrado")
             return True
 
         except Exception as e:
@@ -110,9 +110,10 @@ class GerenciadorBot(
             bool: True se todos os plugins essenciais estão ok
         """
         plugins_essenciais = {
-            "conexao": "Conexão com a Bybit",
-            "banco_dados": "Banco de Dados",
-            "sinais_plugin": "Gerador de Sinais",
+            "plugins.conexao": "Conexão com a Bybit",
+            "plugins.gerenciador_banco": "Gerenciador do Banco",
+            "plugins.banco_dados": "Banco de Dados",
+            "plugins.sinais_plugin": "Gerador de Sinais",
         }
 
         for nome, descricao in plugins_essenciais.items():
@@ -126,43 +127,17 @@ class GerenciadorBot(
 
         return True
 
-    def _executar_analises(
-        self, dados_ohlcv: list, symbol: str, timeframe: str
-    ) -> dict:
+    def obter_plugin(self, nome_plugin: str) -> Optional[Plugin]:
         """
-        Executa todas as análises disponíveis para um par/timeframe.
+        Obtém um plugin registrado.
 
         Args:
-            dados_ohlcv: Dados OHLCV do par
-            symbol: Par de trading
-            timeframe: Timeframe da análise
+            nome_plugin: Nome do plugin
 
         Returns:
-            dict: Resultados das análises
+            Optional[Plugin]: Plugin ou None se não encontrado
         """
-        resultados = {}
-        plugins_analise = {
-            "analise_candles": "candles",
-            "medias_moveis": "medias_moveis",
-            "price_action": "price_action",
-            "indicadores_tendencia": "tendencia",
-        }
-
-        for plugin, chave in plugins_analise.items():
-            if plugin in self._plugins_ativos:
-                try:
-                    if plugin == "indicadores_tendencia":
-                        resultados[chave] = self._plugins_ativos[plugin].executar(
-                            dados_ohlcv, symbol, timeframe, self._config
-                        )
-                    else:
-                        resultados[chave] = self._plugins_ativos[plugin].executar(
-                            dados_ohlcv, symbol, timeframe
-                        )
-                except Exception as e:
-                    logger.error(f"Erro ao executar {plugin}: {e}")
-
-        return resultados
+        return self._plugins_ativos.get(nome_plugin)
 
     def executar_ciclo(self) -> bool:
         """
@@ -173,58 +148,27 @@ class GerenciadorBot(
         """
         try:
             if self._status != "rodando":
-                return True
+                logger.warning("Bot não está em execução")
+                return False
 
             # Valida plugins essenciais
             if not self._validar_plugins_essenciais():
                 return False
-
-            conexao = self._plugins_ativos["conexao"]
-            sinais_plugin = self._plugins_ativos["sinais_plugin"]
-
-            # Obtém apenas pares USDT
-            pares_usdt = conexao.obter_pares()
-            if not pares_usdt:
-                logger.warning("Nenhum par USDT disponível")
-                return False
-
-            logger.info(f"Analisando {len(pares_usdt)} pares USDT")
-
-            # Para cada par e timeframe
-            for symbol in pares_usdt:
-                for timeframe in self.timeframes:
-                    try:
-                        # Coleta dados OHLCV
-                        dados_ohlcv = conexao.obter_klines(symbol, timeframe)
-                        if not dados_ohlcv:
-                            logger.warning(f"Sem dados para {symbol} {timeframe}")
-                            continue
-
-                        # Executa todas as análises disponíveis
-                        resultados = self._executar_analises(
-                            dados_ohlcv, symbol, timeframe
-                        )
-
-                        # Gera sinais se houver resultados
-                        if resultados:
-                            try:
-                                sinais_plugin.executar(
-                                    resultados, symbol, timeframe, self._config
-                                )
-                            except Exception as e:
-                                logger.error(
-                                    f"Erro ao gerar sinais para {symbol} {timeframe}: {e}"
-                                )
-
-                    except Exception as e:
-                        logger.error(f"Erro ao processar {symbol} {timeframe}: {e}")
-                        continue
 
             return True
 
         except Exception as e:
             logger.error(f"Erro no ciclo: {e}")
             return False
+
+    def esta_rodando(self) -> bool:
+        """
+        Verifica se o bot está em execução.
+
+        Returns:
+            bool: True se o bot está rodando
+        """
+        return self._status == "rodando"
 
     def iniciar(self) -> bool:
         """
@@ -236,6 +180,10 @@ class GerenciadorBot(
         try:
             if not self.inicializado:
                 logger.error("Gerenciador não inicializado")
+                return False
+
+            if not self._validar_plugins_essenciais():
+                logger.error("Plugins essenciais não validados")
                 return False
 
             self._status = "rodando"

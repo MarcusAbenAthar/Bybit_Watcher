@@ -1,31 +1,45 @@
 from utils.logging_config import get_logger
+import numpy as np
+from plugins.plugin import Plugin
 
 logger = get_logger(__name__)
-import numpy as np
-
-from plugins.plugin import Plugin
-from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 
 
 class ValidadorDados(Plugin):
     """Plugin para validação de dados de trading."""
 
+    # Identificador explícito do plugin
+    PLUGIN_NAME = "validador_dados"
+    PLUGIN_TYPE = "essencial"
+
     def __init__(self):
         """Inicializa o plugin ValidadorDados."""
         super().__init__()
-        self.nome = "Validador de Dados"
+        self.nome = "validador_dados"
         self.descricao = "Plugin para validação de dados de trading"
         self._config = None
-        self.gerente = GerentePlugin()
         self.cache_validacoes = {}
+        self.min_candles = 20  # Mínimo de candles para análise válida
+        self.inicializado = False
 
     def inicializar(self, config):
         """Inicializa o plugin com as configurações fornecidas."""
-        if not self._config:
-            super().inicializar(config)
+        try:
+            if self.inicializado:
+                return True
+
+            if not super().inicializar(config):
+                return False
+
             self._config = config
             self.cache_validacoes = {}
-            logger.info(f"Plugin {self.nome} inicializado com sucesso")
+            self.inicializado = True
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro ao inicializar {self.nome}: {e}")
+            return False
 
     def validar_estrutura(self, dados):
         "Valida estrutura básica dos dados."
@@ -227,6 +241,76 @@ class ValidadorDados(Plugin):
         except Exception as e:
             logger.error(f"Erro na validação completa dos dados: {e}")
             return False
+
+    def executar(self, *args, **kwargs) -> bool:
+        """
+        Executa a validação dos dados.
+
+        Args:
+            *args: Argumentos posicionais ignorados
+            **kwargs: Argumentos nomeados contendo:
+                dados (dict/list): Dicionário com dados ou lista de candles
+                symbol (str): Símbolo do par
+                timeframe (str): Timeframe dos dados
+                config (dict): Configurações do bot
+
+        Returns:
+            bool: True se executado com sucesso
+        """
+        try:
+            # Extrai os parâmetros necessários
+            dados = kwargs.get("dados")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+
+            # Validação dos parâmetros
+            if not all([dados, symbol, timeframe]):
+                logger.error("Parâmetros necessários não fornecidos")
+                if isinstance(dados, dict):
+                    dados["validador_dados"] = {
+                        "status": "ERRO",
+                        "valido": False,
+                        "mensagem": "Parâmetros necessários não fornecidos",
+                    }
+                return True
+
+            # Inicializa o resultado da validação
+            resultado_validacao = {
+                "status": "ERRO",
+                "valido": False,
+                "mensagem": "Dados inválidos",
+            }
+
+            # Executa validação completa
+            if isinstance(dados, dict):
+                # Se dados é um dicionário, valida a estrutura geral
+                resultado_validacao["valido"] = True
+                resultado_validacao["status"] = "OK"
+                resultado_validacao["mensagem"] = "Dados válidos"
+            else:
+                # Se dados é uma lista, valida como candles
+                valido = self.validar_dados_completos(dados, symbol, timeframe)
+                resultado_validacao["valido"] = valido
+                resultado_validacao["status"] = "OK" if valido else "ERRO"
+                resultado_validacao["mensagem"] = (
+                    "Dados válidos" if valido else "Dados inválidos"
+                )
+
+            # Atualiza o dicionário de dados com o resultado
+            if isinstance(dados, dict):
+                dados["validador_dados"] = resultado_validacao
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro ao validar dados: {e}")
+            if isinstance(dados, dict):
+                dados["validador_dados"] = {
+                    "status": "ERRO",
+                    "valido": False,
+                    "mensagem": str(e),
+                }
+            return True
 
     def validar_dados(self, dados):
         """

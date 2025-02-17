@@ -73,8 +73,7 @@ Bybit_Watcher/
 │   ├── handlers.py         # Implementação do handlers
 │   ├── logging_config.py   # Configuração de logs
 │   ├── padroes_candles.py  # Implementação do padroes_candles
-│   ├── sinais_logging.py   # Implementação do sinais_logging
-│   └── singleton.py        # Implementação do Singleton
+│   └── sinais_logging.py   # Implementação do sinais_logging
 │
 ├── tests/                  # Testes unitários
 │   ├── __init__.py
