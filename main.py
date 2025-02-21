@@ -50,6 +50,7 @@ PLUGINS_ESSENCIAIS = [
     "gerenciadores/gerenciador_banco",  # Sem dependências
     "banco_dados",  # Depende de gerenciador_banco
     "validador_dados",  # Base para outros plugins
+    "calculo_alavancagem",  # Base para indicadores_tendencia
     "indicadores.indicadores_tendencia",  # Necessário para sinais
     "medias_moveis",  # Necessário para sinais
     "sinais_plugin",  # Depende dos indicadores
@@ -60,7 +61,6 @@ PLUGINS_ESSENCIAIS = [
 PLUGINS_ADICIONAIS = [
     "price_action",  # Análise técnica
     "analise_candles",  # Análise técnica
-    "calculo_alavancagem",
     "calculo_risco",
     "execucao_ordens",
     "indicadores.indicadores_osciladores",

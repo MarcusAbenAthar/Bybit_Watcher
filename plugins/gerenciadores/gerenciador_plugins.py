@@ -36,6 +36,7 @@ class GerentePlugin:
         ("plugins.sinais_plugin", "Gerador de Sinais"),
         ("plugins.analisador_mercado", "Analisador de Mercado"),
         ("plugins.gerenciadores.gerenciador_bot", "Gerenciador do Bot"),
+        ("plugins.calculo_alavancagem", "Cálculo de Alavancagem"),
     ]
 
     # Plugins que precisam do validador_dados
@@ -146,6 +147,20 @@ class GerentePlugin:
                 f"Erro ao carregar plugin {nome_plugin}: {e}"
             )  # Log full traceback
             return False
+
+    def obter_banco_dados(self):
+        """
+        Retorna a instância do plugin BancoDados.
+        """
+        from plugins.banco_dados import BancoDados
+
+        # Cria e inicializa o banco de dados
+        banco = BancoDados(self.gerenciador_banco)
+        if not banco.inicializar(self.config):
+            logger.error("Falha ao inicializar banco de dados")
+            return None
+
+        return banco
 
     def _criar_plugin_especifico(
         self, plugin_class, plugin_name: str, plugin_key: str

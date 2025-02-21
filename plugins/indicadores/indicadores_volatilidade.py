@@ -1,8 +1,8 @@
 import psycopg2
-from plugins.gerenciadores.gerenciador_banco import obter_banco_dados
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 from utils.logging_config import get_logger
 import talib
+import numpy as np
 from plugins.plugin import Plugin
 
 logger = get_logger(__name__)
@@ -27,8 +27,8 @@ class IndicadoresVolatilidade(Plugin):
         self.gerente = gerente
         # Acessa o plugin de cálculo de alavancagem através do gerente
         self.calculo_alavancagem = self.gerente.obter_calculo_alavancagem()
-        # Obtém o plugin de banco de dados
-        self.banco_dados = obter_banco_dados(config)
+        # Obtém o plugin de banco de dados através do gerente
+        self.banco_dados = self.gerente.obter_banco_dados()
 
     def calcular_bandas_de_bollinger(self, dados, periodo=20, desvio_padrao=2):
         """
@@ -140,18 +140,52 @@ class IndicadoresVolatilidade(Plugin):
                 "take_profit": None,
             }
 
-    def executar(self, dados, symbol, timeframe):
+    def executar(self, *args, **kwargs) -> bool:
         """
-        Executa o cálculo dos indicadores de volatilidade, gera sinais de trading e salva os resultados no banco de dados.
+        Executa o cálculo dos indicadores de volatilidade.
 
         Args:
-            dados (list): Lista de candles.
-            symbol (str): Par de moedas.
-            timeframe (str): Timeframe dos candles.
+            *args: Argumentos posicionais ignorados
+            **kwargs: Argumentos nomeados contendo:
+                dados (list): Lista de candles
+                symbol (str): Símbolo do par
+                timeframe (str): Timeframe da análise
+                config (dict): Configurações do bot
+
+        Returns:
+            bool: True se executado com sucesso
         """
 
         try:
+            # Extrai os parâmetros necessários
+            dados = kwargs.get("dados")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+
+            # Validação dos parâmetros
+            if not all([dados, symbol, timeframe]):
+                logger.error("Parâmetros necessários não fornecidos")
+                dados["volatilidade"] = {
+                    "bandas_bollinger": None,
+                    "atr": None,
+                    "sinais": {
+                        "direcao": "NEUTRO",
+                        "forca": "FRACA",
+                        "confianca": 0,
+                    },
+                }
+                return True
+
+            # Verifica se o banco de dados está disponível e inicializado
+            if not self.banco_dados or not hasattr(self.banco_dados, "conn"):
+                logger.warning("Banco de dados não disponível")
+                return True
+
             conn = self.banco_dados.conn
+            if not conn:
+                logger.warning("Conexão com banco de dados não disponível")
+                return True
+
             cursor = conn.cursor()
 
             for candle in dados:
@@ -236,3 +270,15 @@ class IndicadoresVolatilidade(Plugin):
 
         except (Exception, psycopg2.Error) as error:
             logger.error(f"Erro ao calcular indicadores de volatilidade: {error}")
+            dados["volatilidade"] = {
+                "bandas_bollinger": None,
+                "atr": None,
+                "sinais": {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                },
+            }
+            return True
+
+        return True

@@ -650,49 +650,12 @@ class GerenciadorBanco(
             return False
 
     def finalizar(self):
-        """Finaliza o gerenciador."""
-        try:
-            if self._conn:
+        """Finaliza o gerenciador de banco de dados PostgreSQL."""
+        if self._conn is not None:
+            try:
                 self._conn.close()
-                self._conn = None
-            logger.info("Gerenciador de banco finalizado com sucesso")
-        except Exception as e:
-            logger.error(f"Erro na finalização do gerenciador: {e}")
-
-
-def obter_banco_dados(config=None, gerenciador_banco=None):
-    """
-    Retorna a instância do plugin BancoDados.
-
-    Args:
-        config: Configurações do bot
-        gerenciador_banco: Instância do gerenciador de banco
-
-    Returns:
-        BancoDados: Instância do plugin BancoDados
-    """
-    from plugins.banco_dados import BancoDados
-
-    # Verifica se temos configuração
-    if not config:
-        logger.error("Configuração necessária para inicializar banco")
-        return None
-
-    # Verifica se o gerenciador existe
-    if not gerenciador_banco:
-        logger.error("Gerenciador de banco não fornecido")
-        return None
-
-    # Inicializa o gerenciador se necessário
-    if not gerenciador_banco.inicializado:
-        if not gerenciador_banco.inicializar(config):
-            logger.error("Falha ao inicializar gerenciador de banco")
-            return None
-
-    # Cria e inicializa o banco de dados
-    banco = BancoDados(gerenciador_banco)
-    if not banco.inicializar(config):
-        logger.error("Falha ao inicializar banco de dados")
-        return None
-
-    return banco
+                logger.info("Gerenciador de banco finalizado com sucesso")
+            except psycopg2.DatabaseError as e:
+                logger.error(f"Erro ao fechar a conexão com o banco: {e}")
+            finally:
+                self._conn = None  # Garante que a conexão não fique referenciada

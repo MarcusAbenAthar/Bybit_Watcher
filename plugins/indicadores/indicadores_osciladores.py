@@ -1,8 +1,8 @@
-from plugins.gerenciadores.gerenciador_banco import obter_banco_dados
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 from utils.logging_config import get_logger
 import psycopg2
 import talib
+import numpy as np
 from plugins.plugin import Plugin
 
 logger = get_logger(__name__)
@@ -23,8 +23,8 @@ class IndicadoresOsciladores(Plugin):
         self.gerente = gerente
         # Acessa o plugin de cálculo de alavancagem através do gerente
         self.calculo_alavancagem = self.gerente.obter_calculo_alavancagem()
-        # Acesso ao banco de dados
-        self.banco_dados = obter_banco_dados(config)
+        # Acesso ao banco de dados através do gerente
+        self.banco_dados = self.gerente.obter_banco_dados()
 
     def calcular_rsi(self, dados, symbol, timeframe, periodo=14):
         """
@@ -57,8 +57,26 @@ class IndicadoresOsciladores(Plugin):
         )  # Ajuste o fator 10 conforme necessário
         periodo = max(7, min(28, periodo + ajuste_volatilidade))
 
-        # Extrai os valores de fechamento dos candles
-        fechamentos = [candle for candle in dados]
+        # Extrai os valores de fechamento dos candles e converte para numpy array
+        try:
+            fechamentos = []
+            for candle in dados:
+                if candle[4] is None or str(candle[4]).strip() == "":
+                    continue
+                try:
+                    valor = float(str(candle[4]).replace("e", "").replace("E", ""))
+                    fechamentos.append(valor)
+                except (ValueError, TypeError):
+                    continue
+
+            if not fechamentos:
+                logger.warning("Nenhum dado válido para calcular RSI")
+                return np.array([])
+
+            fechamentos = np.array(fechamentos, dtype=np.float64)
+        except Exception as e:
+            logger.error(f"Erro ao converter dados para float: {e}")
+            return np.array([])
 
         # Calcula o RSI usando a função RSI do TA-Lib
         rsi = talib.RSI(fechamentos, timeperiod=periodo)
@@ -118,24 +136,50 @@ class IndicadoresOsciladores(Plugin):
         slowk_period = max(2, min(6, slowk_period + ajuste_volatilidade))
         slowd_period = max(2, min(6, slowd_period + ajuste_volatilidade))
 
-        # Extrai os valores de high, low e close dos candles
-        high = [candle[2] for candle in dados]
-        low = [candle[3] for candle in dados]
-        close = [candle[4] for candle in dados]
+        # Extrai e valida os valores
+        try:
+            high = []
+            low = []
+            close = []
 
-        # Calcula o Estocástico usando a função STOCH do TA-Lib
-        slowk, slowd = talib.STOCH(
-            high,
-            low,
-            close,
-            fastk_period=fastk_period,
-            slowk_period=slowk_period,
-            slowk_matype=slowk_matype,
-            slowd_period=slowd_period,
-            slowd_matype=slowd_matype,
-        )
+            for candle in dados:
+                if any(str(val).strip() == "" or val is None for val in candle[2:5]):
+                    continue
+                try:
+                    h = float(str(candle[2]).replace("e", "").replace("E", ""))
+                    l = float(str(candle[3]).replace("e", "").replace("E", ""))
+                    c = float(str(candle[4]).replace("e", "").replace("E", ""))
+                    high.append(h)
+                    low.append(l)
+                    close.append(c)
+                except (ValueError, TypeError):
+                    continue
 
-        return slowk, slowd
+            if not high or not low or not close:
+                logger.warning("Dados insuficientes para calcular indicadores")
+                return np.array([]), np.array([])
+
+            # Converte para numpy arrays
+            high = np.array(high, dtype=np.float64)
+            low = np.array(low, dtype=np.float64)
+            close = np.array(close, dtype=np.float64)
+
+            # Calcula o Estocástico usando a função STOCH do TA-Lib
+            slowk, slowd = talib.STOCH(
+                high,
+                low,
+                close,
+                fastk_period=fastk_period,
+                slowk_period=slowk_period,
+                slowk_matype=slowk_matype,
+                slowd_period=slowd_period,
+                slowd_matype=slowd_matype,
+            )
+
+            return slowk, slowd
+        except Exception as e:
+            logger.error(f"Erro ao calcular estocástico: {e}")
+            return np.array([]), np.array([])
 
     def calcular_mfi(self, dados, periodo=14):
         """
@@ -159,6 +203,41 @@ class IndicadoresOsciladores(Plugin):
         mfi = talib.MFI(high, low, close, volume, timeperiod=periodo)
 
         return mfi
+
+    def calcular_volatilidade(self, dados, periodo=14):
+        """
+        Calcula a volatilidade dos preços usando desvio padrão.
+
+        Args:
+            dados (list): Lista de candles.
+            periodo (int): Período para cálculo da volatilidade.
+
+        Returns:
+            float: Valor da volatilidade normalizado entre 0 e 1.
+        """
+        try:
+            # Verifica se há dados suficientes
+            if len(dados) < periodo:
+                return 0.0
+
+            # Extrai os preços de fechamento e converte para numpy array
+            fechamentos = np.array(
+                [float(candle[4]) for candle in dados], dtype=np.float64
+            )
+
+            # Calcula o desvio padrão
+            std = talib.STDDEV(fechamentos, timeperiod=periodo)
+
+            # Normaliza o resultado (último valor do desvio padrão)
+            if std is not None and len(std) > 0:
+                volatilidade = float(std[-1]) / float(fechamentos[-1])
+                return min(max(volatilidade, 0.0), 1.0)  # Limita entre 0 e 1
+
+            return 0.0
+
+        except Exception as e:
+            logger.error(f"Erro ao calcular volatilidade: {e}")
+            return 0.0
 
     def gerar_sinal(self, dados, indicador, tipo, symbol, timeframe, config):
         """
@@ -281,6 +360,10 @@ class IndicadoresOsciladores(Plugin):
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
 
+            # Validação do tipo do parâmetro 'dados'
+            if not isinstance(dados, dict):
+                logger.error("Parâmetro 'dados' está ausente ou inválido")
+                return False
             # Validação dos parâmetros
             if not all([dados, symbol, timeframe]):
                 logger.error("Parâmetros necessários não fornecidos")

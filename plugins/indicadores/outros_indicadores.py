@@ -1,8 +1,10 @@
-from plugins.gerenciadores.gerenciador_banco import obter_banco_dados
+import inspect
+from plugins.banco_dados import BancoDados
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 from utils.logging_config import get_logger
 import psycopg2
 import talib
+import numpy as np
 from plugins.plugin import Plugin
 
 
@@ -28,8 +30,10 @@ class OutrosIndicadores(Plugin):
         self.gerente = gerente
         # Acessa o plugin de cálculo de alavancagem através do gerente
         self.calculo_alavancagem = self.gerente.obter_calculo_alavancagem()
-        # Obtém o plugin de banco de dados
-        self.banco_dados = obter_banco_dados(config)
+        # Obtém o plugin de banco de dados através do gerente
+        self.banco_dados = self.gerente.obter_banco_dados()
+        logger.error(f"Banco de Dados carregado de: {BancoDados.__module__}")
+        logger.error(inspect.getfile(BancoDados))
 
     def calcular_fibonacci_retracement(self, dados):
         """
@@ -266,19 +270,61 @@ class OutrosIndicadores(Plugin):
                 "take_profit": None,
             }
 
-    def executar(self, dados, symbol, timeframe):
+    def executar(self, *args, **kwargs) -> bool:
         """
         Executa o cálculo dos indicadores, gera sinais de trading e salva os resultados no banco de dados.
 
         Args:
-            dados (list): Lista de candles.
-            symbol (str): Par de moedas.
-            timeframe (str): Timeframe dos candles.
+            *args: Argumentos posicionais ignorados
+            **kwargs: Argumentos nomeados contendo:
+                dados (list): Lista de candles
+                symbol (str): Símbolo do par
+                timeframe (str): Timeframe da análise
+                config (dict): Configurações do bot
+
+        Returns:
+            bool: True se executado com sucesso
         """
         try:
-            banco_dados = obter_banco_dados(self.config)
-            conn = banco_dados.conn
-            cursor = conn.cursor()
+            # Extrai os parâmetros necessários
+            dados = kwargs.get("dados")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+
+            # Validação dos parâmetros
+            if not all([dados, symbol, timeframe]):
+                logger.error("Parâmetros necessários não fornecidos")
+                dados["outros_indicadores"] = {
+                    "ichimoku": None,
+                    "fibonacci": None,
+                    "pivot_points": None,
+                    "sinais": {
+                        "direcao": "NEUTRO",
+                        "forca": "FRACA",
+                        "confianca": 0,
+                    },
+                }
+                return True
+
+            # Verifica se o banco de dados está disponível e obtém a instância do BancoDados
+            logger.error(f"Tipo de banco_dados: {type(self.banco_dados)}")
+            logger.error(dir(self.banco_dados))  # Mostra os métodos disponíveis
+            banco_dados = self.gerente.obter_banco_dados()
+            if not banco_dados or not banco_dados.obter_conexao():
+                logger.error("Banco de dados não disponível")
+                dados["outros_indicadores"] = {
+                    "ichimoku": None,
+                    "fibonacci": None,
+                    "pivot_points": None,
+                    "sinais": {
+                        "direcao": "NEUTRO",
+                        "forca": "FRACA",
+                        "confianca": 0,
+                    },
+                }
+                return True
+
+            cursor = self.banco_dados.conn.cursor()
 
             for candle in dados:
                 # Calcula os indicadores para o candle atual
@@ -394,10 +440,22 @@ class OutrosIndicadores(Plugin):
                     ),
                 )
 
-            conn.commit()
+            self.banco_dados.conn.commit()
             logger.debug(
                 f"Outros indicadores calculados e sinais gerados para {symbol} - {timeframe}."
             )
+            return True
 
         except (Exception, psycopg2.Error) as error:
             logger.error(f"Erro ao calcular outros indicadores: {error}")
+            dados["outros_indicadores"] = {
+                "ichimoku": None,
+                "fibonacci": None,
+                "pivot_points": None,
+                "sinais": {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                },
+            }
+            return True

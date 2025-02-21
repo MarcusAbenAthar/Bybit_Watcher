@@ -16,7 +16,6 @@ import numpy as np
 import pandas as pd
 from utils.logging_config import get_logger
 from plugins.plugin import Plugin
-from plugins.gerenciadores.gerenciador_banco import obter_banco_dados
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 
 logger = get_logger(__name__)

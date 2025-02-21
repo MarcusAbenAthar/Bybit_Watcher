@@ -18,10 +18,14 @@ import logging
 import logging.config  # Added this import
 import logging.handlers
 from datetime import datetime
+import os
 from pathlib import Path
 
-# Criar diretório de logs se não existir
+# Criar diretório de logs e suas subpastas se não existir
 Path("logs").mkdir(exist_ok=True)
+os.makedirs("logs/erros", exist_ok=True)
+os.makedirs("logs/bot", exist_ok=True)
+os.makedirs("logs/sinais", exist_ok=True)
 
 # Configurações Base
 BASE_CONFIG = {
@@ -30,15 +34,15 @@ BASE_CONFIG = {
     "formatters": {
         "detalhado": {
             "format": "%(asctime)s | %(levelname)-8s | %(name)s | %(filename)s:%(funcName)s:%(lineno)d | %(message)s",
-            "datefmt": "%Y-%m-%d %H:%M:%S",
+            "datefmt": "%d-%m-%Y %H:%M:%S",
         },
         "simples": {
             "format": "%(asctime)s | %(levelname)-8s | %(filename)s | %(message)s",
-            "datefmt": "%Y-%m-%d %H:%M:%S",
+            "datefmt": "%d-%m-%Y %H:%M:%S",
         },
         "sinais": {
-            "format": "%Y-%m-%d %H:%M:%S | SINAL | %(filename)s | %(message)s",
-            "datefmt": "%Y-%m-%d %H:%M:%S",
+            "format": "%d-%m-%Y %H:%M:%S | SINAL | %(filename)s | %(message)s",
+            "datefmt": "%d-%m-%Y %H:%M:%S",
         },
     },
     "handlers": {
@@ -51,7 +55,7 @@ BASE_CONFIG = {
         # Handler para log geral
         "arquivo": {
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": f"logs/bot_{datetime.now():%Y-%m-%d}.log",
+            "filename": f"logs/bot_{datetime.now():%d-%m-%Y}.log",
             "formatter": "detalhado",
             "maxBytes": 10485760,  # 10MB
             "backupCount": 10,
@@ -60,7 +64,7 @@ BASE_CONFIG = {
         # Handler para sinais de trading
         "sinais": {
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": f"logs/sinais_{datetime.now():%Y-%m-%d}.log",
+            "filename": f"logs/sinais_{datetime.now():%d-%m-%Y}.log",
             "formatter": "sinais",
             "maxBytes": 10485760,  # 10MB
             "backupCount": 10,
@@ -69,7 +73,34 @@ BASE_CONFIG = {
         # Handler para erros
         "erros": {
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": f"logs/erros_{datetime.now():%Y-%m-%d}.log",
+            "filename": f"logs/erros_{datetime.now():%d-%m-%Y}.log",
+            "formatter": "detalhado",
+            "maxBytes": 10485760,  # 10MB
+            "backupCount": 10,
+            "level": "ERROR",
+        },
+        # Handler para log geral
+        "arquivo": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": f"logs/bot/bot_{datetime.now():%d-%m-%Y}.log",  # Novo caminho
+            "formatter": "detalhado",
+            "maxBytes": 10485760,  # 10MB
+            "backupCount": 10,
+            "level": "DEBUG",
+        },
+        # Handler para sinais de trading
+        "sinais": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": f"logs/sinais/sinais_{datetime.now():%d-%m-%Y}.log",  # Novo caminho
+            "formatter": "sinais",
+            "maxBytes": 10485760,  # 10MB
+            "backupCount": 10,
+            "level": "INFO",
+        },
+        # Handler para erros
+        "erros": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": f"logs/erros/erros_{datetime.now():%d-%m-%Y}.log",  # Novo caminho
             "formatter": "detalhado",
             "maxBytes": 10485760,  # 10MB
             "backupCount": 10,

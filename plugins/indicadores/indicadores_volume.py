@@ -1,8 +1,8 @@
 import psycopg2
-from plugins.gerenciadores.gerenciador_banco import obter_banco_dados
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 from utils.logging_config import get_logger
 import talib
+import numpy as np
 from plugins.plugin import Plugin
 
 
@@ -28,8 +28,8 @@ class IndicadoresVolume(Plugin):
         self.gerente = gerente
         # Acessa o plugin de cálculo de alavancagem através do gerente
         self.calculo_alavancagem = self.gerente.obter_calculo_alavancagem()
-        # Obtém o plugin de banco de dados
-        self.banco_dados = obter_banco_dados(config)
+        # Obtém o plugin de banco de dados através do gerente
+        self.banco_dados = self.gerente.obter_banco_dados()
 
     def calcular_obv(self, dados):
         """
@@ -166,18 +166,52 @@ class IndicadoresVolume(Plugin):
                 "take_profit": None,
             }
 
-    def executar(self, dados, symbol, timeframe):
+    def executar(self, *args, **kwargs) -> bool:
         """
-        Executa o cálculo dos indicadores de volume, gera sinais e salva no banco de dados.
+        Executa o cálculo dos indicadores de volume.
 
         Args:
-            dados (list): Lista de candles.
-            symbol (str): Par de moedas.
-            timeframe (str): Timeframe dos candles.
+            *args: Argumentos posicionais ignorados
+            **kwargs: Argumentos nomeados contendo:
+                dados (list): Lista de candles
+                symbol (str): Símbolo do par
+                timeframe (str): Timeframe da análise
+                config (dict): Configurações do bot
+
+        Returns:
+            bool: True se executado com sucesso
         """
         try:
-            banco_dados = obter_banco_dados(self.config)
-            conn = banco_dados.conn
+            # Extrai os parâmetros necessários
+            dados = kwargs.get("dados")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+
+            # Validação dos parâmetros
+            if not all([dados, symbol, timeframe]):
+                logger.error("Parâmetros necessários não fornecidos")
+                dados["volume"] = {
+                    "obv": None,
+                    "cmf": None,
+                    "mfi": None,
+                    "sinais": {
+                        "direcao": "NEUTRO",
+                        "forca": "FRACA",
+                        "confianca": 0,
+                    },
+                }
+                return True
+
+            # Verifica se o banco de dados está disponível e inicializado
+            if not self.banco_dados or not hasattr(self.banco_dados, "conn"):
+                logger.warning("Banco de dados não disponível")
+                return True
+
+            conn = self.banco_dados.conn
+            if not conn:
+                logger.warning("Conexão com banco de dados não disponível")
+                return True
+
             cursor = conn.cursor()
             for candle in dados:
                 # Calcula os indicadores de volume para o candle atual
@@ -276,3 +310,16 @@ class IndicadoresVolume(Plugin):
 
         except (Exception, psycopg2.Error) as error:
             logger.error(f"Erro ao calcular indicadores de volume: {error}")
+            dados["volume"] = {
+                "obv": None,
+                "cmf": None,
+                "mfi": None,
+                "sinais": {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                },
+            }
+            return True
+
+        return True

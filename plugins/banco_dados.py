@@ -112,7 +112,9 @@ class BancoDados(Plugin):
                 return False
 
             # Usa a conexão do gerenciador
-            self._conn = self.gerenciador_banco._conn
+            self._conn = (
+                self.gerenciador_banco._conn
+            )  # Corrigido: acessando self.gerenciador_banco._conn diretamente
             self.inicializado = True
             logger.info("Banco de dados inicializado com sucesso")
             return True

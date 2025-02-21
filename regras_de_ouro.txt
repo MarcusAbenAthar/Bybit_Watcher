@@ -32,6 +32,8 @@ Esta estrutura:
 * Mantém organização clara
 * Separa responsabilidades
 
+
+
 Estrutura do projeto:
 
 Bybit_Watcher/
