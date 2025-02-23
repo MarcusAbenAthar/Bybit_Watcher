@@ -1,6 +1,5 @@
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 from utils.logging_config import get_logger
-import psycopg2
 import talib
 import numpy as np
 from plugins.plugin import Plugin
@@ -127,8 +126,8 @@ class IndicadoresOsciladores(Plugin):
         # Calcula a volatilidade do ativo
         volatilidade = self.calcular_volatilidade(dados)
 
-        # Ajusta os períodos do Estocástico com base na volatilidade
-        # Aumenta os períodos para volatilidade alta, diminui para volatilidade baixa
+        # Ajusta os períodos do Estocástico com base na volatilidade, aumenta os períodos para volatilidade alta, diminui para volatilidade baixa
+
         ajuste_volatilidade = int(
             volatilidade * 3
         )  # Ajuste o fator 3 conforme necessário

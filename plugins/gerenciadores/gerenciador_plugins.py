@@ -15,6 +15,7 @@ Regras de Ouro:
 """
 
 import os
+import numpy as np
 import importlib
 from utils.logging_config import get_logger
 from typing import Optional, Dict
@@ -87,6 +88,7 @@ class GerentePlugin:
             if self._plugin_ja_carregado(plugin_key):
                 logger.debug(f"Plugin {plugin_key} já carregado e inicializado")
                 return True
+
             # Importa o módulo
             try:
                 modulo = importlib.import_module(plugin_key)
@@ -122,9 +124,18 @@ class GerentePlugin:
 
             # Cria instância do plugin com tratamento especial por tipo
             try:
-                plugin = self._criar_plugin_especifico(
-                    plugin_class, plugin_name, plugin_key
-                )
+                if nome_plugin == "banco_dados":
+                    gerenciador_banco = self.obter_plugin(
+                        "gerenciadores.gerenciador_banco"
+                    )  # Corrigido o caminho de importação
+                    if not gerenciador_banco:
+                        logger.error("Gerenciador de banco não encontrado")
+                        return False
+                    plugin = plugin_class(gerenciador_banco=gerenciador_banco)
+                else:
+                    plugin = self._criar_plugin_especifico(
+                        plugin_class, plugin_name, plugin_key
+                    )
                 if not plugin:
                     return False
 
@@ -150,17 +161,19 @@ class GerentePlugin:
 
     def obter_banco_dados(self):
         """
-        Retorna a instância do plugin BancoDados.
+        Retorna a instância do plugin BancoDados (Singleton).
         """
-        from plugins.banco_dados import BancoDados
+        if "banco_dados" not in self.plugins:
+            from plugins.banco_dados import BancoDados
 
-        # Cria e inicializa o banco de dados
-        banco = BancoDados(self.gerenciador_banco)
-        if not banco.inicializar(self.config):
-            logger.error("Falha ao inicializar banco de dados")
-            return None
-
-        return banco
+            banco = BancoDados(self.gerenciador_banco)
+            if not banco.inicializar(self.config):
+                logger.error("Falha ao inicializar banco de dados")
+                return None
+            self.plugins["banco_dados"] = (
+                banco  # Armazena a instância no dicionário de plugins
+            )
+        return self.plugins["banco_dados"]
 
     def _criar_plugin_especifico(
         self, plugin_class, plugin_name: str, plugin_key: str
