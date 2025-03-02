@@ -338,12 +338,14 @@ class IndicadoresOsciladores(Plugin):
                 "take_profit": None,
             }
 
-    def executar(self, *args, **kwargs) -> bool:
+    def executar(self, high: np.ndarray, low: np.ndarray, close: np.ndarray, **kwargs):
         """
         Executa o cálculo dos indicadores osciladores.
 
         Args:
-            *args: Argumentos posicionais ignorados
+            high (np.ndarray): Array de valores altos.
+            low (np.ndarray): Array de valores baixos.
+            close (np.ndarray): Array de valores de fechamento.
             **kwargs: Argumentos nomeados contendo:
                 dados (list): Lista de candles
                 symbol (str): Símbolo do par
@@ -360,9 +362,18 @@ class IndicadoresOsciladores(Plugin):
             timeframe = kwargs.get("timeframe")
 
             # Validação do tipo do parâmetro 'dados'
-            if not isinstance(dados, dict):
-                logger.error("Parâmetro 'dados' está ausente ou inválido")
+            if not isinstance(dados, list):
+                logger.error(
+                    f"Parâmetro 'dados' está ausente ou inválido: {type(dados)}"
+                )
                 return False
+
+            # Converte os dados para lista antes de enviar ao gerenciador de plugins
+            dados_lista = list(dados)
+
+            # Chama o gerenciador de plugins com os dados convertidos
+            self.gerente.executar_ciclo(dados_lista, symbol, timeframe, self.config)
+
             # Validação dos parâmetros
             if not all([dados, symbol, timeframe]):
                 logger.error("Parâmetros necessários não fornecidos")

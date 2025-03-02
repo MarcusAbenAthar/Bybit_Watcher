@@ -388,14 +388,24 @@ class GerentePlugin:
     def executar_ciclo(self, dados, symbol, timeframe, config) -> bool:
         """Executa o ciclo em todos os plugins carregados."""
         try:
+            if not isinstance(dados, list):
+                logger.error(
+                    f"Parâmetro 'dados' está ausente ou inválido: {type(dados)}"
+                )
+                return False
+
             kwargs = {
                 "dados": dados,
                 "symbol": symbol,
                 "timeframe": timeframe,
                 "config": config,
             }
+            high = np.array([candle[2] for candle in dados])
+            low = np.array([candle[3] for candle in dados])
+            close = np.array([candle[4] for candle in dados])
+
             for plugin in self.plugins.values():
-                if not plugin.executar(**kwargs):
+                if not plugin.executar(high, low, close, **kwargs):
                     logger.error(f"Erro na execução do plugin: {plugin.nome}")
                     return False
             return True
@@ -435,7 +445,3 @@ class GerentePlugin:
 
         except Exception as e:
             logger.error(f"Erro ao listar plugins: {e}")
-
-
-# Função removida pois criava instâncias duplicadas.
-# Agora o plugin é obtido diretamente do gerenciador através de self.plugins

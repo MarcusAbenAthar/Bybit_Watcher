@@ -1,11 +1,16 @@
-from plugins.gerenciadores import gerenciador_banco
+import psycopg2
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 from utils.logging_config import get_logger
-import pandas as pd
+import talib
+import numpy as np
 from plugins.plugin import Plugin
 
-
 logger = get_logger(__name__)
+
+
+class BancoDados:
+    def __init__(self):
+        self.conn = None  # Corrigir o nome do atributo para 'conn'
 
 
 class OutrosIndicadores(Plugin):
@@ -29,7 +34,6 @@ class OutrosIndicadores(Plugin):
         self.calculo_alavancagem = self.gerente.obter_calculo_alavancagem()
         # Obtém o plugin de banco de dados através do gerente
         self.banco_dados = self.gerente.obter_banco_dados()
-        self.gerenciador_banco = gerenciador_banco
 
     def calcular_fibonacci_retracement(self, dados):
         """
@@ -62,7 +66,7 @@ class OutrosIndicadores(Plugin):
 
     def calcular_ichimoku(self, dados):
         """
-        Calcula o Ichimoku Cloud para os dados fornecidos, usando a biblioteca pandas-ta.
+        Calcula o Ichimoku Cloud para os dados fornecidos, usando a biblioteca TA-Lib.
 
         Args:
             dados (list): Lista de candles.
@@ -70,20 +74,28 @@ class OutrosIndicadores(Plugin):
         Returns:
             dict: Um dicionário com as listas de valores para cada linha do Ichimoku.
         """
-        # Converter dados para DataFrame do pandas
-        df = pd.DataFrame(
-            dados, columns=["timestamp", "open", "high", "low", "close", "volume"]
+        # Extrai os valores de high, low e close dos candles
+        high = np.array([candle[2] for candle in dados])
+        low = np.array([candle[3] for candle in dados])
+        close = np.array([candle[4] for candle in dados])
+
+        # Calcula as linhas do Ichimoku usando a função Ichimoku do TA-Lib
+        tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b, chikou_span = (
+            talib.Ichimoku(
+                high,
+                low,
+                tenkan_sen_period=9,
+                kijun_sen_period=26,
+                senkou_span_b_period=52,
+            )
         )
 
-        # Calcular o Ichimoku Cloud
-        ichimoku = df.ta.ichimoku()
-
         return {
-            "tenkan_sen": ichimoku["TENKAN"].values.tolist(),
-            "kijun_sen": ichimoku["KIJUN"].values.tolist(),
-            "senkou_span_a": ichimoku["SPAN_A"].values.tolist(),
-            "senkou_span_b": ichimoku["SPAN_B"].values.tolist(),
-            "chikou_span": ichimoku["CHIKOU"].values.tolist(),
+            "tenkan_sen": tenkan_sen,
+            "kijun_sen": kijun_sen,
+            "senkou_span_a": senkou_span_a,
+            "senkou_span_b": senkou_span_b,
+            "chikou_span": chikou_span,
         }
 
     def calcular_pivot_points(self, dados):
@@ -294,10 +306,22 @@ class OutrosIndicadores(Plugin):
                 }
                 return True
 
-            # Verifica se o gerenciador_banco está disponível
-            if not self.gerenciador_banco:
-                logger.error("Gerenciador de banco não disponível")
-                return False
+            # Verifica se o banco de dados está disponível
+            if not self.banco_dados or not self.banco_dados.conn:
+                logger.error("Banco de dados não disponível")
+                dados["outros_indicadores"] = {
+                    "ichimoku": None,
+                    "fibonacci": None,
+                    "pivot_points": None,
+                    "sinais": {
+                        "direcao": "NEUTRO",
+                        "forca": "FRACA",
+                        "confianca": 0,
+                    },
+                }
+                return True
+
+            cursor = self.banco_dados.conn.cursor()
 
             for candle in dados:
                 # Calcula os indicadores para o candle atual
@@ -342,85 +366,85 @@ class OutrosIndicadores(Plugin):
 
                 # Salva os resultados no banco de dados para o candle atual
                 timestamp = int(candle / 1000)  # Converte o timestamp para segundos
-
-                # Salva os resultados chamando o método no gerenciador_banco
-                self.gerenciador_banco.salvar_dados_outros_indicadores(
-                    [
-                        {
-                            "symbol": symbol,
-                            "timeframe": timeframe,
-                            "timestamp": timestamp,
-                            "tenkan_sen": ichimoku["tenkan_sen"][-1],
-                            "kijun_sen": ichimoku["kijun_sen"][-1],
-                            "senkou_span_a": ichimoku["senkou_span_a"][-1],
-                            "senkou_span_b": ichimoku["senkou_span_b"][-1],
-                            "chikou_span": ichimoku["chikou_span"][-1],
-                            "fibonacci_23_6": fibonacci["23.6%"],
-                            "fibonacci_38_2": fibonacci["38.2%"],
-                            "fibonacci_50": fibonacci["50%"],
-                            "fibonacci_61_8": fibonacci["61.8%"],
-                            "pivot_point": pivot_points["PP"],
-                            "r1": pivot_points["R1"],
-                            "s1": pivot_points["S1"],
-                            "r2": pivot_points["R2"],
-                            "s2": pivot_points["S2"],
-                            "r3": pivot_points["R3"],
-                            "s3": pivot_points["S3"],
-                            "sinal_ichimoku_compra": sinal_ichimoku_compra["sinal"],
-                            "stop_loss_ichimoku_compra": sinal_ichimoku_compra[
-                                "stop_loss"
-                            ],
-                            "take_profit_ichimoku_compra": sinal_ichimoku_compra[
-                                "take_profit"
-                            ],
-                            "sinal_ichimoku_venda": sinal_ichimoku_venda["sinal"],
-                            "stop_loss_ichimoku_venda": sinal_ichimoku_venda[
-                                "stop_loss"
-                            ],
-                            "take_profit_ichimoku_venda": sinal_ichimoku_venda[
-                                "take_profit"
-                            ],
-                            "sinal_fibonacci_suporte": sinal_fibonacci_suporte["sinal"],
-                            "stop_loss_fibonacci_suporte": sinal_fibonacci_suporte[
-                                "stop_loss"
-                            ],
-                            "take_profit_fibonacci_suporte": sinal_fibonacci_suporte[
-                                "take_profit"
-                            ],
-                            "sinal_fibonacci_resistencia": sinal_fibonacci_resistencia[
-                                "sinal"
-                            ],
-                            "stop_loss_fibonacci_resistencia": sinal_fibonacci_resistencia[
-                                "stop_loss"
-                            ],
-                            "take_profit_fibonacci_resistencia": sinal_fibonacci_resistencia[
-                                "take_profit"
-                            ],
-                            "sinal_pivot_points_suporte": sinal_pivot_points_suporte[
-                                "sinal"
-                            ],
-                            "stop_loss_pivot_points_suporte": sinal_pivot_points_suporte[
-                                "stop_loss"
-                            ],
-                            "take_profit_pivot_points_suporte": sinal_pivot_points_suporte[
-                                "take_profit"
-                            ],
-                            "sinal_pivot_points_resistencia": sinal_pivot_points_resistencia[
-                                "sinal"
-                            ],
-                            "stop_loss_pivot_points_resistencia": sinal_pivot_points_resistencia[
-                                "stop_loss"
-                            ],
-                            "take_profit_pivot_points_resistencia": sinal_pivot_points_resistencia[
-                                "take_profit"
-                            ],
-                        }
-                    ]
+                cursor.execute(
+                    """
+                    INSERT INTO outros_indicadores (
+                        symbol, timeframe, timestamp,
+                        tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b, chikou_span,
+                        fibonacci_23_6, fibonacci_38_2, fibonacci_50, fibonacci_61_8,
+                        pivot_point, r1, s1, r2, s2, r3, s3,
+                        sinal_ichimoku_compra, stop_loss_ichimoku_compra, take_profit_ichimoku_compra,
+                        sinal_ichimoku_venda, stop_loss_ichimoku_venda, take_profit_ichimoku_venda,
+                        sinal_fibonacci_suporte, stop_loss_fibonacci_suporte, take_profit_fibonacci_suporte,
+                        sinal_fibonacci_resistencia, stop_loss_fibonacci_resistencia, take_profit_fibonacci_resistencia,
+                        sinal_pivot_points_suporte, stop_loss_pivot_points_suporte, take_profit_pivot_points_suporte,
+                        sinal_pivot_points_resistencia, stop_loss_pivot_points_resistencia, take_profit_pivot_points_resistencia
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                    ON CONFLICT (symbol, timeframe, timestamp) DO UPDATE
+                    SET tenkan_sen = EXCLUDED.tenkan_sen, kijun_sen = EXCLUDED.kijun_sen, senkou_span_a = EXCLUDED.senkou_span_a,
+                        senkou_span_b = EXCLUDED.senkou_span_b, chikou_span = EXCLUDED.chikou_span,
+                        fibonacci_23_6 = EXCLUDED.fibonacci_23_6, fibonacci_38_2 = EXCLUDED.fibonacci_38_2,
+                        fibonacci_50 = EXCLUDED.fibonacci_50, fibonacci_61_8 = EXCLUDED.fibonacci_61_8,
+                        pivot_point = EXCLUDED.pivot_point, r1 = EXCLUDED.r1, s1 = EXCLUDED.s1, r2 = EXCLUDED.r2, s2 = EXCLUDED.s2, r3 = EXCLUDED.r3, s3 = EXCLUDED.s3,
+                        sinal_ichimoku_compra = EXCLUDED.sinal_ichimoku_compra, stop_loss_ichimoku_compra = EXCLUDED.stop_loss_ichimoku_compra, take_profit_ichimoku_compra = EXCLUDED.take_profit_ichimoku_compra,
+                        sinal_ichimoku_venda = EXCLUDED.sinal_ichimoku_venda, stop_loss_ichimoku_venda = EXCLUDED.stop_loss_ichimoku_venda, take_profit_ichimoku_venda = EXCLUDED.take_profit_ichimoku_venda,
+                        sinal_fibonacci_suporte = EXCLUDED.sinal_fibonacci_suporte, stop_loss_fibonacci_suporte = EXCLUDED.stop_loss_fibonacci_suporte, take_profit_fibonacci_suporte = EXCLUDED.take_profit_fibonacci_suporte,
+                        sinal_fibonacci_resistencia = EXCLUDED.sinal_fibonacci_resistencia, stop_loss_fibonacci_resistencia = EXCLUDED.stop_loss_fibonacci_resistencia, take_profit_fibonacci_resistencia = EXCLUDED.take_profit_fibonacci_resistencia,
+                        sinal_pivot_points_suporte = EXCLUDED.sinal_pivot_points_suporte, stop_loss_pivot_points_suporte = EXCLUDED.stop_loss_pivot_points_suporte, take_profit_pivot_points_suporte = EXCLUDED.take_profit_pivot_points_suporte,
+                        sinal_pivot_points_resistencia = EXCLUDED.sinal_pivot_points_resistencia, stop_loss_pivot_points_resistencia = EXCLUDED.stop_loss_pivot_points_resistencia, take_profit_pivot_points_resistencia = EXCLUDED.take_profit_pivot_points_resistencia;
+                    """,
+                    (
+                        symbol,
+                        timeframe,
+                        timestamp,
+                        ichimoku["tenkan_sen"][-1],
+                        ichimoku["kijun_sen"][-1],
+                        ichimoku["senkou_span_a"][-1],
+                        ichimoku["senkou_span_b"][-1],
+                        ichimoku["chikou_span"][-1],
+                        fibonacci["23.6%"],
+                        fibonacci["38.2%"],
+                        fibonacci["50%"],
+                        fibonacci["61.8%"],
+                        pivot_points["PP"],
+                        pivot_points["R1"],
+                        pivot_points["S1"],
+                        pivot_points["R2"],
+                        pivot_points["S2"],
+                        pivot_points["R3"],
+                        pivot_points["S3"],
+                        sinal_ichimoku_compra["sinal"],
+                        sinal_ichimoku_compra["stop_loss"],
+                        sinal_ichimoku_compra["take_profit"],
+                        sinal_ichimoku_venda["sinal"],
+                        sinal_ichimoku_venda["stop_loss"],
+                        sinal_ichimoku_venda["take_profit"],
+                        sinal_fibonacci_suporte["sinal"],
+                        sinal_fibonacci_suporte["stop_loss"],
+                        sinal_fibonacci_suporte["take_profit"],
+                        sinal_fibonacci_resistencia["sinal"],
+                        sinal_fibonacci_resistencia["stop_loss"],
+                        sinal_fibonacci_resistencia["take_profit"],
+                        sinal_pivot_points_suporte["sinal"],
+                        sinal_pivot_points_suporte["stop_loss"],
+                        sinal_pivot_points_suporte["take_profit"],
+                        sinal_pivot_points_resistencia["sinal"],
+                        sinal_pivot_points_resistencia["stop_loss"],
+                        sinal_pivot_points_resistencia["take_profit"],
+                    ),
                 )
+
+            self.banco_dados.conn.commit()
+            logger.debug(
+                f"Outros indicadores calculados e sinais gerados para {symbol} - {timeframe}."
+            )
             return True
 
-        except Exception as e:
-            logger.error(f"Erro ao executar outros indicadores: {e}")
+        except (Exception, psycopg2.Error) as error:
+            logger.error(f"Erro ao calcular outros indicadores: {error}")
             dados["outros_indicadores"] = {
                 "ichimoku": None,
                 "fibonacci": None,
@@ -432,194 +456,3 @@ class OutrosIndicadores(Plugin):
                 },
             }
             return True
-
-    # def executar(self, *args, **kwargs) -> bool:
-    #     """
-    #     Executa o cálculo dos indicadores, gera sinais de trading e salva os resultados no banco de dados.
-
-    #     Args:
-    #         *args: Argumentos posicionais ignorados
-    #         **kwargs: Argumentos nomeados contendo:
-    #             dados (list): Lista de candles
-    #             symbol (str): Símbolo do par
-    #             timeframe (str): Timeframe da análise
-    #             config (dict): Configurações do bot
-
-    #     Returns:
-    #         bool: True se executado com sucesso
-    #     """
-    #     try:
-    #         # Extrai os parâmetros necessários
-    #         dados = kwargs.get("dados")
-    #         symbol = kwargs.get("symbol")
-    #         timeframe = kwargs.get("timeframe")
-
-    #         # Validação dos parâmetros
-    #         if not all([dados, symbol, timeframe]):
-    #             logger.error("Parâmetros necessários não fornecidos")
-    #             dados["outros_indicadores"] = {
-    #                 "ichimoku": None,
-    #                 "fibonacci": None,
-    #                 "pivot_points": None,
-    #                 "sinais": {
-    #                     "direcao": "NEUTRO",
-    #                     "forca": "FRACA",
-    #                     "confianca": 0,
-    #                 },
-    #             }
-    #             return True
-
-    #         # Verifica se o banco de dados está disponível e obtém a instância do BancoDados
-    #         logger.error(f"Tipo de banco_dados: {type(self.banco_dados)}")
-    #         logger.error(dir(self.gerente))  # Mostra os métodos disponíveis
-
-    #         banco_dados = self.gerente.obter_banco_dados()
-    #         if not banco_dados or not banco_dados.obter_conexao():
-    #             logger.error("Banco de dados não disponível")
-    #             dados["outros_indicadores"] = {
-    #                 "ichimoku": None,
-    #                 "fibonacci": None,
-    #                 "pivot_points": None,
-    #                 "sinais": {
-    #                     "direcao": "NEUTRO",
-    #                     "forca": "FRACA",
-    #                     "confianca": 0,
-    #                 },
-    #             }
-    #             return True
-
-    #         cursor = self.banco_dados.conn.cursor()
-
-    #         for candle in dados:
-    #             # Calcula os indicadores para o candle atual
-    #             ichimoku = self.calcular_ichimoku([candle])
-    #             fibonacci = self.calcular_fibonacci_retracement([candle])
-    #             pivot_points = self.calcular_pivot_points([candle])
-
-    #             # Gera os sinais de compra e venda para o candle atual
-    #             sinal_ichimoku_compra = self.gerar_sinal(
-    #                 [candle], "ichimoku", "compra", symbol, timeframe, self.config
-    #             )
-    #             sinal_ichimoku_venda = self.gerar_sinal(
-    #                 [candle], "ichimoku", "venda", symbol, timeframe, self.config
-    #             )
-    #             sinal_fibonacci_suporte = self.gerar_sinal(
-    #                 [candle],
-    #                 "fibonacci_retracement",
-    #                 "suporte",
-    #                 symbol,
-    #                 timeframe,
-    #                 self.config,
-    #             )
-    #             sinal_fibonacci_resistencia = self.gerar_sinal(
-    #                 [candle],
-    #                 "fibonacci_retracement",
-    #                 "resistencia",
-    #                 symbol,
-    #                 timeframe,
-    #                 self.config,
-    #             )
-    #             sinal_pivot_points_suporte = self.gerar_sinal(
-    #                 [candle], "pivot_points", "suporte", symbol, timeframe, self.config
-    #             )
-    #             sinal_pivot_points_resistencia = self.gerar_sinal(
-    #                 [candle],
-    #                 "pivot_points",
-    #                 "resistencia",
-    #                 symbol,
-    #                 timeframe,
-    #                 self.config,
-    #             )
-
-    #             # Salva os resultados no banco de dados para o candle atual
-    #             timestamp = int(candle / 1000)  # Converte o timestamp para segundos
-    #             cursor.execute(
-    #                 """
-    #                 INSERT INTO outros_indicadores (
-    #                     symbol, timeframe, timestamp,
-    #                     tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b, chikou_span,
-    #                     fibonacci_23_6, fibonacci_38_2, fibonacci_50, fibonacci_61_8,
-    #                     pivot_point, r1, s1, r2, s2, r3, s3,
-    #                     sinal_ichimoku_compra, stop_loss_ichimoku_compra, take_profit_ichimoku_compra,
-    #                     sinal_ichimoku_venda, stop_loss_ichimoku_venda, take_profit_ichimoku_venda,
-    #                     sinal_fibonacci_suporte, stop_loss_fibonacci_suporte, take_profit_fibonacci_suporte,
-    #                     sinal_fibonacci_resistencia, stop_loss_fibonacci_resistencia, take_profit_fibonacci_resistencia,
-    #                     sinal_pivot_points_suporte, stop_loss_pivot_points_suporte, take_profit_pivot_points_suporte,
-    #                     sinal_pivot_points_resistencia, stop_loss_pivot_points_resistencia, take_profit_pivot_points_resistencia
-    #                 )
-    #                 VALUES (
-    #                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-    #                 )
-    #                 ON CONFLICT (symbol, timeframe, timestamp) DO UPDATE
-    #                 SET tenkan_sen = EXCLUDED.tenkan_sen, kijun_sen = EXCLUDED.kijun_sen, senkou_span_a = EXCLUDED.senkou_span_a,
-    #                     senkou_span_b = EXCLUDED.senkou_span_b, chikou_span = EXCLUDED.chikou_span,
-    #                     fibonacci_23_6 = EXCLUDED.fibonacci_23_6, fibonacci_38_2 = EXCLUDED.fibonacci_38_2,
-    #                     fibonacci_50 = EXCLUDED.fibonacci_50, fibonacci_61_8 = EXCLUDED.fibonacci_61_8,
-    #                     pivot_point = EXCLUDED.pivot_point, r1 = EXCLUDED.r1, s1 = EXCLUDED.s1, r2 = EXCLUDED.r2, s2 = EXCLUDED.s2, r3 = EXCLUDED.r3, s3 = EXCLUDED.s3,
-    #                     sinal_ichimoku_compra = EXCLUDED.sinal_ichimoku_compra, stop_loss_ichimoku_compra = EXCLUDED.stop_loss_ichimoku_compra, take_profit_ichimoku_compra = EXCLUDED.take_profit_ichimoku_compra,
-    #                     sinal_ichimoku_venda = EXCLUDED.sinal_ichimoku_venda, stop_loss_ichimoku_venda = EXCLUDED.stop_loss_ichimoku_venda, take_profit_ichimoku_venda = EXCLUDED.take_profit_ichimoku_venda,
-    #                     sinal_fibonacci_suporte = EXCLUDED.sinal_fibonacci_suporte, stop_loss_fibonacci_suporte = EXCLUDED.stop_loss_fibonacci_suporte, take_profit_fibonacci_suporte = EXCLUDED.take_profit_fibonacci_suporte,
-    #                     sinal_fibonacci_resistencia = EXCLUDED.sinal_fibonacci_resistencia, stop_loss_fibonacci_resistencia = EXCLUDED.stop_loss_fibonacci_resistencia, take_profit_fibonacci_resistencia = EXCLUDED.take_profit_fibonacci_resistencia,
-    #                     sinal_pivot_points_suporte = EXCLUDED.sinal_pivot_points_suporte, stop_loss_pivot_points_suporte = EXCLUDED.stop_loss_pivot_points_suporte, take_profit_pivot_points_suporte = EXCLUDED.take_profit_pivot_points_suporte,
-    #                     sinal_pivot_points_resistencia = EXCLUDED.sinal_pivot_points_resistencia, stop_loss_pivot_points_resistencia = EXCLUDED.stop_loss_pivot_points_resistencia, take_profit_pivot_points_resistencia = EXCLUDED.take_profit_pivot_points_resistencia;
-    #                 """,
-    #                 (
-    #                     symbol,
-    #                     timeframe,
-    #                     timestamp,
-    #                     ichimoku["tenkan_sen"][-1],
-    #                     ichimoku["kijun_sen"][-1],
-    #                     ichimoku["senkou_span_a"][-1],
-    #                     ichimoku["senkou_span_b"][-1],
-    #                     ichimoku["chikou_span"][-1],
-    #                     fibonacci["23.6%"],
-    #                     fibonacci["38.2%"],
-    #                     fibonacci["50%"],
-    #                     fibonacci["61.8%"],
-    #                     pivot_points["PP"],
-    #                     pivot_points["R1"],
-    #                     pivot_points["S1"],
-    #                     pivot_points["R2"],
-    #                     pivot_points["S2"],
-    #                     pivot_points["R3"],
-    #                     pivot_points["S3"],
-    #                     sinal_ichimoku_compra["sinal"],
-    #                     sinal_ichimoku_compra["stop_loss"],
-    #                     sinal_ichimoku_compra["take_profit"],
-    #                     sinal_ichimoku_venda["sinal"],
-    #                     sinal_ichimoku_venda["stop_loss"],
-    #                     sinal_ichimoku_venda["take_profit"],
-    #                     sinal_fibonacci_suporte["sinal"],
-    #                     sinal_fibonacci_suporte["stop_loss"],
-    #                     sinal_fibonacci_suporte["take_profit"],
-    #                     sinal_fibonacci_resistencia["sinal"],
-    #                     sinal_fibonacci_resistencia["stop_loss"],
-    #                     sinal_fibonacci_resistencia["take_profit"],
-    #                     sinal_pivot_points_suporte["sinal"],
-    #                     sinal_pivot_points_suporte["stop_loss"],
-    #                     sinal_pivot_points_suporte["take_profit"],
-    #                     sinal_pivot_points_resistencia["sinal"],
-    #                     sinal_pivot_points_resistencia["stop_loss"],
-    #                     sinal_pivot_points_resistencia["take_profit"],
-    #                 ),
-    #             )
-
-    #         self.banco_dados.conn.commit()
-    #         logger.debug(
-    #             f"Outros indicadores calculados e sinais gerados para {symbol} - {timeframe}."
-    #         )
-    #         return True
-
-    #     except (Exception, psycopg2.Error) as error:
-    #         logger.error(f"Erro ao calcular outros indicadores: {error}")
-    #         dados["outros_indicadores"] = {
-    #             "ichimoku": None,
-    #             "fibonacci": None,
-    #             "pivot_points": None,
-    #             "sinais": {
-    #                 "direcao": "NEUTRO",
-    #                 "forca": "FRACA",
-    #                 "confianca": 0,
-    #             },
-    #         }
-    #         return True

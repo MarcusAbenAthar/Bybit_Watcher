@@ -659,3 +659,8 @@ class GerenciadorBanco(
                 logger.error(f"Erro ao fechar a conexão com o banco: {e}")
             finally:
                 self._conn = None  # Garante que a conexão não fique referenciada
+
+
+def obter_banco_dados():
+    # Implementação da função para obter o banco de dados
+    pass
