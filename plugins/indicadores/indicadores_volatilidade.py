@@ -30,6 +30,35 @@ class IndicadoresVolatilidade(Plugin):
         # Obtém o plugin de banco de dados através do gerente
         self.banco_dados = self.gerente.obter_banco_dados()
 
+    def _validar_e_converter_valor(self, valor):
+        """
+        Valida e converte um valor para float, tratando casos especiais.
+
+        Args:
+            valor: Valor a ser convertido
+
+        Returns:
+            float: Valor convertido ou None se inválido
+        """
+        try:
+            # Se for None ou vazio, retorna None
+            if valor is None or str(valor).strip() == "":
+                return None
+
+            # Converte para string e remove caracteres de notação científica
+            valor_str = str(valor).replace("e", "").replace("E", "").replace("n", "")
+
+            # Verifica se há um número válido após remoção
+            if (
+                not valor_str
+                or not valor_str.replace(".", "", 1).replace("-", "", 1).isdigit()
+            ):
+                return None
+
+            return float(valor_str)
+        except (ValueError, TypeError):
+            return None
+
     def calcular_bandas_de_bollinger(self, dados, periodo=20, desvio_padrao=2):
         """
         Calcula as Bandas de Bollinger para os dados fornecidos, usando a biblioteca TA-Lib.
@@ -42,12 +71,37 @@ class IndicadoresVolatilidade(Plugin):
         Returns:
             tuple: Uma tupla com as listas da banda superior, da banda média e da banda inferior.
         """
-        fechamentos = [candle[4] for candle in dados]
-        banda_media = talib.SMA(fechamentos, timeperiod=periodo)
-        desvio_padrao = talib.STDDEV(fechamentos, timeperiod=periodo)
-        banda_superior = banda_media + desvio_padrao * desvio_padrao
-        banda_inferior = banda_media - desvio_padrao * desvio_padrao
-        return banda_superior, banda_media, banda_inferior
+        try:
+            # Valida e extrai valores numéricos
+            fechamentos = []
+
+            for candle in dados:
+                if len(candle) < 5:
+                    continue
+
+                valor = self._validar_e_converter_valor(candle[4])
+                if valor is not None:
+                    fechamentos.append(valor)
+
+            # Verifica se temos dados suficientes
+            if len(fechamentos) < periodo:
+                logger.warning(
+                    f"Dados insuficientes para calcular Bandas de Bollinger: {len(fechamentos)}/{periodo}"
+                )
+                return np.array([0]), np.array([0]), np.array([0])
+
+            # Converte para array numpy para compatibilidade com TALib
+            fechamentos = np.array(fechamentos, dtype=np.float64)
+            banda_media = talib.SMA(fechamentos, timeperiod=periodo)
+            std_dev = talib.STDDEV(fechamentos, timeperiod=periodo)
+            banda_superior = banda_media + std_dev * desvio_padrao
+            banda_inferior = banda_media - std_dev * desvio_padrao
+
+            return banda_superior, banda_media, banda_inferior
+
+        except Exception as e:
+            logger.error(f"Erro ao calcular Bandas de Bollinger: {e}")
+            return np.array([0]), np.array([0]), np.array([0])
 
     def calcular_atr(self, dados, periodo=14):
         """
@@ -60,15 +114,49 @@ class IndicadoresVolatilidade(Plugin):
         Returns:
             list: Lista com os valores do ATR.
         """
-        # Extrai os valores de high, low e close dos candles
-        high = [candle[2] for candle in dados]
-        low = [candle[3] for candle in dados]
-        close = [candle[4] for candle in dados]
+        try:
+            # Valida e extrai valores numéricos
+            highs = []
+            lows = []
+            closes = []
 
-        # Calcula o ATR usando a função ATR do TA-Lib
-        atr = talib.ATR(high, low, close, timeperiod=periodo)
+            for candle in dados:
+                if len(candle) < 5:
+                    continue
 
-        return atr
+                high_val = self._validar_e_converter_valor(candle[2])
+                low_val = self._validar_e_converter_valor(candle[3])
+                close_val = self._validar_e_converter_valor(candle[4])
+
+                if (
+                    high_val is not None
+                    and low_val is not None
+                    and close_val is not None
+                ):
+                    highs.append(high_val)
+                    lows.append(low_val)
+                    closes.append(close_val)
+
+            # Verifica se temos dados suficientes
+            if len(highs) < periodo or len(lows) < periodo or len(closes) < periodo:
+                logger.warning(
+                    f"Dados insuficientes para calcular ATR: {len(highs)}/{periodo}"
+                )
+                return np.array([0])
+
+            # Converte para arrays numpy
+            high = np.array(highs, dtype=np.float64)
+            low = np.array(lows, dtype=np.float64)
+            close = np.array(closes, dtype=np.float64)
+
+            # Calcula o ATR usando a função ATR do TA-Lib
+            atr = talib.ATR(high, low, close, timeperiod=periodo)
+
+            return atr
+
+        except Exception as e:
+            logger.error(f"Erro ao calcular ATR: {e}")
+            return np.array([0])
 
     def gerar_sinal(self, dados, indicador, tipo, symbol, timeframe, config):
         """
@@ -177,16 +265,25 @@ class IndicadoresVolatilidade(Plugin):
                 return True
 
             # Verifica se o banco de dados está disponível e inicializado
-            if not self.banco_dados or not hasattr(self.banco_dados, "conn"):
+            if not self.banco_dados:
                 logger.warning("Banco de dados não disponível")
+                dados["volatilidade"] = {
+                    "bandas_bollinger": None,
+                    "atr": None,
+                    "sinais": {
+                        "direcao": "NEUTRO",
+                        "forca": "FRACA",
+                        "confianca": 0,
+                    },
+                }
                 return True
 
-            conn = self.banco_dados.conn
-            if not conn:
+            # Verificar se a conexão existe no banco de dados
+            if not hasattr(self.banco_dados, "conn") or not self.banco_dados.conn:
                 logger.warning("Conexão com banco de dados não disponível")
                 return True
 
-            cursor = conn.cursor()
+            cursor = self.banco_dados.conn.cursor()
 
             for candle in dados:
                 # Calcula os indicadores de volatilidade para o candle atual
@@ -263,7 +360,7 @@ class IndicadoresVolatilidade(Plugin):
                     ),
                 )
 
-            conn.commit()
+            self.banco_dados.conn.commit()
             logger.debug(
                 f"Indicadores de volatilidade calculados e sinais gerados para {symbol} - {timeframe}."
             )

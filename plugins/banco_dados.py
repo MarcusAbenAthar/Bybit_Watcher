@@ -231,6 +231,16 @@ class BancoDados(Plugin):
             logger.error(f"Erro no ciclo de execução: {e}")
             return False
 
+    @property
+    def conn(self):
+        """
+        Retorna a conexão com o banco de dados.
+
+        Returns:
+            Connection: Objeto de conexão com o banco de dados
+        """
+        return self._conn
+
     def finalizar(self):
         """Finaliza o plugin."""
         try:

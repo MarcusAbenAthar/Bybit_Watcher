@@ -388,10 +388,9 @@ class GerentePlugin:
     def executar_ciclo(self, dados, symbol, timeframe, config) -> bool:
         """Executa o ciclo em todos os plugins carregados."""
         try:
-            if not isinstance(dados, list):
-                logger.error(
-                    f"Parâmetro 'dados' está ausente ou inválido: {type(dados)}"
-                )
+            # Validação menos restritiva: aceita dict
+            if dados is None:
+                logger.error("Parâmetro 'dados' está ausente")
                 return False
 
             kwargs = {
@@ -400,13 +399,30 @@ class GerentePlugin:
                 "timeframe": timeframe,
                 "config": config,
             }
-            high = np.array([candle[2] for candle in dados])
-            low = np.array([candle[3] for candle in dados])
-            close = np.array([candle[4] for candle in dados])
+
+            # Verifica se dados é lista para extrair high, low, close
+            if isinstance(dados, list) and len(dados) > 0:
+                try:
+                    high = np.array([candle[2] for candle in dados])
+                    low = np.array([candle[3] for candle in dados])
+                    close = np.array([candle[4] for candle in dados])
+                except (IndexError, TypeError):
+                    high = np.array([])
+                    low = np.array([])
+                    close = np.array([])
+            else:
+                # Se dados é dicionário, não tenta extrair high, low, close
+                high = np.array([])
+                low = np.array([])
+                close = np.array([])
 
             for plugin in self.plugins.values():
-                if not plugin.executar(high, low, close, **kwargs):
-                    logger.error(f"Erro na execução do plugin: {plugin.nome}")
+                try:
+                    if not plugin.executar(high, low, close, **kwargs):
+                        logger.error(f"Erro na execução do plugin: {plugin.nome}")
+                        return False
+                except Exception as e:
+                    logger.error(f"Exceção ao executar plugin {plugin.nome}: {e}")
                     return False
             return True
         except Exception as e:

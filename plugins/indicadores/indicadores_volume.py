@@ -34,33 +34,90 @@ class IndicadoresVolume(Plugin):
     def calcular_obv(self, dados):
         """
         Calcula o On Balance Volume (OBV).
-        (sem alterações nesta função)
+
+        Args:
+            dados (list): Lista de candles.
+
+        Returns:
+            numpy.ndarray: Array com valores do OBV.
         """
-        fechamentos = [candle[4] for candle in dados]
-        volume = [candle[5] for candle in dados]
+        # Converte para arrays numpy para compatibilidade com TALib
+        fechamentos = np.array([float(candle[4]) for candle in dados], dtype=np.float64)
+        volume = np.array([float(candle[5]) for candle in dados], dtype=np.float64)
         return talib.OBV(fechamentos, volume)
 
     def calcular_cmf(self, dados, periodo=20):
         """
         Calcula o Chaikin Money Flow (CMF).
-        (sem alterações nesta função)
+
+        Args:
+            dados (list): Lista de candles.
+            periodo (int): Período para cálculo do CMF.
+
+        Returns:
+            numpy.ndarray: Array com valores do CMF.
         """
-        high = [candle[2] for candle in dados]
-        low = [candle[3] for candle in dados]
-        close = [candle[4] for candle in dados]
-        volume = [candle[5] for candle in dados]
+        # Converte para arrays numpy para compatibilidade com TALib
+        high = np.array([float(candle[2]) for candle in dados], dtype=np.float64)
+        low = np.array([float(candle[3]) for candle in dados], dtype=np.float64)
+        close = np.array([float(candle[4]) for candle in dados], dtype=np.float64)
+        volume = np.array([float(candle[5]) for candle in dados], dtype=np.float64)
         return talib.CMF(high, low, close, volume, timeperiod=periodo)
 
     def calcular_mfi(self, dados, periodo=14):
         """
         Calcula o Índice de Fluxo de Dinheiro (MFI).
-        (sem alterações nesta função)
+
+        Args:
+            dados (list): Lista de candles.
+            periodo (int): Período para cálculo do MFI.
+
+        Returns:
+            numpy.ndarray: Array com valores do MFI.
         """
-        high = [candle[2] for candle in dados]
-        low = [candle[3] for candle in dados]
-        close = [candle[4] for candle in dados]
-        volume = [candle[5] for candle in dados]
+        # Converte para arrays numpy para compatibilidade com TALib
+        high = np.array([float(candle[2]) for candle in dados], dtype=np.float64)
+        low = np.array([float(candle[3]) for candle in dados], dtype=np.float64)
+        close = np.array([float(candle[4]) for candle in dados], dtype=np.float64)
+        volume = np.array([float(candle[5]) for candle in dados], dtype=np.float64)
         return talib.MFI(high, low, close, volume, timeperiod=periodo)
+
+    def verificar_divergencia(self, dados, indicador, tipo="altista"):
+        """
+        Verifica se há divergência entre o preço e o indicador.
+
+        Args:
+            dados (list): Lista de candles.
+            indicador (numpy.ndarray): Array com valores do indicador.
+            tipo (str): Tipo de divergência ('altista' ou 'baixista').
+
+        Returns:
+            bool: True se há divergência, False caso contrário.
+        """
+        try:
+            if len(dados) < 3 or len(indicador) < 3:
+                return False
+
+            # Converte dados para numpy array
+            fechamentos = np.array([float(candle[4]) for candle in dados])
+
+            # Divergência altista: preço em baixa mas indicador em alta
+            if tipo == "altista":
+                return (fechamentos[-1] < fechamentos[-3]) and (
+                    indicador[-1] > indicador[-3]
+                )
+
+            # Divergência baixista: preço em alta mas indicador em baixa
+            elif tipo == "baixista":
+                return (fechamentos[-1] > fechamentos[-3]) and (
+                    indicador[-1] < indicador[-3]
+                )
+
+            return False
+
+        except Exception as e:
+            logger.error(f"Erro ao verificar divergência: {e}")
+            return False
 
     def gerar_sinal(self, dados, indicador, tipo, symbol, timeframe, config):
         """
@@ -90,8 +147,8 @@ class IndicadoresVolume(Plugin):
             if indicador == "obv":
                 obv = self.calcular_obv(dados)
                 # Lógica para gerar sinais com base no OBV (exemplo: divergência)
-                if tipo == "divergencia_altista" and self.detectar_divergencia_altista(
-                    dados, obv
+                if tipo == "divergencia_altista" and self.verificar_divergencia(
+                    dados, obv, "altista"
                 ):
                     sinal = "compra"
                     stop_loss = dados[-1] - (dados[-1] - dados[-1]) * (
@@ -100,9 +157,8 @@ class IndicadoresVolume(Plugin):
                     take_profit = dados[-1] + (dados[-1] - dados[-1]) * (
                         2 / alavancagem
                     )
-                elif (
-                    tipo == "divergencia_baixista"
-                    and self.detectar_divergencia_baixista(dados, obv)
+                elif tipo == "divergencia_baixista" and self.verificar_divergencia(
+                    dados, obv, "baixista"
                 ):
                     sinal = "venda"
                     stop_loss = dados[-1] + (dados[-1] - dados[-1]) * (
@@ -203,16 +259,26 @@ class IndicadoresVolume(Plugin):
                 return True
 
             # Verifica se o banco de dados está disponível e inicializado
-            if not self.banco_dados or not hasattr(self.banco_dados, "conn"):
+            if not self.banco_dados:
                 logger.warning("Banco de dados não disponível")
+                dados["volume"] = {
+                    "obv": None,
+                    "cmf": None,
+                    "mfi": None,
+                    "sinais": {
+                        "direcao": "NEUTRO",
+                        "forca": "FRACA",
+                        "confianca": 0,
+                    },
+                }
                 return True
 
-            conn = self.banco_dados.conn
-            if not conn:
+            # Verificar se a conexão existe no banco de dados
+            if not hasattr(self.banco_dados, "conn") or not self.banco_dados.conn:
                 logger.warning("Conexão com banco de dados não disponível")
                 return True
 
-            cursor = conn.cursor()
+            cursor = self.banco_dados.conn.cursor()
             for candle in dados:
                 # Calcula os indicadores de volume para o candle atual
                 obv = self.calcular_obv([candle])
@@ -303,7 +369,7 @@ class IndicadoresVolume(Plugin):
                     ),
                 )
 
-            conn.commit()
+            self.banco_dados.conn.commit()
             logger.debug(
                 f"Indicadores de volume calculados e sinais gerados para {symbol} - {timeframe}."
             )

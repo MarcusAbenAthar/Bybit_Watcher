@@ -361,18 +361,14 @@ class IndicadoresOsciladores(Plugin):
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
 
-            # Validação do tipo do parâmetro 'dados'
-            if not isinstance(dados, list):
-                logger.error(
-                    f"Parâmetro 'dados' está ausente ou inválido: {type(dados)}"
-                )
+            # Verificação menos restritiva de dados
+            if dados is None:
+                logger.error("Parâmetro 'dados' está ausente")
                 return False
 
-            # Converte os dados para lista antes de enviar ao gerenciador de plugins
-            dados_lista = list(dados)
-
-            # Chama o gerenciador de plugins com os dados convertidos
-            self.gerente.executar_ciclo(dados_lista, symbol, timeframe, self.config)
+            # Não tenta converter dados para lista se for um dicionário
+            # Uma chamada recursiva ao gerenciador pode causar loop infinito,
+            # então vamos evitar chamar executar_ciclo aqui
 
             # Validação dos parâmetros
             if not all([dados, symbol, timeframe]):
@@ -391,28 +387,52 @@ class IndicadoresOsciladores(Plugin):
 
             # Calcula os indicadores
             try:
-                rsi = self.calcular_rsi(dados, symbol, timeframe)
-                estocastico_lento, estocastico_rapido = self.calcular_estocastico(
-                    dados, timeframe
-                )
-                mfi = self.calcular_mfi(dados)
+                # Verifica se dados é uma lista para cálculo dos indicadores
+                if isinstance(dados, list) and len(dados) > 0:
+                    # Cálculo dos indicadores com dados como lista
+                    rsi = self.calcular_rsi(dados, symbol, timeframe)
+                    estocastico_lento, estocastico_rapido = self.calcular_estocastico(
+                        dados, timeframe
+                    )
+                    mfi = self.calcular_mfi(dados)
 
-                # Atualiza o dicionário de dados
+                    # Valores para atualizar
+                    rsi_valor = rsi[-1] if rsi is not None and len(rsi) > 0 else None
+                    estocastico_lento_valor = (
+                        estocastico_lento[-1]
+                        if estocastico_lento is not None and len(estocastico_lento) > 0
+                        else None
+                    )
+                    estocastico_rapido_valor = (
+                        estocastico_rapido[-1]
+                        if estocastico_rapido is not None
+                        and len(estocastico_rapido) > 0
+                        else None
+                    )
+                    mfi_valor = mfi[-1] if mfi is not None and len(mfi) > 0 else None
+
+                    # Se for uma lista com dados válidos, podemos tentar salvar no banco
+                    salvar_no_banco = True
+                    timestamp = (
+                        int(dados[-1][0] / 1000) if dados and len(dados) > 0 else None
+                    )
+                else:
+                    # Caso dados seja um dicionário, não calculamos indicadores numéricos
+                    rsi_valor = None
+                    estocastico_lento_valor = None
+                    estocastico_rapido_valor = None
+                    mfi_valor = None
+                    salvar_no_banco = False
+                    timestamp = None
+
+                # Atualiza o dicionário de dados (funciona para ambos os tipos)
                 dados["osciladores"] = {
-                    "rsi": rsi[-1] if rsi is not None else None,
+                    "rsi": rsi_valor,
                     "estocastico": {
-                        "lento": (
-                            estocastico_lento[-1]
-                            if estocastico_lento is not None
-                            else None
-                        ),
-                        "rapido": (
-                            estocastico_rapido[-1]
-                            if estocastico_rapido is not None
-                            else None
-                        ),
+                        "lento": estocastico_lento_valor,
+                        "rapido": estocastico_rapido_valor,
                     },
-                    "mfi": mfi[-1] if mfi is not None else None,
+                    "mfi": mfi_valor,
                     "sinais": {
                         "direcao": "NEUTRO",
                         "forca": "FRACA",
@@ -420,11 +440,15 @@ class IndicadoresOsciladores(Plugin):
                     },
                 }
 
-                # Tenta salvar no banco se disponível
-                if self.banco_dados and self.banco_dados.conn:
+                # Tenta salvar no banco se disponível e se tivermos timestamp válido
+                if (
+                    salvar_no_banco
+                    and timestamp
+                    and self.banco_dados
+                    and self.banco_dados.conn
+                ):
                     try:
                         cursor = self.banco_dados.conn.cursor()
-                        timestamp = int(dados[-1][0] / 1000)
                         cursor.execute(
                             """
                             INSERT INTO indicadores_osciladores (
