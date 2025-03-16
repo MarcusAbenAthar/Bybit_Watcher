@@ -338,14 +338,12 @@ class IndicadoresOsciladores(Plugin):
                 "take_profit": None,
             }
 
-    def executar(self, high: np.ndarray, low: np.ndarray, close: np.ndarray, **kwargs):
+    def executar(self, *args, **kwargs) -> bool:
         """
         Executa o cálculo dos indicadores osciladores.
 
         Args:
-            high (np.ndarray): Array de valores altos.
-            low (np.ndarray): Array de valores baixos.
-            close (np.ndarray): Array de valores de fechamento.
+            *args: Argumentos posicionais ignorados
             **kwargs: Argumentos nomeados contendo:
                 dados (list): Lista de candles
                 symbol (str): Símbolo do par
@@ -360,43 +358,46 @@ class IndicadoresOsciladores(Plugin):
             dados = kwargs.get("dados")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
+            config = kwargs.get("config")
 
-            # Verificação menos restritiva de dados
+            # Validação inicial
             if dados is None:
                 logger.error("Parâmetro 'dados' está ausente")
                 return False
 
-            # Não tenta converter dados para lista se for um dicionário
-            # Uma chamada recursiva ao gerenciador pode causar loop infinito,
-            # então vamos evitar chamar executar_ciclo aqui
-
-            # Validação dos parâmetros
+            # Validação completa dos parâmetros
             if not all([dados, symbol, timeframe]):
                 logger.error("Parâmetros necessários não fornecidos")
-                dados["osciladores"] = {
-                    "rsi": None,
-                    "estocastico": None,
-                    "mfi": None,
-                    "sinais": {
-                        "direcao": "NEUTRO",
-                        "forca": "FRACA",
-                        "confianca": 0,
-                    },
-                }
+                if isinstance(dados, dict):
+                    dados["osciladores"] = {
+                        "rsi": None,
+                        "estocastico": None,
+                        "mfi": None,
+                        "sinais": {
+                            "direcao": "NEUTRO",
+                            "forca": "FRACA",
+                            "confianca": 0,
+                        },
+                    }
                 return True
 
-            # Calcula os indicadores
+            # Processa indicadores
             try:
-                # Verifica se dados é uma lista para cálculo dos indicadores
+                # Verifica tipo dos dados
                 if isinstance(dados, list) and len(dados) > 0:
-                    # Cálculo dos indicadores com dados como lista
+                    # Extrai dados em arrays numpy
+                    high = np.array([float(candle[2]) for candle in dados])
+                    low = np.array([float(candle[3]) for candle in dados])
+                    close = np.array([float(candle[4]) for candle in dados])
+
+                    # Calcula indicadores
                     rsi = self.calcular_rsi(dados, symbol, timeframe)
                     estocastico_lento, estocastico_rapido = self.calcular_estocastico(
                         dados, timeframe
                     )
                     mfi = self.calcular_mfi(dados)
 
-                    # Valores para atualizar
+                    # Obtém últimos valores
                     rsi_valor = rsi[-1] if rsi is not None and len(rsi) > 0 else None
                     estocastico_lento_valor = (
                         estocastico_lento[-1]
@@ -411,21 +412,22 @@ class IndicadoresOsciladores(Plugin):
                     )
                     mfi_valor = mfi[-1] if mfi is not None and len(mfi) > 0 else None
 
-                    # Se for uma lista com dados válidos, podemos tentar salvar no banco
-                    salvar_no_banco = True
+                    # Prepara para salvar no banco
                     timestamp = (
                         int(dados[-1][0] / 1000) if dados and len(dados) > 0 else None
                     )
+                    salvar_banco = True
+
                 else:
-                    # Caso dados seja um dicionário, não calculamos indicadores numéricos
+                    # Caso seja dicionário, mantém valores nulos
                     rsi_valor = None
                     estocastico_lento_valor = None
                     estocastico_rapido_valor = None
                     mfi_valor = None
-                    salvar_no_banco = False
                     timestamp = None
+                    salvar_banco = False
 
-                # Atualiza o dicionário de dados (funciona para ambos os tipos)
+                # Atualiza dicionário de dados
                 dados["osciladores"] = {
                     "rsi": rsi_valor,
                     "estocastico": {
@@ -433,30 +435,26 @@ class IndicadoresOsciladores(Plugin):
                         "rapido": estocastico_rapido_valor,
                     },
                     "mfi": mfi_valor,
-                    "sinais": {
-                        "direcao": "NEUTRO",
-                        "forca": "FRACA",
-                        "confianca": 0,
-                    },
+                    "sinais": {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0},
                 }
 
-                # Tenta salvar no banco se disponível e se tivermos timestamp válido
+                # Salva no banco se possível
                 if (
-                    salvar_no_banco
+                    salvar_banco
                     and timestamp
                     and self.banco_dados
-                    and self.banco_dados.conn
+                    and hasattr(self.banco_dados, "conn")
                 ):
                     try:
                         cursor = self.banco_dados.conn.cursor()
                         cursor.execute(
                             """
                             INSERT INTO indicadores_osciladores (
-                                symbol, timeframe, timestamp, rsi, estocastico_lento, 
+                                symbol, timeframe, timestamp, rsi, estocastico_lento,
                                 estocastico_rapido, mfi
                             ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                             ON CONFLICT (symbol, timeframe, timestamp) 
-                            DO UPDATE SET 
+                            DO UPDATE SET
                                 rsi = EXCLUDED.rsi,
                                 estocastico_lento = EXCLUDED.estocastico_lento,
                                 estocastico_rapido = EXCLUDED.estocastico_rapido,
@@ -466,41 +464,38 @@ class IndicadoresOsciladores(Plugin):
                                 symbol,
                                 timeframe,
                                 timestamp,
-                                dados["osciladores"]["rsi"],
-                                dados["osciladores"]["estocastico"]["lento"],
-                                dados["osciladores"]["estocastico"]["rapido"],
-                                dados["osciladores"]["mfi"],
+                                rsi_valor,
+                                estocastico_lento_valor,
+                                estocastico_rapido_valor,
+                                mfi_valor,
                             ),
                         )
                         self.banco_dados.conn.commit()
+                        logger.debug(
+                            f"Dados salvos no banco para {symbol} - {timeframe}"
+                        )
                     except Exception as e:
                         logger.error(f"Erro ao salvar no banco: {e}")
 
+                return True
+
             except Exception as e:
-                logger.error(f"Erro ao calcular indicadores: {e}")
+                logger.error(f"Erro ao processar indicadores: {e}")
                 dados["osciladores"] = {
                     "rsi": None,
                     "estocastico": None,
                     "mfi": None,
-                    "sinais": {
-                        "direcao": "NEUTRO",
-                        "forca": "FRACA",
-                        "confianca": 0,
-                    },
+                    "sinais": {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0},
                 }
-
-            return True
+                return True
 
         except Exception as e:
             logger.error(f"Erro ao executar indicadores osciladores: {e}")
-            dados["osciladores"] = {
-                "rsi": None,
-                "estocastico": None,
-                "mfi": None,
-                "sinais": {
-                    "direcao": "NEUTRO",
-                    "forca": "FRACA",
-                    "confianca": 0,
-                },
-            }
+            if isinstance(dados, dict):
+                dados["osciladores"] = {
+                    "rsi": None,
+                    "estocastico": None,
+                    "mfi": None,
+                    "sinais": {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0},
+                }
             return True
