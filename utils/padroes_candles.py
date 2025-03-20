@@ -1,3 +1,6 @@
+# padroes_candles.py
+# Descrição: Dicionário com os padrões de candles e suas respectivas funções de stop loss e take profit.
+
 PADROES_CANDLES = {
     # Padrões 1-10
     "dois_corvos_alta": {

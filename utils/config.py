@@ -1,3 +1,6 @@
+# config.py
+# Configurações do bot
+
 import os
 from dotenv import load_dotenv
 

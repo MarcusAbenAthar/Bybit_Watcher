@@ -1,3 +1,6 @@
+# logging_config.py
+# Configuração centralizada de logs
+
 """
 Configuração centralizada de logs. Arquivo logging_config.py
 

@@ -1,3 +1,5 @@
+# main.py
+
 """
 Bot de análise de mercado cripto seguindo as Regras de Ouro.
 

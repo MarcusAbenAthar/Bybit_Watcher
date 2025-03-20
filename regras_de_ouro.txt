@@ -84,8 +84,11 @@ Bybit_Watcher/
 │   └── ... (outros testes)
 │
 └── logs/                   # Diretório de logs
-    ├── bot_YYYY-MM-DD.log
-    ├── sinais_YYYY-MM-DD.log
-    └── erros_YYYY-MM-DD.log
+    ├── bot/
+    │   └── bot_DD-MM-YYYY.log
+    ├── sinais/
+    │   └── sinais_DD-MM-YYYY.log
+    ├── erros/
+    │    └── erros_DD-MM-YYYY.log
 
 https://github.com/MarcusAbenAthar/Bybit_Watcher

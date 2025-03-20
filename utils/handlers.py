@@ -1,3 +1,6 @@
+# handlers.py
+# Description: Módulo com handlers para sinais de interrupção.
+
 import logging
 import sys
 from typing import Optional
