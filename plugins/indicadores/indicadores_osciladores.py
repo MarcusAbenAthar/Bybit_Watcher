@@ -1,3 +1,6 @@
+# indicadores_osciladores.py
+# Plugin para cálculo de indicadores osciladores (RSI, Estocástico, MFI e etc). Implementa a lógica de cálculo dos indicadores e geração de sinais de compra e venda
+
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 from utils.logging_config import get_logger
 import talib

@@ -1,13 +1,16 @@
+# gerenciador_banco.py
+# Plugin para gerenciamento centralizado de conexoes com o banco de dados.
+
 """
 Plugin para gerenciamento centralizado de conexoes com o banco de dados.
 
 Regras de Ouro:
 1. Autonomo - Gerencia conexoes automaticamente
 2. Criterioso - Validacoes rigorosas
-3. Seguro - Tratamento de erros 
+3. Seguro - Tratamento de erros
 4. Certeiro - Operacoes precisas
 5. Eficiente - Performance otimizada
-6. Clareza - Bem documentado 
+6. Clareza - Bem documentado
 7. Modular - Responsabilidade unica
 8. Plugins - Interface padronizada
 9. Testavel - Metodos isolados

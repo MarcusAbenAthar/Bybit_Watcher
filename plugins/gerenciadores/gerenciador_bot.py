@@ -1,3 +1,6 @@
+# gerenciador_bot.py
+# Gerenciador principal do bot.
+
 """
 Gerenciador principal do bot.
 

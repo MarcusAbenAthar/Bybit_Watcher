@@ -1,4 +1,6 @@
 # sinais_plugin.py
+# Plugin para gerenciamento de sinais de trading
+
 from utils.logging_config import get_logger
 from plugins.plugin import Plugin
 

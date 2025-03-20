@@ -1,3 +1,6 @@
+# outros_indicadores.py
+# Plugin para calcular outros indicadores como indicadores Ichimoku Cloud, Fibonacci Retracement e Pivot Points e etc.
+
 import psycopg2
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 from utils.logging_config import get_logger

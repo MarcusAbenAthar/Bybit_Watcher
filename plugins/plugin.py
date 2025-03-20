@@ -1,3 +1,6 @@
+# plugin.py
+# Plugin Base Class
+
 """
 Classe base para plugins do sistema.
 

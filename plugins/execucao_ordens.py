@@ -1,3 +1,6 @@
+# execucao_ordens.py
+# Plugin para execução de ordens de trading e exibição de sinais
+
 from utils.logging_config import get_logger
 from plugins.plugin import Plugin
 

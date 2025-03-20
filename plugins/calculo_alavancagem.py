@@ -1,3 +1,6 @@
+# calculo_alavancagem.py
+# Plugin para cálculos de alavancagem baseados na volatilidade.
+
 from utils.logging_config import get_logger
 import numpy as np
 import talib

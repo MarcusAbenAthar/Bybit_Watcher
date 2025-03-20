@@ -1,3 +1,6 @@
+# validador_dados.py
+# Plugin para validação de dados de trading
+
 from utils.logging_config import get_logger
 import numpy as np
 from plugins.plugin import Plugin

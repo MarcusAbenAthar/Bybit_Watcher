@@ -1,3 +1,6 @@
+# gerenciador_plugins.py
+# Gerenciador de plugins para o bot de trading.
+
 """
 Gerenciador de plugins para o bot de trading.
 

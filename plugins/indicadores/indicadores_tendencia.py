@@ -1,3 +1,6 @@
+# indicadores_tendencia.py
+# Plugin de Indicadores de Tendência
+
 """
 Plugin de Indicadores de Tendência
 

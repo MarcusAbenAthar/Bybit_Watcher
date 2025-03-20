@@ -1,3 +1,6 @@
+# calculo_risco.py
+# Plugin para cálculos de risco e análise de sinais
+
 from utils.logging_config import get_logger
 import numpy as np
 import talib

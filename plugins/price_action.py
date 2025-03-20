@@ -1,3 +1,6 @@
+# price_action.py
+# Plugin para análise de price action
+
 from utils.logging_config import get_logger
 import numpy as np
 from plugins.plugin import Plugin

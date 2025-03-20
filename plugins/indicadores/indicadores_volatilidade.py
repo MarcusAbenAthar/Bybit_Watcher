@@ -1,3 +1,6 @@
+# indicadores_volatilidade.py
+# Plugin para calcular indicadores de volatilidade e gerar sinais de compra e venda.
+
 import psycopg2
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 from utils.logging_config import get_logger

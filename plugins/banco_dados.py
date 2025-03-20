@@ -1,3 +1,5 @@
+# banco_dados.py
+
 """
 Plugin para gerenciamento do banco de dados.
 

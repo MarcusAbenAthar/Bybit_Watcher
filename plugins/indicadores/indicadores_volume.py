@@ -1,3 +1,6 @@
+# indicadores_volume.py
+# Plugin para calcular indicadores de volume.
+
 import psycopg2
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 from utils.logging_config import get_logger

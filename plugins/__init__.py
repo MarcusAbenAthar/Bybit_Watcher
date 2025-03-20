@@ -1,3 +1,6 @@
+# Esse é o __init__.py do pacote de plugins.
+# Ele é responsável por inicializar o pacote e garantir que os plugins sejam carregados corretamente.
+
 """
 Inicializador do pacote de plugins.
 Exporta os plugins disponíveis e garante que sejam carregados corretamente.

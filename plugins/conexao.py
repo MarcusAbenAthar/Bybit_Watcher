@@ -1,3 +1,6 @@
+# conexao.py
+# Plugin gerencia a conexão e a obtenção de alguns dados via API Bybit
+
 """
 Plugin para conexão com a Bybit.
 

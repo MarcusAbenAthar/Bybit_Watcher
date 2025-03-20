@@ -1,3 +1,7 @@
+# analise_candles.py
+# Plugin para análise de padrões de candles
+
+
 from utils.logging_config import get_logger
 import numpy as np
 from plugins.gerenciadores import gerenciador_banco

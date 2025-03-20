@@ -1,3 +1,7 @@
+# __init__.py
+# # Inicializador do pacote de gerenciadores.
+# Exporta os gerenciadores disponíveis.
+
 """
 Inicializador do pacote de gerenciadores.
 Exporta os gerenciadores disponíveis.
@@ -12,4 +16,3 @@ __all__ = ["GerenciadorBanco", "GerenciadorBot", "GerentePlugin"]
 
 def __init__(self):
     self.plugins = {}
-    # Aqui você pode registrar os plugins manualmente ou via um método separado

@@ -1,3 +1,6 @@
+# medias_moveis.py
+# Plugin para cálculo e análise de médias móveis.
+
 from utils.logging_config import get_logger
 import numpy as np
 import talib

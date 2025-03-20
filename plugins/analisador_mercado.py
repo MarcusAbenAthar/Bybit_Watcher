@@ -1,3 +1,6 @@
+# analisador_mercado.py
+# Plugin para análise de mercado.
+
 """
 Plugin para análise de mercado.
 

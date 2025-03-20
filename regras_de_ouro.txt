@@ -53,6 +53,8 @@ Bybit_Watcher/
 │   ├── price_action.py     # Análise de price action
 │   ├── validador_dados.py  # Validação de dados
 │   ├── sinais_plugin.py    # Geração de sinais
+│   ├── analisador_mercado.py # Análise do mercado
+│   ├── execucao_ordens.py    # Execução de ordens
 │   │
 │   ├── indicadores/        # Subpacote de indicadores
 │   │    ├── __init__.py
