@@ -23,6 +23,7 @@ import logging
 import signal
 import sys
 from typing import Optional
+import time
 
 # Imports terceiros
 from dotenv import load_dotenv
@@ -122,56 +123,45 @@ def main() -> None:
 
         # Inicialização do gerenciador do bot
         gerenciador_bot = GerenciadorBot()
+        gerenciador_bot.gerente = (
+            gerente_plugin  # Injeta o gerente com plugins registrados
+        )
+
         if not gerenciador_bot.inicializar(gerente_plugin.config):
             raise RuntimeError("Falha ao inicializar gerenciador do bot")
 
-        # Registra todos os plugins carregados
+        # Registra todos os plugins carregados do gerente no GerenciadorBot
         for nome, plugin in gerente_plugin.plugins.items():
             if not gerenciador_bot.registrar_plugin(plugin):
                 logger.error(f"Falha ao registrar plugin {nome}")
                 raise RuntimeError(f"Falha ao registrar plugin {nome}")
 
-        # Inicia o bot após todos os plugins estarem registrados
+        # Inicia o bot
         if not gerenciador_bot.iniciar():
             raise RuntimeError("Falha ao iniciar gerenciador do bot")
         logger.info("Bot iniciado com sucesso")
 
+        # Carrega os timeframes do config
+        config = gerente_plugin.config
+        timeframes = config.get(
+            "timeframes", ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+        )  # Default caso não esteja no config
+        par = "BTCUSDT"  # Par fixo conforme ajustamos anteriormente
+
         # Loop principal
         while True:
             try:
-                # Inicio do ciclo de execução do bot
                 logger.debug("Iniciando ciclo de execução...")
-
-                # Executa o ciclo do gerenciador do bot
-                if not gerenciador_bot.executar_ciclo():
-                    logger.warning("Falha no ciclo do gerenciador do bot")
-                    break
-
-                # Obtém configurações e dados necessários
-                symbol = gerenciador_bot._config.get("symbol", "BTCUSDT")
-                timeframe = gerenciador_bot._config.get("timeframe", "1h")
-                dados = {
-                    "tendencia": {
-                        "direcao": "NEUTRO",
-                        "forca": "MÉDIA",
-                        "confianca": 50,
-                    },
-                    "medias_moveis": {
-                        "direcao": "NEUTRO",
-                        "forca": "MÉDIA",
-                        "confianca": 50,
-                    },
-                }
-
-                # Executa o ciclo do gerente de plugins
-                if not gerente_plugin.executar_ciclo(
-                    dados, symbol, timeframe, gerenciador_bot._config
-                ):
-                    logger.warning("Falha no ciclo de execução dos plugins")
-                    break
-
-                # Fim do ciclo de execução do bot
+                for timeframe in timeframes:
+                    logger.info(f"Processando {par} no timeframe {timeframe}")
+                    resultados = gerenciador_bot.executar_ciclo(
+                        par=par, timeframe=timeframe
+                    )
+                    if not resultados:
+                        logger.warning(f"Falha no ciclo para {par} - {timeframe}")
+                        continue  # Continua para o próximo timeframe em vez de quebrar o loop
                 logger.debug("Ciclo de execução concluído com sucesso")
+                time.sleep(60)  # Pausa de 60 segundos entre ciclos completos
 
             except Exception as e:
                 logger.error(f"Erro no ciclo: {e}")
@@ -182,8 +172,8 @@ def main() -> None:
         sys.exit(1)
 
     finally:
-        if "gerente" in locals():
-            gerente_plugin.interromper_execucao()
+        if "gerente_plugin" in locals():
+            gerente_plugin.finalizar()
 
 
 if __name__ == "__main__":

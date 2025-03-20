@@ -282,77 +282,53 @@ class IndicadoresTendencia(Plugin):
             return 0
 
     def executar(self, *args, **kwargs) -> bool:
-        """
-        Executa a análise de tendência.
-
-        Args:
-            *args: Argumentos posicionais ignorados
-            **kwargs: Argumentos nomeados contendo:
-                dados: Lista de tuplas com dados OHLCV
-                symbol: Símbolo do par
-                timeframe: Timeframe da análise
-                config: Configurações do bot
-
-        Returns:
-            bool: True se executado com sucesso
-        """
+        resultado_padrao = {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0}
         try:
-            # Extrai os parâmetros necessários
-            dados = kwargs.get("dados")
+            dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
             config = kwargs.get("config")
 
-            # Validação dos parâmetros
-            if not all([dados, symbol, timeframe]):
-                logger.error("Parâmetros necessários não fornecidos")
-                dados["tendencia"] = {
-                    "direcao": "NEUTRO",
-                    "forca": "FRACA",
-                    "confianca": 0,
-                }
+            if not all([dados_completos, symbol, timeframe]):
+                logger.error(
+                    f"Parâmetros necessários não fornecidos - dados_completos: {dados_completos}, symbol: {symbol}, timeframe: {timeframe}"
+                )
+                dados_completos["processados"]["tendencia"] = resultado_padrao
                 return True
 
-            # Verifica se há dados suficientes
-            if not dados or len(dados) < 20:  # Mínimo de candles para análise
-                logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
-                dados["tendencia"] = {
-                    "direcao": "NEUTRO",
-                    "forca": "FRACA",
-                    "confianca": 0,
-                }
+            dados_crus = dados_completos.get("crus", [])
+            if not isinstance(dados_crus, list) or len(dados_crus) < 20:
+                logger.warning(
+                    f"Dados insuficientes ou inválidos para {symbol} - {timeframe}"
+                )
+                dados_completos["processados"]["tendencia"] = resultado_padrao
                 return True
 
-            # Converte dados para DataFrame
             df = pd.DataFrame(
-                dados,
-                columns=[
-                    "timestamp",
-                    "open",
-                    "high",
-                    "low",
-                    "close",
-                    "volume",
-                ],
+                dados_crus,
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
             )
-
-            # Atualiza configurações se necessário
-            if config and "indicadores_tendencia" in config:
-                self.config.update(config["indicadores_tendencia"])
-
-            # Gera sinal
             sinal = self.gerar_sinal(df)
-
-            # Atualiza o dicionário de dados com o sinal
-            dados["tendencia"] = sinal
-
+            logger.info(f"Sinal gerado para {symbol} - {timeframe}: {sinal}")
+            dados_completos["processados"][
+                "tendencia"
+            ] = sinal  # Garantir que o resultado seja salvo
             return True
 
         except Exception as e:
-            logger.error(f"Erro ao executar análise de tendência: {e}")
-            dados["tendencia"] = {
-                "direcao": "NEUTRO",
-                "forca": "FRACA",
-                "confianca": 0,
-            }
+            logger.error(f"Erro ao executar análise de tendência: {str(e)}")
+            dados_completos["processados"]["tendencia"] = resultado_padrao
             return True
+
+    def gerar_sinal(self, df):
+        resultado_padrao = {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0}
+        if len(df) < 20:
+            return resultado_padrao
+
+        close = df["close"].iloc[-1]
+        close_prev = df["close"].iloc[-10]
+        if close > close_prev * 1.01:  # Aumento de 1%
+            return {"direcao": "ALTA", "forca": "MÉDIA", "confianca": 60.0}
+        elif close < close_prev * 0.99:  # Queda de 1%
+            return {"direcao": "BAIXA", "forca": "MÉDIA", "confianca": 60.0}
+        return resultado_padrao

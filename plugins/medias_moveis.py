@@ -9,7 +9,6 @@ logger = get_logger(__name__)
 class MediasMoveis(Plugin):
     """Plugin para cálculo e análise de médias móveis."""
 
-    # Identificador explícito do plugin
     PLUGIN_NAME = "medias_moveis"
     PLUGIN_TYPE = "essencial"
 
@@ -32,7 +31,6 @@ class MediasMoveis(Plugin):
             super().inicializar(config)
             self._config = config
             self.cache_medias = {}
-
             return True
         return True
 
@@ -52,7 +50,6 @@ class MediasMoveis(Plugin):
             ValueError: se o tipo de média for inválido
         """
         try:
-            # Converte dados para numpy array e extrai preços de fechamento
             dados_np = np.array(dados)
             fechamentos = dados_np[:, 4].astype(np.float64)  # Coluna de fechamento
 
@@ -67,7 +64,7 @@ class MediasMoveis(Plugin):
 
         except ValueError as e:
             logger.error(f"Erro ao calcular média móvel: {e}")
-            raise  # Re-lança a exceção para ser capturada pelo teste
+            raise
         except Exception as e:
             logger.error(f"Erro ao calcular média móvel: {e}")
             return None
@@ -87,11 +84,9 @@ class MediasMoveis(Plugin):
             dict: Dicionário com o sinal gerado
         """
         try:
-            # Obtém períodos das médias das configs
             periodo_curto = config.getint("medias_moveis", "periodo_curto", fallback=9)
             periodo_longo = config.getint("medias_moveis", "periodo_longo", fallback=21)
 
-            # Calcula as médias
             media_movel_curta = self.calcular_media_movel(
                 dados, periodo_curto, "exponencial"
             )
@@ -99,7 +94,6 @@ class MediasMoveis(Plugin):
                 dados, periodo_longo, "exponencial"
             )
 
-            # Verifica se temos dados suficientes
             if len(media_movel_curta) < 2 or len(media_movel_longa) < 2:
                 return {
                     "sinal": None,
@@ -108,7 +102,6 @@ class MediasMoveis(Plugin):
                     "indicadores": {"media_curta": None, "media_longa": None},
                 }
 
-            # Identifica cruzamentos
             sinal = None
             if padrao == "cruzamento_alta":
                 if (
@@ -148,23 +141,45 @@ class MediasMoveis(Plugin):
         Args:
             *args: Argumentos posicionais ignorados
             **kwargs: Argumentos nomeados contendo:
-                dados (list): Lista de candles
+                dados_completos (dict): Dicionário com dados crus e processados
                 symbol (str): Símbolo do par
                 timeframe (str): Timeframe
+                config (dict): Configurações
 
         Returns:
             bool: True se executado com sucesso
         """
         try:
             # Extrai os parâmetros necessários
-            dados = kwargs.get("dados")
+            dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
+            config = kwargs.get("config", {})
 
             # Validação dos parâmetros
-            if not all([dados, symbol, timeframe]):
+            if not all([dados_completos, symbol, timeframe]):
                 logger.error("Parâmetros necessários não fornecidos")
-                dados["medias_moveis"] = {
+                return False
+
+            if "crus" not in dados_completos or not dados_completos["crus"]:
+                logger.warning("Dados brutos não disponíveis")
+                dados_completos["processados"]["medias_moveis"] = {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0,
+                    "indicadores": {
+                        "ma20": None,
+                        "ma50": None,
+                        "distancia": 0,
+                        "alavancagem": 1,
+                    },
+                }
+                return True
+
+            dados = dados_completos["crus"]
+            if len(dados) < 20:  # Mínimo de candles para análise
+                logger.warning("Dados insuficientes para análise")
+                dados_completos["processados"]["medias_moveis"] = {
                     "direcao": "NEUTRO",
                     "forca": "FRACA",
                     "confianca": 0,
@@ -178,22 +193,7 @@ class MediasMoveis(Plugin):
                 return True
 
             # Inicializa alavancagem com valor padrão
-            self.alavancagem = 1  # Valor default
-
-            if not dados or len(dados) < 20:  # Mínimo de candles para análise
-                logger.warning("Dados insuficientes para análise")
-                dados["medias_moveis"] = {
-                    "direcao": "NEUTRO",
-                    "forca": "FRACA",
-                    "confianca": 0,
-                    "indicadores": {
-                        "ma20": None,
-                        "ma50": None,
-                        "distancia": 0,
-                        "alavancagem": 1,
-                    },
-                }
-                return True
+            self.alavancagem = 1
 
             # Calcular médias móveis
             closes = np.array([float(candle[4]) for candle in dados])
@@ -207,9 +207,9 @@ class MediasMoveis(Plugin):
             distancia = abs(ma20[-1] - ma50[-1]) / ma50[-1] * 100
 
             # Determina força do sinal baseada na distância
-            if distancia >= 2.0:  # 2% ou mais de distância
+            if distancia >= 2.0:
                 forca = "FORTE"
-            elif distancia >= 1.0:  # Entre 1% e 2%
+            elif distancia >= 1.0:
                 forca = "MÉDIA"
             else:
                 forca = "FRACA"
@@ -235,21 +235,25 @@ class MediasMoveis(Plugin):
                 "forca": forca,
                 "confianca": confianca,
                 "indicadores": {
-                    "ma20": ma20[-1],
-                    "ma50": ma50[-1],
+                    "ma20": float(ma20[-1]),
+                    "ma50": float(ma50[-1]),
                     "distancia": distancia,
                     "alavancagem": self.alavancagem,
                 },
             }
 
-            # Atualiza o dicionário de dados com o sinal
-            dados["medias_moveis"] = sinal
+            # Armazena o resultado em dados_completos["processados"]
+            if "processados" not in dados_completos:
+                dados_completos["processados"] = {}
+            dados_completos["processados"]["medias_moveis"] = sinal
+            logger.info(f"Médias móveis calculadas para {symbol} ({timeframe})")
             return True
 
         except Exception as e:
             logger.error(f"Erro ao processar médias móveis: {e}")
-            # Atualiza o dicionário com sinal neutro em caso de erro
-            dados["medias_moveis"] = {
+            if "processados" not in dados_completos:
+                dados_completos["processados"] = {}
+            dados_completos["processados"]["medias_moveis"] = {
                 "direcao": "NEUTRO",
                 "forca": "FRACA",
                 "confianca": 0,
@@ -272,4 +276,4 @@ class MediasMoveis(Plugin):
             return alavancagem
         except Exception as e:
             logger.error(f"Erro ao calcular alavancagem: {e}")
-            return 1  # Valor default seguro
+            return 1

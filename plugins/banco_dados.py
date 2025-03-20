@@ -3,7 +3,7 @@ Plugin para gerenciamento do banco de dados.
 
 Regras de Ouro:
 2 - Criterioso: Validacao rigorosa das operacoes
-3 - Seguro: Tratamento de erros 
+3 - Seguro: Tratamento de erros
 6 - Clareza: Documentacao clara
 7 - Modular: Responsabilidade unica
 9 - Testavel: Metodos bem definidos

@@ -5,7 +5,7 @@ Regras de Ouro:
 1. Autonomo - Decisões automáticas
 2. Criterioso - Validações rigorosas
 3. Seguro - Tratamento de erros
-4. Certeiro - Análises precisas 
+4. Certeiro - Análises precisas
 5. Eficiente - Otimizado
 6. Clareza - Bem documentado
 7. Modular - Responsabilidade única
@@ -139,27 +139,82 @@ class GerenciadorBot(Plugin):
         """
         return self._plugins_ativos.get(nome_plugin)
 
-    def executar_ciclo(self) -> bool:
-        """
-        Executa um ciclo do bot.
-
-        Returns:
-            bool: True se ciclo executado com sucesso
-        """
+    def executar_ciclo(self, par="BTCUSDT", timeframe="1h") -> Dict:
         try:
-            if self._status != "rodando":
-                logger.warning("Bot não está em execução")
-                return False
+            if not self.inicializado:
+                logger.error("Gerenciador não inicializado")
+                return {}
 
-            # Valida plugins essenciais
-            if not self._validar_plugins_essenciais():
-                return False
+            resultados = {}
 
-            return True
+            if not hasattr(self, "gerente") or not self.gerente:
+                logger.error("Gerente de plugins não fornecido ao GerenciadorBot")
+                return {}
 
+            config_dict = self._config if self._config else {}
+            # Adicionar períodos padrão se não estiverem no config
+            config_dict.setdefault(
+                "medias_moveis", {"mma_curta": 9, "mma_media": 21, "mma_longa": 50}
+            )
+            pares_config = config_dict.get("pares", par)
+
+            if isinstance(pares_config, str) and pares_config.lower() == "all":
+                conexao = self.gerente.plugins.get("plugins.conexao")
+                if not conexao:
+                    logger.error("Plugin 'plugins.conexao' não encontrado")
+                    pares = [par]
+                else:
+                    pares = conexao.obter_pares_usdt()
+            else:
+                pares = (
+                    pares_config.split(",") if isinstance(pares_config, str) else [par]
+                )
+
+            timeframes = config_dict.get("timeframes", self.timeframes)
+
+            plugins_ordem = [
+                "plugins.conexao",
+                "plugins.validador_dados",
+                "plugins.indicadores.indicadores_tendencia",
+                "plugins.medias_moveis",
+                "plugins.calculo_alavancagem",
+                "plugins.sinais_plugin",
+            ]
+
+            for par in pares:
+                resultados[par] = {}
+                for tf in timeframes:
+                    logger.info(f"Iniciando análise para {par} - {tf}")
+                    dados_completos = {"crus": [], "processados": {}}
+
+                for nome_plugin in plugins_ordem:
+                    plugin = self.gerente.plugins.get(nome_plugin)
+                    if not plugin:
+                        logger.warning(f"Plugin {nome_plugin} não encontrado")
+                        continue
+
+                    logger.debug(f"Executando {nome_plugin} para {par} - {tf}")
+                    kwargs = {
+                        "dados_completos": dados_completos,
+                        "symbol": par.strip(),
+                        "timeframe": tf.strip(),
+                        "config": config_dict,
+                    }
+                    logger.debug(
+                        f"Dados completos antes de {nome_plugin}: {dados_completos}"
+                    )  # Adicionado aqui
+                    sucesso = plugin.executar(**kwargs)
+                    if not sucesso:
+                        logger.warning(
+                            f"Falha ao executar {nome_plugin} para {par} - {tf}"
+                        )
+                        continue
+                    resultados[par][tf] = dados_completos["processados"]
+
+            return resultados
         except Exception as e:
-            logger.error(f"Erro no ciclo: {e}")
-            return False
+            logger.error(f"Erro no ciclo de execução: {e}")
+            return {}
 
     def esta_rodando(self) -> bool:
         """

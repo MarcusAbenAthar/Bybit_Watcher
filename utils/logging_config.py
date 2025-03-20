@@ -1,5 +1,5 @@
 """
-Configuração centralizada de logs.
+Configuração centralizada de logs. Arquivo logging_config.py
 
 Regras de Ouro:
 1. Autonomo - Rotação automática de logs
@@ -15,7 +15,7 @@ Regras de Ouro:
 """
 
 import logging
-import logging.config  # Added this import
+import logging.config
 import logging.handlers
 from datetime import datetime
 import os
@@ -49,62 +49,38 @@ BASE_CONFIG = {
         # Handler para console
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "detalhado",  # Changed to detailed format
+            "formatter": "detalhado",
             "level": "DEBUG",
         },
         # Handler para log geral
         "arquivo": {
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": f"logs/bot_{datetime.now():%d-%m-%Y}.log",
+            "filename": f"logs/bot/bot_{datetime.now():%d-%m-%Y}.log",
             "formatter": "detalhado",
             "maxBytes": 10485760,  # 10MB
             "backupCount": 10,
             "level": "DEBUG",
+            "encoding": "utf-8",  # Adicionado
         },
         # Handler para sinais de trading
         "sinais": {
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": f"logs/sinais_{datetime.now():%d-%m-%Y}.log",
+            "filename": f"logs/sinais/sinais_{datetime.now():%d-%m-%Y}.log",
             "formatter": "sinais",
             "maxBytes": 10485760,  # 10MB
             "backupCount": 10,
             "level": "INFO",
+            "encoding": "utf-8",  # Adicionado
         },
         # Handler para erros
         "erros": {
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": f"logs/erros_{datetime.now():%d-%m-%Y}.log",
+            "filename": f"logs/erros/erros_{datetime.now():%d-%m-%Y}.log",
             "formatter": "detalhado",
             "maxBytes": 10485760,  # 10MB
             "backupCount": 10,
             "level": "ERROR",
-        },
-        # Handler para log geral
-        "arquivo": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": f"logs/bot/bot_{datetime.now():%d-%m-%Y}.log",  # Novo caminho
-            "formatter": "detalhado",
-            "maxBytes": 10485760,  # 10MB
-            "backupCount": 10,
-            "level": "DEBUG",
-        },
-        # Handler para sinais de trading
-        "sinais": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": f"logs/sinais/sinais_{datetime.now():%d-%m-%Y}.log",  # Novo caminho
-            "formatter": "sinais",
-            "maxBytes": 10485760,  # 10MB
-            "backupCount": 10,
-            "level": "INFO",
-        },
-        # Handler para erros
-        "erros": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": f"logs/erros/erros_{datetime.now():%d-%m-%Y}.log",  # Novo caminho
-            "formatter": "detalhado",
-            "maxBytes": 10485760,  # 10MB
-            "backupCount": 10,
-            "level": "ERROR",
+            "encoding": "utf-8",  # Adicionado
         },
     },
     "loggers": {

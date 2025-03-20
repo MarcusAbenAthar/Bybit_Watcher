@@ -133,13 +133,16 @@ class Conexao(Plugin):
         """
         return self.obter_pares_usdt()
 
-    def obter_klines(self, symbol: str, timeframe: str) -> Optional[List]:
+    def obter_klines(
+        self, symbol: str, timeframe: str, limit: int = 100
+    ) -> Optional[List]:
         """
         Obtém dados OHLCV para um par e timeframe.
 
         Args:
             symbol: Par de trading
             timeframe: Intervalo de tempo
+            limit: Número de candles a serem obtidos (padrão: 100)
 
         Returns:
             Optional[List]: Lista de candles OHLCV ou None se falhar
@@ -149,8 +152,8 @@ class Conexao(Plugin):
                 logger.error("Exchange não inicializada")
                 return None
 
-            # Obtém os últimos 100 candles
-            klines = self.exchange.fetch_ohlcv(symbol, timeframe, limit=100)
+            # Obtém os últimos 'limit' candles
+            klines = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
             if not klines:
                 logger.warning(f"Nenhum dado OHLCV para {symbol} {timeframe}")
                 return None
@@ -205,27 +208,25 @@ class Conexao(Plugin):
             return False
 
     def executar(self, *args, **kwargs) -> bool:
-        """
-        Executa ciclo do plugin.
-
-        Args:
-            *args: Argumentos posicionais ignorados
-            **kwargs: Argumentos nomeados ignorados
-
-        Returns:
-            bool: True se executado com sucesso
-        """
         try:
-            if not self.exchange:
-                logger.warning("Exchange não inicializada")
+            dados_completos = kwargs.get("dados_completos")
+            symbol = kwargs.get("symbol", "BTCUSDT")
+            timeframe = kwargs.get("timeframe", "1h")
+            limit = kwargs.get("limit", 100)
+
+            if not dados_completos:
+                logger.error("Estrutura de dados completa não fornecida")
                 return False
 
-            # Verifica se a conexão está ativa
-            self.exchange.fetch_time()
-            return True
+            klines = self.obter_klines(symbol, timeframe, limit)
+            if not klines:
+                logger.warning(f"Falha ao obter klines para {symbol} ({timeframe})")
+                return False
 
+            dados_completos["crus"] = klines
+            return True
         except Exception as e:
-            logger.error(f"Erro no ciclo de execução: {e}")
+            logger.error(f"Erro ao executar Conexao: {e}")
             return False
 
     def finalizar(self):
