@@ -36,83 +36,44 @@ class SinaisPlugin(Plugin):
 
     def executar(self, *args, **kwargs) -> bool:
         """
-        Executa o plugin para consolidar sinais de trading.
+        Gera sinais de negociação com base nos indicadores processados.
 
         Args:
-            *args: Argumentos posicionais
-            **kwargs: Argumentos nomeados (espera 'dados_completos', 'symbol', 'timeframe')
+            *args: Argumentos posicionais (não utilizados diretamente).
+            **kwargs: Argumentos nomeados, incluindo:
+                - dados_completos (dict): Dicionário com dados brutos e processados.
+                - symbol (str): O par de negociação (ex.: "BTCUSDT").
+                - timeframe (str): O intervalo de tempo (ex.: "1m", "1d").
 
         Returns:
-            bool: True se executado com sucesso, False caso contrário
+            bool: True se os sinais foram gerados e salvos com sucesso, False caso contrário.
         """
-        try:
-            dados_completos = kwargs.get("dados_completos")
-            symbol = kwargs.get("symbol")
-            timeframe = kwargs.get("timeframe")
+        dados_completos = kwargs.get("dados_completos")
+        symbol = kwargs.get("symbol")
+        timeframe = kwargs.get("timeframe")
 
-            if not all([dados_completos, symbol, timeframe]):
-                logger.error("Parâmetros necessários não fornecidos")
-                return False
+        if not dados_completos or not symbol or not timeframe:
+            logger.error("Parâmetros inválidos para sinais_plugin")
+            return False
 
-            if "processados" not in dados_completos:
-                logger.error("Dados processados não encontrados em dados_completos")
-                dados_completos["processados"] = {}
-                dados_completos["processados"]["sinais_plugin"] = {
-                    "direcao": "NEUTRO",
-                    "forca": "FRACA",
-                    "confianca": 0.0,
-                }
-                return True
+        tendencia = dados_completos["processados"].get(
+            "tendencia", {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0}
+        )
+        medias_moveis = dados_completos["processados"].get("medias_moveis", {})
 
-            dados_processados = dados_completos["processados"]
-            tendencia = dados_processados.get("indicadores_tendencia", {})
-            medias_moveis = dados_processados.get("medias_moveis", {})
-
-            # Verifica se há dados válidos para processar
-            if not tendencia and not medias_moveis:
-                logger.warning(
-                    f"Nenhum dado de tendência ou médias móveis disponível para {symbol} ({timeframe})"
-                )
-                dados_completos["processados"]["sinais_plugin"] = {
-                    "direcao": "NEUTRO",
-                    "forca": "FRACA",
-                    "confianca": 0.0,
-                }
-                return True
-
-            sinais_consolidados = self.consolidar_sinais(
-                {"tendencia": tendencia, "medias_moveis": medias_moveis}
+        sinal = {
+            "direcao": tendencia["direcao"],  # Usa a tendência calculada
+            "forca": "MÉDIA",
+            "confianca": max(
+                tendencia["confianca"], medias_moveis.get("confianca", 0.0)
             )
+            / 2,
+            "indicadores": {"tendencia": tendencia, "medias_moveis": medias_moveis},
+        }
 
-            # Se consolidar_sinais retornar None, usa valores padrão
-            if sinais_consolidados is None:
-                logger.warning(
-                    f"Falha ao consolidar sinais para {symbol} ({timeframe})"
-                )
-                sinais_consolidados = {
-                    "direcao": "NEUTRO",
-                    "forca": "FRACA",
-                    "confianca": 0.0,
-                }
-
-            dados_completos["processados"]["sinais_plugin"] = {
-                "direcao": sinais_consolidados["direcao"],
-                "forca": sinais_consolidados["forca"],
-                "confianca": sinais_consolidados["confianca"],
-            }
-            logger.info(
-                f"Sinais gerados para {symbol} ({timeframe}): {sinais_consolidados}"
-            )
-            return True
-
-        except Exception as e:
-            logger.error(f"Erro ao executar sinais_plugin: {e}")
-            dados_completos["processados"]["sinais_plugin"] = {
-                "direcao": "NEUTRO",
-                "forca": "FRACA",
-                "confianca": 0.0,
-            }
-            return True
+        logger.info(f"Sinais gerados para {symbol} ({timeframe}): {sinal}")
+        dados_completos["processados"]["sinais"] = sinal
+        return True
 
     def validar_dados(self, dados):
         """

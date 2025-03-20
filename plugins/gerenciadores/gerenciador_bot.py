@@ -17,7 +17,6 @@ Regras de Ouro:
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
-import time
 from typing import Dict, List, Optional
 from plugins.plugin import Plugin
 
@@ -139,29 +138,54 @@ class GerenciadorBot(Plugin):
         """
         return self._plugins_ativos.get(nome_plugin)
 
-    def executar_ciclo(self, par="BTCUSDT", timeframe="1h") -> Dict:
+    def executar_ciclo(self, par: str = "BTCUSDT", timeframe: str = "1h") -> Dict:
+        """
+        Executa um ciclo completo de análise técnica para um par de negociação em todos os timeframes configurados.
+
+        Coordena a execução ordenada de plugins para coletar, validar e processar dados de mercado, retornando
+        sinais de análise técnica. É autônomo (não executa trades), criterioso (valida dados), seguro (trata exceções),
+        eficiente (processa múltiplos timeframes), claro (logs detalhados), modular (baseado em plugins) e testável
+        (retorna resultados estruturados).
+
+        Args:
+            par (str, optional): Par de negociação a ser analisado (ex.: "BTCUSDT"). Padrão é "BTCUSDT".
+            timeframe (str, optional): Intervalo de tempo de fallback (ex.: "1h"). Ignorado se "timeframes"
+                estiver configurado no config.
+
+        Returns:
+            Dict: Resultados no formato {par: {timeframe: dados_processados}}, com OHLCV, indicadores e sinais.
+                Retorna vazio em caso de erro.
+
+        Raises:
+            Exception: Erros gerais são capturados e registrados no log.
+        """
         try:
+            # Verifica inicialização
             if not self.inicializado:
-                logger.error("Gerenciador não inicializado")
+                logger.error("Gerenciador não inicializado. Ciclo abortado.")
                 return {}
 
             resultados = {}
 
+            # Verifica gerente de plugins
             if not hasattr(self, "gerente") or not self.gerente:
-                logger.error("Gerente de plugins não fornecido ao GerenciadorBot")
+                logger.error("Gerente de plugins não fornecido ao GerenciadorBot.")
                 return {}
 
+            # Carrega configuração
             config_dict = self._config if self._config else {}
-            # Adicionar períodos padrão se não estiverem no config
             config_dict.setdefault(
                 "medias_moveis", {"mma_curta": 9, "mma_media": 21, "mma_longa": 50}
             )
             pares_config = config_dict.get("pares", par)
 
+            # Determina pares
             if isinstance(pares_config, str) and pares_config.lower() == "all":
                 conexao = self.gerente.plugins.get("plugins.conexao")
                 if not conexao:
-                    logger.error("Plugin 'plugins.conexao' não encontrado")
+                    logger.error(
+                        "Plugin 'plugins.conexao' não encontrado. Usando par padrão."
+                    )
                     pares = [par]
                 else:
                     pares = conexao.obter_pares_usdt()
@@ -170,8 +194,12 @@ class GerenciadorBot(Plugin):
                     pares_config.split(",") if isinstance(pares_config, str) else [par]
                 )
 
-            timeframes = config_dict.get("timeframes", self.timeframes)
+            # Define timeframes
+            timeframes = config_dict.get(
+                "timeframes", ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+            )
 
+            # Ordem dos plugins
             plugins_ordem = [
                 "plugins.conexao",
                 "plugins.validador_dados",
@@ -181,35 +209,40 @@ class GerenciadorBot(Plugin):
                 "plugins.sinais_plugin",
             ]
 
-            for par in pares:
-                resultados[par] = {}
+            for par_iter in pares:
+                resultados[par_iter] = {}
                 for tf in timeframes:
-                    logger.info(f"Iniciando análise para {par} - {tf}")
+                    # Log inicial para cada timeframe com contexto único
+                    logger.info(
+                        f"Iniciando análise para {par_iter} - {tf}",
+                        extra={"par": par_iter, "tf": tf},
+                    )
                     dados_completos = {"crus": [], "processados": {}}
 
-                for nome_plugin in plugins_ordem:
-                    plugin = self.gerente.plugins.get(nome_plugin)
-                    if not plugin:
-                        logger.warning(f"Plugin {nome_plugin} não encontrado")
-                        continue
+                    for nome_plugin in plugins_ordem:
+                        plugin = self.gerente.plugins.get(nome_plugin)
+                        if not plugin:
+                            logger.warning(
+                                f"Plugin {nome_plugin} não encontrado para {par_iter} - {tf}."
+                            )
+                            continue
 
-                    logger.debug(f"Executando {nome_plugin} para {par} - {tf}")
-                    kwargs = {
-                        "dados_completos": dados_completos,
-                        "symbol": par.strip(),
-                        "timeframe": tf.strip(),
-                        "config": config_dict,
-                    }
-                    logger.debug(
-                        f"Dados completos antes de {nome_plugin}: {dados_completos}"
-                    )  # Adicionado aqui
-                    sucesso = plugin.executar(**kwargs)
-                    if not sucesso:
-                        logger.warning(
-                            f"Falha ao executar {nome_plugin} para {par} - {tf}"
-                        )
-                        continue
-                    resultados[par][tf] = dados_completos["processados"]
+                        logger.debug(f"Executando {nome_plugin} para {par_iter} - {tf}")
+                        kwargs = {
+                            "dados_completos": dados_completos,
+                            "symbol": par_iter.strip(),
+                            "timeframe": tf.strip(),
+                            "config": config_dict,
+                        }
+                        # Log opcional para depuração detalhada (removido do log atual)
+                        # logger.debug(f"Dados completos antes de {nome_plugin}: {dados_completos}")
+                        sucesso = plugin.executar(**kwargs)
+                        if not sucesso:
+                            logger.warning(
+                                f"Falha ao executar {nome_plugin} para {par_iter} - {tf}."
+                            )
+                            continue
+                        resultados[par_iter][tf] = dados_completos["processados"]
 
             return resultados
         except Exception as e:

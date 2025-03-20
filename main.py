@@ -146,27 +146,22 @@ def main() -> None:
         timeframes = config.get(
             "timeframes", ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
         )  # Default caso não esteja no config
-        par = "BTCUSDT"  # Par fixo conforme ajustamos anteriormente
+        par = "BTCUSDT"
 
         # Loop principal
         while True:
             try:
                 logger.debug("Iniciando ciclo de execução...")
-                for timeframe in timeframes:
-                    logger.info(f"Processando {par} no timeframe {timeframe}")
-                    resultados = gerenciador_bot.executar_ciclo(
-                        par=par, timeframe=timeframe
-                    )
-                    if not resultados:
-                        logger.warning(f"Falha no ciclo para {par} - {timeframe}")
-                        continue  # Continua para o próximo timeframe em vez de quebrar o loop
+                resultados = gerenciador_bot.executar_ciclo(par="BTCUSDT")
+                if not resultados:
+                    logger.warning("Falha no ciclo do gerenciador do bot")
+                    break
                 logger.debug("Ciclo de execução concluído com sucesso")
-                time.sleep(60)  # Pausa de 60 segundos entre ciclos completos
-
+                logger.debug(f"Resultados: {resultados}")
+                time.sleep(15)  # Pausa entre ciclos
             except Exception as e:
                 logger.error(f"Erro no ciclo: {e}")
                 break
-
     except Exception as e:
         logger.error(f"Erro fatal: {e}")
         sys.exit(1)
