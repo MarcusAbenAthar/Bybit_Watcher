@@ -137,3 +137,6 @@ def get_logger(nome: str) -> logging.Logger:
         logging.Logger: Logger configurado
     """
     return logging.getLogger(nome)
+
+
+# fim do arquivo logging_config.py

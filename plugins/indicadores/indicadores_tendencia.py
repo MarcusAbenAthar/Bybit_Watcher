@@ -14,7 +14,7 @@ Características:
 - Filtros de qualidade
 """
 
-from typing import List, Tuple, Dict
+from typing import Dict
 import numpy as np
 import pandas as pd
 from utils.logging_config import get_logger
@@ -25,6 +25,13 @@ logger = get_logger(__name__)
 
 
 class IndicadoresTendencia(Plugin):
+    """
+    Plugin para calcular a tendência do token.
+    """
+
+    PLUGIN_NAME = "indicadores_tendencia"
+    PLUGIN_TYPE = "indicador"
+
     def __init__(self, gerente: GerentePlugin, config=None):
         """
         Inicializa o plugin de indicadores de tendência.
@@ -34,7 +41,8 @@ class IndicadoresTendencia(Plugin):
             config: Configurações do sistema
         """
         super().__init__()
-        self.nome = "Indicadores de Tendência"
+        self.nome = self.PLUGIN_NAME
+        self.gerente = gerente
         # Configurações padrão
         self.config = {
             "sma_rapida": 9,
@@ -46,27 +54,13 @@ class IndicadoresTendencia(Plugin):
             "min_adx": 25,
             "min_confianca": 0.8,  # Mínimo de 80% de confiança
         }
-        # Atualiza com configurações fornecidas
         if config:
             self.config.update(config)
 
-        self.gerente = gerente
-        # Acessa o plugin de cálculo de alavancagem através do gerente
-        self.calculo_alavancagem = self.gerente.obter_calculo_alavancagem()
-
     def calcular_medias_moveis(self, dados: pd.DataFrame) -> Dict[str, pd.Series]:
-        """
-        Calcula diferentes tipos de médias móveis.
-
-        Args:
-            dados: DataFrame com OHLCV
-
-        Returns:
-            Dict com as diferentes médias móveis calculadas
-        """
+        """Calcula diferentes tipos de médias móveis."""
         try:
             close = dados["close"]
-
             return {
                 "sma_rapida": close.rolling(self.config["sma_rapida"]).mean(),
                 "sma_lenta": close.rolling(self.config["sma_lenta"]).mean(),
@@ -87,26 +81,16 @@ class IndicadoresTendencia(Plugin):
             }
 
     def calcular_macd(self, dados: pd.DataFrame) -> Dict[str, pd.Series]:
-        """
-        Calcula o MACD e suas componentes.
-
-        Args:
-            dados: DataFrame com OHLCV
-
-        Returns:
-            Dict com linha MACD, signal e histograma
-        """
+        """Calcula o MACD e suas componentes."""
         try:
             close = dados["close"]
             ema_rapida = close.ewm(span=self.config["ema_rapida"], adjust=False).mean()
             ema_lenta = close.ewm(span=self.config["ema_lenta"], adjust=False).mean()
-
             macd_line = ema_rapida - ema_lenta
             signal_line = macd_line.ewm(
                 span=self.config["macd_signal"], adjust=False
             ).mean()
             histogram = macd_line - signal_line
-
             return {"macd": macd_line, "signal": signal_line, "histogram": histogram}
         except Exception as e:
             logger.error(f"Erro ao calcular MACD: {e}")
@@ -117,49 +101,48 @@ class IndicadoresTendencia(Plugin):
             }
 
     def calcular_adx(self, dados: pd.DataFrame) -> Dict[str, pd.Series]:
-        """
-        Calcula o ADX (Average Directional Index).
-
-        Args:
-            dados: DataFrame com OHLCV
-
-        Returns:
-            Dict com ADX e indicadores direcionais
-        """
+        """Calcula o ADX (Average Directional Index)."""
         try:
             high = dados["high"]
             low = dados["low"]
             close = dados["close"]
             periodo = self.config["adx_periodo"]
 
-            # Cálculo do True Range
             tr1 = high - low
             tr2 = abs(high - close.shift(1))
             tr3 = abs(low - close.shift(1))
             tr = pd.DataFrame({"tr1": tr1, "tr2": tr2, "tr3": tr3}).max(axis=1)
             atr = tr.rolling(periodo).mean()
 
-            # Movimento Direcional
             up_move = high - high.shift(1)
             down_move = low.shift(1) - low
-
             pos_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0)
             neg_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0)
 
             pdi = 100 * pd.Series(pos_dm).rolling(periodo).mean() / atr
             ndi = 100 * pd.Series(neg_dm).rolling(periodo).mean() / atr
-
             dx = 100 * abs(pdi - ndi) / (pdi + ndi)
             adx = dx.rolling(periodo).mean()
 
             return {"adx": adx, "pdi": pdi, "ndi": ndi}
         except Exception as e:
             logger.error(f"Erro ao calcular ADX: {e}")
-            return {
-                "adx": pd.Series(),
-                "pdi": pd.Series(),
-                "ndi": pd.Series(),
-            }
+            return {"adx": pd.Series(), "pdi": pd.Series(), "ndi": pd.Series()}
+
+    def calcular_atr(self, dados: pd.DataFrame, periodo: int = 14) -> float:
+        """Calcula o ATR para definição de TP/SL."""
+        try:
+            high = dados["high"]
+            low = dados["low"]
+            close = dados["close"]
+            tr1 = high - low
+            tr2 = abs(high - close.shift(1))
+            tr3 = abs(low - close.shift(1))
+            tr = pd.DataFrame({"tr1": tr1, "tr2": tr2, "tr3": tr3}).max(axis=1)
+            return tr.rolling(periodo).mean().iloc[-1]
+        except Exception as e:
+            logger.error(f"Erro ao calcular ATR: {e}")
+            return 0
 
     def gerar_sinal(self, dados: pd.DataFrame) -> Dict[str, any]:
         """
@@ -171,13 +154,17 @@ class IndicadoresTendencia(Plugin):
         Returns:
             Dict com sinais e níveis de TP/SL
         """
+        resultado_padrao = {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0}
         try:
+            if len(dados) < 20:
+                logger.warning("Dados insuficientes para gerar sinal")
+                return resultado_padrao
+
             # Calcula todos os indicadores
             medias = self.calcular_medias_moveis(dados)
             macd = self.calcular_macd(dados)
             adx = self.calcular_adx(dados)
 
-            # Inicializa contadores de confirmação
             confirmacoes_compra = 0
             confirmacoes_venda = 0
             total_indicadores = 0
@@ -212,77 +199,48 @@ class IndicadoresTendencia(Plugin):
                 else:
                     confirmacoes_venda += 1
 
-            # Calcula níveis de confiança
-            if total_indicadores > 0:
-                confianca_compra = confirmacoes_compra / total_indicadores
-                confianca_venda = confirmacoes_venda / total_indicadores
-            else:
-                return {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0}
+            if total_indicadores == 0:
+                return resultado_padrao
 
-            # Determina força do sinal
+            confianca_compra = confirmacoes_compra / total_indicadores
+            confianca_venda = confirmacoes_venda / total_indicadores
+
             forca = "FRACA"
             if total_indicadores >= 2:
-                if confianca_compra >= 0.9 or confianca_venda >= 0.9:  # 90% para FORTE
+                if confianca_compra >= 0.9 or confianca_venda >= 0.9:
                     forca = "FORTE"
-                elif (
-                    confianca_compra >= 0.8 or confianca_venda >= 0.8
-                ):  # 80% para MÉDIA
+                elif confianca_compra >= 0.8 or confianca_venda >= 0.8:
                     forca = "MÉDIA"
 
-            # Gera sinal final com base na confiança mínima
+            # Gera sinal com TP/SL
+            atr = self.calcular_atr(dados)
+            preco_atual = dados["close"].iloc[-1]
+
             if confianca_compra >= self.config["min_confianca"]:
-                # Calcula níveis de TP/SL para compra
-                atr = self.calcular_atr(dados)
-                preco_atual = dados["close"].iloc[-1]
                 stop_loss = preco_atual - (atr * 1.5)
                 take_profit = preco_atual + (atr * 2)
-
                 return {
                     "direcao": "ALTA",
                     "forca": forca,
-                    "confianca": confianca_compra * 100,  # Converte para percentual
+                    "confianca": confianca_compra * 100,
                     "stop_loss": stop_loss,
                     "take_profit": take_profit,
                 }
-
             elif confianca_venda >= self.config["min_confianca"]:
-                # Calcula níveis de TP/SL para venda
-                atr = self.calcular_atr(dados)
-                preco_atual = dados["close"].iloc[-1]
                 stop_loss = preco_atual + (atr * 1.5)
                 take_profit = preco_atual - (atr * 2)
-
                 return {
                     "direcao": "BAIXA",
                     "forca": forca,
-                    "confianca": confianca_venda * 100,  # Converte para percentual
+                    "confianca": confianca_venda * 100,
                     "stop_loss": stop_loss,
                     "take_profit": take_profit,
                 }
-
-            return {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0}
+            return resultado_padrao
 
         except Exception as e:
             logger.error(f"Erro ao gerar sinal: {e}")
-            return {"direcao": "ERRO", "forca": "FRACA", "confianca": 0}
-
-    def calcular_atr(self, dados: pd.DataFrame, periodo: int = 14) -> float:
-        """Calcula o ATR para definição de TP/SL."""
-        try:
-            high = dados["high"]
-            low = dados["low"]
-            close = dados["close"]
-
-            tr1 = high - low
-            tr2 = abs(high - close.shift(1))
-            tr3 = abs(low - close.shift(1))
-            tr = pd.DataFrame({"tr1": tr1, "tr2": tr2, "tr3": tr3}).max(axis=1)
-            atr = tr.rolling(periodo).mean().iloc[-1]
-
-            return atr
-        except Exception as e:
-            logger.error(f"Erro ao calcular ATR: {e}")
-            return 0
+            return resultado_padrao
 
     def executar(self, *args, **kwargs) -> bool:
         resultado_padrao = {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0}
@@ -290,13 +248,11 @@ class IndicadoresTendencia(Plugin):
             dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
-            config = kwargs.get("config")
 
             if not all([dados_completos, symbol, timeframe]):
                 logger.error(
                     f"Parâmetros necessários não fornecidos - dados_completos: {dados_completos}, symbol: {symbol}, timeframe: {timeframe}"
                 )
-                dados_completos["processados"]["tendencia"] = resultado_padrao
                 return True
 
             dados_crus = dados_completos.get("crus", [])
@@ -313,25 +269,10 @@ class IndicadoresTendencia(Plugin):
             )
             sinal = self.gerar_sinal(df)
             logger.info(f"Sinal gerado para {symbol} - {timeframe}: {sinal}")
-            dados_completos["processados"][
-                "tendencia"
-            ] = sinal  # Garantir que o resultado seja salvo
+            dados_completos["processados"]["tendencia"] = sinal
             return True
-
         except Exception as e:
             logger.error(f"Erro ao executar análise de tendência: {str(e)}")
-            dados_completos["processados"]["tendencia"] = resultado_padrao
+            if isinstance(dados_completos, dict) and "processados" in dados_completos:
+                dados_completos["processados"]["tendencia"] = resultado_padrao
             return True
-
-    def gerar_sinal(self, df):
-        resultado_padrao = {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0}
-        if len(df) < 20:
-            return resultado_padrao
-
-        close = df["close"].iloc[-1]
-        close_prev = df["close"].iloc[-10]
-        if close > close_prev * 1.01:  # Aumento de 1%
-            return {"direcao": "ALTA", "forca": "MÉDIA", "confianca": 60.0}
-        elif close < close_prev * 0.99:  # Queda de 1%
-            return {"direcao": "BAIXA", "forca": "MÉDIA", "confianca": 60.0}
-        return resultado_padrao

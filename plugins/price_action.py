@@ -1,6 +1,4 @@
 # price_action.py
-# Plugin para análise de price action
-
 from utils.logging_config import get_logger
 import numpy as np
 from plugins.plugin import Plugin
@@ -9,194 +7,122 @@ logger = get_logger(__name__)
 
 
 class PriceAction(Plugin):
-    """
-    Plugin para analisar o price action.
-
-    Este plugin é responsável por identificar padrões de price action nos dados
-    e gerar sinais de compra ou venda com base nesses padrões.
-    """
-
-    # Identificador explícito do plugin
     PLUGIN_NAME = "price_action"
     PLUGIN_TYPE = "essencial"
 
-    def __init__(self):
-        """
-        Inicializa o plugin PriceAction.
-        """
-        super().__init__()
-        self.nome = "price_action"
-        self.descricao = "Plugin para análise de Price Action"
-        self._config = None
-        self.cache_padroes = {}
-
-    def inicializar(self, config):
-        """Inicializa o plugin com as configurações fornecidas."""
-        if not self._config:
-            super().inicializar(config)
-            self._config = config
-            self.cache_padroes = {}
-
-            return True
-        return True
-
-    def analisar_padrao(self, candle):
-        """Analisa o padrão do candle."""
-        try:
-            return {
-                "padrao": self._identificar_tipo_padrao(candle),
-                "forca": self.calcular_forca(candle),
-                "tendencia": self.analisar_tendencia(candle),
-            }
-        except Exception as e:
-            logger.error(f"Erro ao analisar padrão: {e}")
-            return None
-
-    def calcular_forca(self, candle):
-        """Calcula a força do movimento do candle."""
-        try:
-            amplitude = candle["high"] - candle["low"]
-            corpo = abs(candle["close"] - candle["open"])
-            return float(corpo / amplitude if amplitude > 0 else 0.0)
-        except Exception as e:
-            logger.error(f"Erro ao calcular força: {e}")
-            return 0.0
-
-    def analisar_tendencia(self, candle):
-        """Analisa a tendência do movimento."""
-        try:
-            if candle["close"] > candle["open"]:
-                return "ALTA"
-            elif candle["close"] < candle["open"]:
-                return "BAIXA"
-            return "LATERAL"
-        except Exception as e:
-            logger.error(f"Erro ao analisar tendência: {e}")
-            return "LATERAL"
-
-    def calcular_forca_padrao(self, candle):
-        """
-        Calcula a força do padrão identificado.
-
-        Args:
-            candle (dict): Dicionário com dados do candle
-
-        Returns:
-            float: Valor entre 0 e 1 representando a força do padrão
-        """
-        try:
-            # Converte valores para float antes do cálculo
-            high = float(candle["high"])
-            low = float(candle["low"])
-            open_price = float(candle["open"])
-            close = float(candle["close"])
-
-            amplitude = high - low
-            corpo = abs(close - open_price)
-
-            return float(corpo / amplitude if amplitude > 0 else 0.0)
-
-        except Exception as e:
-            logger.error(f"Erro ao calcular força do padrão: {e}")
-            return 0.0
-
-    def identificar_padrao(self, dados):
-        """
-        Identifica o padrão de price action nos dados fornecidos.
-
-        Args:
-            dados (dict): Dados do candle
-
-        Raises:
-            NotImplementedError: Método ainda não implementado
-        """
-        if dados is None:
-            raise NotImplementedError
-        raise NotImplementedError
-
-    def gerar_sinal(self, dados, padrao=None):
-        """
-        Gera um sinal de compra ou venda com base no padrão de price action identificado.
-
-        Args:
-            dados (dict): Dados do candle
-            padrao (str, optional): Nome do padrão de price action
-
-        Raises:
-            NotImplementedError: Método ainda não implementado
-        """
-        raise NotImplementedError
-
-    def _identificar_tipo_padrao(self, candle):
-        """Identifica o tipo específico do padrão."""
-        try:
-            amplitude = candle["high"] - candle["low"]
-            corpo = abs(candle["close"] - candle["open"])
-
-            if corpo / amplitude < 0.1:
-                return "doji"
-            elif candle["close"] > candle["open"]:
-                return "alta"
-            else:
-                return "baixa"
-        except Exception as e:
-            logger.error(f"Erro ao identificar tipo do padrão: {e}")
-            return "indefinido"
-
     def executar(self, *args, **kwargs) -> bool:
-        """
-        Executa análise de price action.
-
-        Args:
-            *args: Argumentos posicionais ignorados
-            **kwargs: Argumentos nomeados contendo:
-                dados (list): Dados para análise
-                symbol (str): Símbolo do par
-                timeframe (str): Timeframe dos dados
-
-        Returns:
-            bool: True se executado com sucesso
-        """
+        resultado_padrao = {
+            "price_action": {
+                "direcao": "NEUTRO",
+                "forca": "FRACA",
+                "confianca": 0.0,
+                "padrao": None,
+            }
+        }
         try:
-            # Extrai os parâmetros necessários
             dados = kwargs.get("dados")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
 
-            # Validação dos parâmetros
             if not all([dados, symbol, timeframe]):
-                logger.error("Parâmetros necessários não fornecidos")
-                dados["price_action"] = {
-                    "direcao": "NEUTRO",
-                    "forca": "FRACA",
-                    "confianca": 0,
-                }
+                logger.error(f"Parâmetros necessários não fornecidos")
+                if isinstance(dados, dict):
+                    dados.update(resultado_padrao)
                 return True
 
-            # Verifica se há dados suficientes
-            if not dados or len(dados) < 20:  # Mínimo de candles para análise
+            if not isinstance(dados, list) or len(dados) < 20:
                 logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
-                dados["price_action"] = {
-                    "direcao": "NEUTRO",
-                    "forca": "FRACA",
-                    "confianca": 0,
-                }
+                if isinstance(dados, dict):
+                    dados.update(resultado_padrao)
                 return True
 
-            # Implementação básica
-            logger.info(f"Analisando price action para {symbol} - {timeframe}")
-            dados["price_action"] = {
-                "direcao": "NEUTRO",
-                "forca": "FRACA",
-                "confianca": 0,
-            }
+            sinal = self.gerar_sinal(dados)
+            if isinstance(dados, dict):
+                dados["price_action"] = sinal
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao executar price_action: {e}")
+            if isinstance(dados, dict):
+                dados.update(resultado_padrao)
             return True
 
+    def gerar_sinal(self, dados):
+        try:
+            dados_extraidos = self._extrair_dados(dados, [1, 2, 3, 4])
+            open_prices, high, low, close = (
+                dados_extraidos[1],
+                dados_extraidos[2],
+                dados_extraidos[3],
+                dados_extraidos[4],
+            )
+            if len(close) < 20:
+                return {
+                    "direcao": "NEUTRO",
+                    "forca": "FRACA",
+                    "confianca": 0.0,
+                    "padrao": None,
+                }
+
+            ultimo_candle = {
+                "open": open_prices[-1],
+                "high": high[-1],
+                "low": low[-1],
+                "close": close[-1],
+            }
+            padrao = self._identificar_padrao(ultimo_candle)
+            forca = self._calcular_forca(ultimo_candle)
+            tendencia = self._analisar_tendencia(ultimo_candle)
+
+            confianca = min(forca * 100, 100.0) if padrao != "indefinido" else 0.0
+            direcao = tendencia if tendencia != "LATERAL" else "NEUTRO"
+            forca_str = "FORTE" if forca > 0.7 else "MÉDIA" if forca > 0.3 else "FRACA"
+
+            return {
+                "direcao": direcao,
+                "forca": forca_str,
+                "confianca": confianca,
+                "padrao": padrao,
+            }
         except Exception as e:
-            logger.error(f"Erro ao executar análise de price action: {e}")
-            dados["price_action"] = {
+            logger.error(f"Erro ao gerar sinal: {e}")
+            return {
                 "direcao": "NEUTRO",
                 "forca": "FRACA",
-                "confianca": 0,
+                "confianca": 0.0,
+                "padrao": None,
             }
-            return True
+
+    def _identificar_padrao(self, candle):
+        try:
+            amplitude = candle["high"] - candle["low"]
+            corpo = abs(candle["close"] - candle["open"])
+            if not amplitude:
+                return "indefinido"
+            return (
+                "doji"
+                if corpo / amplitude < 0.1
+                else "alta" if candle["close"] > candle["open"] else "baixa"
+            )
+        except Exception as e:
+            logger.error(f"Erro ao identificar padrão: {e}")
+            return "indefinido"
+
+    def _calcular_forca(self, candle):
+        try:
+            amplitude = candle["high"] - candle["low"]
+            corpo = abs(candle["close"] - candle["open"])
+            return corpo / amplitude if amplitude > 0 else 0.0
+        except Exception as e:
+            logger.error(f"Erro ao calcular força: {e}")
+            return 0.0
+
+    def _analisar_tendencia(self, candle):
+        try:
+            return (
+                "ALTA"
+                if candle["close"] > candle["open"]
+                else "BAIXA" if candle["close"] < candle["open"] else "LATERAL"
+            )
+        except Exception as e:
+            logger.error(f"Erro ao analisar tendência: {e}")
+            return "LATERAL"

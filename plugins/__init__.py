@@ -41,3 +41,5 @@ available_plugins = {
     "banco_dados": BancoDados,  # Depende de gerenciador_banco
     "gerenciador_bot": GerenciadorBot,  # Depende de banco_dados e gerenciador_banco
 }
+
+# Fim de __init__.py

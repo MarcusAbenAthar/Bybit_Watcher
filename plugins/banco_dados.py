@@ -1,19 +1,5 @@
 # banco_dados.py
-
-"""
-Plugin para gerenciamento do banco de dados.
-
-Regras de Ouro:
-2 - Criterioso: Validacao rigorosa das operacoes
-3 - Seguro: Tratamento de erros
-6 - Clareza: Documentacao clara
-7 - Modular: Responsabilidade unica
-9 - Testavel: Metodos bem definidos
-10 - Documentado: Docstrings completos
-"""
-
-import numpy as np
-from typing import Optional
+"""Plugin para operações de gravação no banco de dados."""
 
 from utils.logging_config import get_logger
 from plugins.plugin import Plugin
@@ -22,252 +8,197 @@ logger = get_logger(__name__)
 
 
 class BancoDados(Plugin):
-    """Plugin para gerenciamento do banco de dados."""
+    """Plugin para salvar dados no banco."""
 
     PLUGIN_NAME = "banco_dados"
     PLUGIN_TYPE = "essencial"
 
-    # Definições das tabelas
-    TABELAS = {
-        "klines": """
-            CREATE TABLE {schema}.klines (
-                id SERIAL PRIMARY KEY,
-                symbol TEXT NOT NULL,
-                timeframe TEXT NOT NULL,
-                timestamp BIGINT NOT NULL,
-                open REAL NOT NULL,
-                high REAL NOT NULL,
-                low REAL NOT NULL,
-                close REAL NOT NULL,
-                volume REAL NOT NULL,
-                UNIQUE (symbol, timeframe, timestamp)
-            )
-        """,
-        "sinais": """
-            CREATE TABLE {schema}.sinais (
-                id SERIAL PRIMARY KEY,
-                symbol TEXT NOT NULL,
-                timeframe TEXT NOT NULL,
-                tipo TEXT NOT NULL,
-                sinal TEXT NOT NULL,
-                forca TEXT NOT NULL,
-                confianca REAL NOT NULL,
-                stop_loss REAL,
-                take_profit REAL,
-                volume_24h REAL,
-                tendencia TEXT,
-                rsi REAL,
-                macd TEXT,
-                suporte REAL,
-                resistencia REAL,
-                timestamp BIGINT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE (symbol, timeframe, timestamp)
-            )
-        """,
-        "analises": """
-            CREATE TABLE {schema}.analises (
-                id SERIAL PRIMARY KEY,
-                symbol TEXT NOT NULL,
-                timeframe TEXT NOT NULL,
-                tipo_analise TEXT NOT NULL,
-                resultado TEXT NOT NULL,
-                detalhes TEXT,
-                timestamp BIGINT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE (symbol, timeframe, timestamp)
-            )
-        """,
-    }
+    def __init__(self, gerenciador_banco):
+        """
+        Inicializa o plugin com o gerenciador de banco.
 
-    def __init__(self, gerenciador_banco):  # Injeção de dependência
+        Args:
+            gerenciador_banco: Instância do GerenciadorBanco (necessária pra conexão)
+        """
         super().__init__()
-        self.nome = self.PLUGIN_NAME
-        self.descricao = "Gerenciamento de banco de dados"
-        self._conn = None
-        self._config = None
-        self.inicializado = False
-        self.gerenciador_banco = gerenciador_banco  # Armazena o gerenciador
+        self._gerenciador = gerenciador_banco
 
     def inicializar(self, config: dict) -> bool:
-        """Inicializa a conexão com o banco."""
+        """
+        Inicializa o plugin, usando a conexão do gerenciador.
+
+        Args:
+            config: Configurações do bot
+
+        Returns:
+            bool: True se inicializado
+        """
         try:
             if not super().inicializar(config):
                 return False
-
-            self._config = config
-
-            # Verifica se o gerenciador existe
-            if not self.gerenciador_banco:
-                logger.error("Gerenciador de banco não disponível")
-                return False
-
-            # Inicializa o gerenciador se necessário
-            if not self.gerenciador_banco.inicializado:
-                if not self.gerenciador_banco.inicializar(config):
-                    logger.error("Falha ao inicializar gerenciador de banco")
-                    return False
-
-            # Verifica se o gerenciador tem conexão válida
-            if not self.gerenciador_banco._conn:
-                logger.error("Gerenciador de banco sem conexão válida")
-                return False
-
-            # Usa a conexão do gerenciador
-            self._conn = (
-                self.gerenciador_banco._conn
-            )  # Corrigido: acessando self.gerenciador_banco._conn diretamente
-            self.inicializado = True
-            logger.info("Banco de dados inicializado com sucesso")
+            if not self._gerenciador.inicializado:
+                self._gerenciador.inicializar(config)
+            logger.info("BancoDados inicializado")
             return True
-
         except Exception as e:
-            logger.exception(f"Erro ao inicializar o banco de dados: {e}")
-            return False
-
-    def executar_query(
-        self, query: str, params: tuple = None, commit: bool = False
-    ) -> Optional[list]:
-        """
-        Executa query no banco de forma segura.
-
-        Args:
-            query: Query SQL
-            params: Parâmetros da query
-            commit: Se True, faz commit da transação
-
-        Returns:
-            list: Resultados ou None se erro
-        """
-        try:
-            # Converte valores numéricos para tipos nativos
-            if params:
-                params = tuple(
-                    (
-                        float(p)
-                        if isinstance(p, np.floating)
-                        else int(p) if isinstance(p, np.integer) else p
-                    )
-                    for p in params
-                )
-
-            with self._conn.cursor() as cur:
-                cur.execute(query, params)
-
-                if commit:
-                    self._conn.commit()
-                    return []
-
-                if cur.description:
-                    return cur.fetchall()
-                return []
-
-        except Exception as e:
-            logger.error(f"Erro ao executar query: {e}")
-            return None
-
-    def criar_tabela(self, nome_tabela: str, schema: str = "public") -> bool:
-        """
-        Cria uma tabela no banco de dados se ela não existir.
-
-        Args:
-            nome_tabela: Nome da tabela a ser criada
-            schema: Nome do schema onde a tabela será criada
-
-        Returns:
-            bool: True se criada com sucesso
-        """
-        try:
-            # Verifica se a tabela está definida
-            if nome_tabela not in self.TABELAS:
-                logger.error(f"Tabela {nome_tabela} não definida")
-                return False
-
-            # Verifica se a tabela existe
-            tabela_existe = self.executar_query(
-                """
-                SELECT EXISTS (
-                    SELECT 1 
-                    FROM information_schema.tables 
-                    WHERE table_schema = %s 
-                    AND table_name = %s
-                )
-                """,
-                (schema, nome_tabela),
-            )[0][0]
-
-            # Se a tabela existe, retorna
-            if tabela_existe:
-                logger.info(f"Tabela {schema}.{nome_tabela} ja existe")
-                return True
-
-            # Cria a tabela
-            self.executar_query(
-                self.TABELAS[nome_tabela].format(schema=schema),
-                commit=True,
-            )
-            logger.info(f"Tabela {schema}.{nome_tabela} criada com sucesso")
-            return True
-
-        except Exception as e:
-            logger.error(f"Erro ao criar tabela {nome_tabela}: {e}")
+            logger.error(f"Erro ao inicializar BancoDados: {e}")
             return False
 
     def executar(self, *args, **kwargs) -> bool:
         """
-        Executa ciclo do plugin.
+        Salva dados no banco conforme o tipo.
 
         Args:
-            *args: Argumentos posicionais ignorados
-            **kwargs: Argumentos nomeados ignorados
+            dados: Dicionário com dados processados
+            symbol: Símbolo do par
+            timeframe: Timeframe
+            tipo: Tipo de dado ("klines", "sinais", "indicadores_tendencia", etc.)
 
         Returns:
-            bool: True se executado com sucesso
+            bool: True se salvo com sucesso
         """
         try:
-            # Verifica conexão
-            with self._conn.cursor() as cur:
-                cur.execute("SELECT 1")
+            dados = kwargs.get("dados")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+            tipo = kwargs.get("tipo")
+            if not all([dados, symbol, timeframe, tipo]):
+                logger.error("Parâmetros insuficientes")
+                return True
+
+            if tipo == "klines" and isinstance(dados["crus"], list) and dados["crus"]:
+                ultimo = dados["crus"][-1]
+                query = """
+                    INSERT INTO public.klines (symbol, timeframe, timestamp, open, high, low, close, volume)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (symbol, timeframe, timestamp) DO NOTHING"""
+                params = (
+                    symbol,
+                    timeframe,
+                    int(ultimo[0]),
+                    float(ultimo[1]),
+                    float(ultimo[2]),
+                    float(ultimo[3]),
+                    float(ultimo[4]),
+                    float(ultimo[5]),
+                )
+                return self._gerenciador.executar(
+                    query=query, params=params, commit=True
+                )
+
+            elif tipo == "sinais" and "sinais" in dados["processados"]:
+                sinal = dados["processados"]["sinais"]
+                query = """
+                    INSERT INTO public.sinais (symbol, timeframe, tipo, sinal, forca, confianca, stop_loss, take_profit, timestamp)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (symbol, timeframe, timestamp) DO NOTHING"""
+                params = (
+                    symbol,
+                    timeframe,
+                    "consolidado",
+                    sinal["direcao"],
+                    sinal["forca"],
+                    sinal["confianca"],
+                    sinal.get("stop_loss"),
+                    sinal.get("take_profit"),
+                    int(dados["crus"][-1][0]),
+                )
+                return self._gerenciador.executar(
+                    query=query, params=params, commit=True
+                )
+
+            elif tipo in [
+                "indicadores_tendencia",
+                "indicadores_osciladores",
+                "indicadores_volatilidade",
+                "indicadores_volume",
+                "outros_indicadores",
+            ]:
+                indicadores = dados["processados"].get(tipo, {})
+                if not indicadores:
+                    return True
+                timestamp = int(dados["crus"][-1][0]) if dados["crus"] else 0
+                if tipo == "indicadores_tendencia":
+                    query = """
+                        INSERT INTO public.indicadores_tendencia (symbol, timeframe, timestamp, sma, ema)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (symbol, timeframe, timestamp) DO NOTHING"""
+                    params = (
+                        symbol,
+                        timeframe,
+                        timestamp,
+                        indicadores.get("sma"),
+                        indicadores.get("ema"),
+                    )
+                elif tipo == "indicadores_osciladores":
+                    query = """
+                        INSERT INTO public.indicadores_osciladores (symbol, timeframe, timestamp, rsi, stochastic_k)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (symbol, timeframe, timestamp) DO NOTHING"""
+                    params = (
+                        symbol,
+                        timeframe,
+                        timestamp,
+                        indicadores.get("rsi"),
+                        indicadores.get("stochastic_k"),
+                    )
+                elif tipo == "indicadores_volatilidade":
+                    query = """
+                        INSERT INTO public.indicadores_volatilidade (symbol, timeframe, timestamp, atr, bollinger_upper, bollinger_lower)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (symbol, timeframe, timestamp) DO NOTHING"""
+                    params = (
+                        symbol,
+                        timeframe,
+                        timestamp,
+                        indicadores.get("atr"),
+                        indicadores.get("bollinger_upper"),
+                        indicadores.get("bollinger_lower"),
+                    )
+                elif tipo == "indicadores_volume":
+                    query = """
+                        INSERT INTO public.indicadores_volume (symbol, timeframe, timestamp, obv, vwap)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (symbol, timeframe, timestamp) DO NOTHING"""
+                    params = (
+                        symbol,
+                        timeframe,
+                        timestamp,
+                        indicadores.get("obv"),
+                        indicadores.get("vwap"),
+                    )
+                elif tipo == "outros_indicadores":
+                    query = """
+                        INSERT INTO public.outros_indicadores (symbol, timeframe, timestamp, tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b, fibonacci_50, pivot_point)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (symbol, timeframe, timestamp) DO NOTHING"""
+                    ichimoku = indicadores.get("ichimoku", {})
+                    fibonacci = indicadores.get("fibonacci", {})
+                    pivot = indicadores.get("pivot_points", {})
+                    params = (
+                        symbol,
+                        timeframe,
+                        timestamp,
+                        ichimoku.get("tenkan_sen"),
+                        ichimoku.get("kijun_sen"),
+                        ichimoku.get("senkou_span_a"),
+                        ichimoku.get("senkou_span_b"),
+                        fibonacci.get("50%"),
+                        pivot.get("PP"),
+                    )
+                return self._gerenciador.executar(
+                    query=query, params=params, commit=True
+                )
+
             return True
         except Exception as e:
-            logger.error(f"Erro no ciclo de execução: {e}")
+            logger.error(f"Erro ao salvar {tipo} no banco: {e}")
             return False
-
-    @property
-    def conn(self):
-        """
-        Retorna a conexão com o banco de dados.
-
-        Returns:
-            Connection: Objeto de conexão com o banco de dados
-        """
-        return self._conn
 
     def finalizar(self):
         """Finaliza o plugin."""
         try:
-            if self._conn:
-                self._conn.close()
-                self._conn = None
-            logger.info("Banco de dados finalizado")
+            logger.info("Finalizando BancoDados")
+            # Não fecha a conexão aqui, pois é gerenciada pelo GerenciadorBanco
         except Exception as e:
-            logger.error(f"Erro ao finalizar banco de dados: {e}")
-
-
-def normalizar_symbol(symbol: str) -> str:
-    """
-    Normaliza o formato do símbolo para o padrão do banco de dados.
-
-    Args:
-        symbol (str): Símbolo no formato original (ex: "BTC/USDT:USDT")
-
-    Returns:
-        str: Símbolo normalizado (ex: "BTCUSDT")
-
-    Examples:
-        >>> normalizar_symbol("BTC/USDT:USDT")
-        'BTCUSDT'
-        >>> normalizar_symbol("ETH/USDT")
-        'ETHUSDT'
-    """
-    return symbol.replace("/", "").replace(":USDT", "")
+            logger.error(f"Erro ao finalizar BancoDados: {e}")

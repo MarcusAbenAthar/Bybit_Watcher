@@ -1,14 +1,11 @@
 # handlers.py
-# Description: Módulo com handlers para sinais de interrupção.
-
-import logging
+from utils.logging_config import get_logger
 import sys
-from typing import Optional
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
-def signal_handler(signum: int, frame: Optional[object]) -> None:
+def signal_handler(signum: int, frame=None) -> None:
     """Handler para sinais de interrupção."""
-    logger.info("Recebido sinal de interrupção...")
+    logger.info(f"Recebido sinal de interrupção ({signum}). Encerrando...")
     sys.exit(0)

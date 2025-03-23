@@ -29,3 +29,5 @@ SINAIS_LOGGING_CONFIG = {
         }
     },
 }
+
+# fim do arquivo sinais_logging.py

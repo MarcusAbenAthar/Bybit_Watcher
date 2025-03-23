@@ -16,3 +16,6 @@ __all__ = ["GerenciadorBanco", "GerenciadorBot", "GerentePlugin"]
 
 def __init__(self):
     self.plugins = {}
+
+
+# fim do __init__.py

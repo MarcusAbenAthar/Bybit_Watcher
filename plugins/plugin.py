@@ -18,6 +18,7 @@ Regras de Ouro:
 """
 
 from typing import Dict, Optional, Any, List
+import numpy as np
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -40,17 +41,10 @@ class Plugin:
         _dependencias (List[Plugin]): Lista de dependências
     """
 
-    PLUGIN_NAME: Optional[str] = None  # Deve ser definido nas subclasses
-    PLUGIN_TYPE: Optional[str] = None  # Deve ser definido nas subclasses
+    PLUGIN_NAME: Optional[str] = None
+    PLUGIN_TYPE: Optional[str] = None
 
     def __init__(self, **kwargs):
-        """
-        Inicializa o plugin com valores padrão e dependências.
-
-        Args:
-            **kwargs: Dependências injetadas pelo gerenciador
-        """
-        # Atributos básicos
         self._nome = self.PLUGIN_NAME if self.PLUGIN_NAME else ""
         self.descricao = ""
         self.tipo = self.PLUGIN_TYPE if self.PLUGIN_TYPE else ""
@@ -58,7 +52,6 @@ class Plugin:
         self._config = None
         self._dependencias: List[Plugin] = []
 
-        # Processa dependências injetadas
         for nome, dependencia in kwargs.items():
             setattr(self, f"_{nome}", dependencia)
             if isinstance(dependencia, Plugin):
@@ -66,35 +59,58 @@ class Plugin:
 
     @property
     def nome(self):
-        """Nome do plugin."""
         if hasattr(self, "_nome"):
             return self._nome
         return self.PLUGIN_NAME if self.PLUGIN_NAME else ""
 
     @nome.setter
     def nome(self, valor):
-        """Define o nome do plugin."""
         self._nome = valor
         if not self.PLUGIN_NAME:
             self.PLUGIN_NAME = valor
 
-    def inicializar(self, config: Dict[str, Any]) -> bool:
+    def _extrair_dados(
+        self, dados: List[Any], indices: List[int]
+    ) -> Dict[int, np.ndarray]:
         """
-        Inicializa o plugin com as configurações fornecidas.
+        Extrai e valida dados de candles para índices especificados.
 
         Args:
-            config: Configurações do plugin
+            dados: Lista de candles
+            indices: Índices dos valores a extrair (ex.: 2=high, 4=close)
 
         Returns:
-            bool: True se inicializado com sucesso
+            Dict com arrays numpy para cada índice ou arrays vazios se inválido
         """
+        try:
+            valores = {idx: [] for idx in indices}
+            for candle in dados:
+                if any(
+                    candle[i] is None or str(candle[i]).strip() == "" for i in indices
+                ):
+                    continue
+                try:
+                    for idx in indices:
+                        valor = float(
+                            str(candle[idx]).replace("e", "").replace("E", "")
+                        )
+                        valores[idx].append(valor)
+                except (ValueError, TypeError):
+                    continue
+            if not all(valores.values()):
+                logger.warning(f"Dados insuficientes ou inválidos em {self.nome}")
+                return {idx: np.array([]) for idx in indices}
+            return {idx: np.array(valores[idx], dtype=np.float64) for idx in indices}
+        except Exception as e:
+            logger.error(f"Erro ao extrair dados em {self.nome}: {e}")
+            return {idx: np.array([]) for idx in indices}
+
+    def inicializar(self, config: Dict[str, Any]) -> bool:
         try:
             if self.inicializado:
                 return True
 
             self._config = config
-
-            # Verifica dependências
             for dependencia in self._dependencias:
                 if not dependencia.inicializado:
                     logger.error(
@@ -103,8 +119,8 @@ class Plugin:
                     return False
 
             self.inicializado = True
+            logger.info(f"Plugin {self.nome} inicializado com sucesso")
             return True
-
         except Exception as e:
             logger.error(f"Erro ao inicializar plugin {self.nome}: {e}")
             return False
@@ -112,6 +128,13 @@ class Plugin:
     def executar(self, *args, **kwargs) -> bool:
         """
         Executa o ciclo do plugin.
+
+        Args:
+            *args: Argumentos posicionais (ignorados)
+            **kwargs: Argumentos nomeados esperados:
+                dados (List): Lista de candles
+                symbol (str): Símbolo do par
+                timeframe (str): Timeframe da análise
 
         Returns:
             bool: True se executado com sucesso
@@ -121,25 +144,31 @@ class Plugin:
                 logger.error(f"Plugin {self.nome} não inicializado")
                 return False
 
-            return True
+            dados = kwargs.get("dados")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
 
+            if not all([dados, symbol, timeframe]):
+                logger.error(f"Parâmetros necessários não fornecidos em {self.nome}")
+                return False
+
+            if not isinstance(dados, list) or not dados:
+                logger.warning(f"Dados inválidos ou vazios em {self.nome}")
+                return False
+
+            return True
         except Exception as e:
             logger.error(f"Erro ao executar plugin {self.nome}: {e}")
             return False
 
     def finalizar(self):
-        """
-        Finaliza o plugin e libera recursos.
-        """
         try:
             if not self.inicializado:
                 return
 
-            # Limpa recursos
             self._config = None
             self._dependencias.clear()
             self.inicializado = False
             logger.info(f"Plugin {self.nome} finalizado com sucesso")
-
         except Exception as e:
             logger.error(f"Erro ao finalizar plugin {self.nome}: {e}")

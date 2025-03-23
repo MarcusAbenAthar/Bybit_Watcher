@@ -1,126 +1,186 @@
 # execucao_ordens.py
-# Plugin para execução de ordens de trading e exibição de sinais
-
 from utils.logging_config import get_logger
+import ccxt
 from plugins.plugin import Plugin
+from utils.config import carregar_config
 
 logger = get_logger(__name__)
 
 
 class ExecucaoOrdens(Plugin):
-    """Plugin para execução de ordens de trading."""
-
-    # Identificador explícito do plugin
     PLUGIN_NAME = "execucao_ordens"
     PLUGIN_TYPE = "essencial"
 
-    def __init__(self):
-        """Inicializa o plugin ExecucaoOrdens."""
-        super().__init__()
-        self.nome = "execucao_ordens"
-        self.descricao = "Plugin para execução de ordens de trading"
-        self._config = None
+    def __init__(self, gerente=None):
+        super().__init__(gerente=gerente)
+        self._gerente = gerente
+        self._exchange = None
         self._ordens_pendentes = {}
+        self._config = carregar_config()  # Carrega config padrão na inicialização
 
-    def inicializar(self, config):
-        """
-        Inicializa o plugin com as configurações fornecidas.
-
-        Args:
-            config: Objeto de configuração
-        """
-        if not self._config:  # Só inicializa uma vez
-            super().inicializar(config)
-            self._config = config
-            self._ordens_pendentes = {}
-
+    def inicializar(self, config_dict: dict = None) -> bool:
+        try:
+            # Usa config passado ou mantém o padrão carregado
+            self._config = config_dict or self._config
+            if not super().inicializar(self._config):
+                return False
+            conexao = self._gerente.obter_plugin("plugins.conexao")
+            if not conexao or not conexao.exchange:
+                logger.error("Plugin de conexão não encontrado ou não inicializado")
+                return False
+            self._exchange = conexao.exchange
+            self._exchange.set_sandbox_mode(True)  # Modo teste da Bybit
+            auto_trade = self._config["trading"]["auto_trade"]
+            logger.info(
+                f"ExecucaoOrdens inicializado em modo teste (Auto Trade: {'ON' if auto_trade else 'OFF'})"
+            )
             return True
-        return True
-
-    def exibir_sinal(self, sinal):
-        """
-        Exibe os detalhes do sinal de trading de forma organizada.
-
-        Args:
-            sinal (dict): Um dicionário com os detalhes do sinal, incluindo o symbol de moedas,
-                         o timeframe, o tipo de sinal (compra ou venda), o stop loss e o take profit.
-        """
-        if sinal["sinal"]:
-            mensagem = f"""
-            Sinal: {sinal['sinal']}
-            Par: {sinal['symbol']}
-            Timeframe: {sinal['timeframe']}
-            Stop Loss: {sinal['stop_loss']:.2f}
-            Take Profit: {sinal['take_profit']:.2f}
-            """
-            logger.info(mensagem)  # Usando logger para exibir o sinal
+        except Exception as e:
+            logger.error(f"Erro ao inicializar execucao_ordens: {e}")
+            return False
 
     def executar(self, *args, **kwargs) -> bool:
-        """
-        Executa as ordens.
-
-        Args:
-            *args: Argumentos posicionais ignorados
-            **kwargs: Argumentos nomeados contendo:
-                dados (list): Dados para análise
-                symbol (str): Símbolo do par
-                timeframe (str): Timeframe dos dados
-                config (dict): Configurações do bot
-
-        Returns:
-            bool: True se executado com sucesso
-        """
+        resultado_padrao = {
+            "execucao_ordens": {"status": "NEUTRO", "ordem_id": None, "resultado": None}
+        }
         try:
-            # Extrai os parâmetros necessários
             dados = kwargs.get("dados")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
 
-            # Validação dos parâmetros
             if not all([dados, symbol, timeframe]):
-                logger.error("Parâmetros necessários não fornecidos")
-                dados["execucao_ordens"] = {
-                    "status": "NEUTRO",
-                    "ordem": None,
-                    "resultado": None,
-                }
+                logger.error(f"Parâmetros necessários não fornecidos")
+                if isinstance(dados, dict):
+                    dados.update(resultado_padrao)
                 return True
 
-            # Executa a ordem
-            resultado = self.executar_ordem(dados)
+            if not isinstance(dados, dict):
+                logger.warning(
+                    f"Dados devem ser um dicionário para {symbol} - {timeframe}"
+                )
+                return True
 
-            # Atualiza o dicionário de dados com o resultado
-            dados["execucao_ordens"] = {
-                "status": "EXECUTADO" if resultado else "FALHA",
-                "ordem": dados.get("ordem"),
-                "resultado": resultado,
-            }
+            sinal = self._extrair_sinal(dados)
+            if not sinal or sinal.get("direcao") == "NEUTRO":
+                resultado = {
+                    "status": "NEUTRO",
+                    "ordem_id": None,
+                    "resultado": "Nenhum sinal válido detectado",
+                }
+            else:
+                self._exibir_sinal(sinal, symbol, timeframe)
+                if self._config["trading"]["auto_trade"]:
+                    resultado = self._executar_ordem_automatica(
+                        dados, symbol, timeframe
+                    )
+                else:
+                    resultado = {
+                        "status": "PRONTO",
+                        "ordem_id": None,
+                        "resultado": f"Sinal detectado: {sinal['direcao']} (Auto Trade OFF)",
+                    }
 
+            if isinstance(dados, dict):
+                dados["execucao_ordens"] = resultado
             return True
-
         except Exception as e:
-            logger.error(f"Erro ao executar ordem: {e}")
-            dados["execucao_ordens"] = {
-                "status": "ERRO",
-                "ordem": None,
-                "resultado": None,
-            }
+            logger.error(f"Erro ao executar execucao_ordens: {e}")
+            if isinstance(dados, dict):
+                dados.update(resultado_padrao)
             return True
 
-    def executar_ordem(self, dados):
-        """
-        Executa uma ordem de compra/venda.
-
-        Args:
-            dados (dict): Dados da ordem a ser executada
-        """
+    def _extrair_sinal(self, dados):
         try:
-            # Mudando de INFO para DEBUG já que são detalhes de execução
-            logger.debug(f"Executando ordem: {dados}")
-
-            # Aqui você pode implementar a lógica de execução de ordens
-            return True
-
+            for plugin in [
+                "analise_candles",
+                "medias_moveis",
+                "price_action",
+                "calculo_risco",
+            ]:
+                if (
+                    plugin in dados
+                    and "direcao" in dados[plugin]
+                    and dados[plugin]["direcao"] != "NEUTRO"
+                ):
+                    return dados[plugin]
+            return None
         except Exception as e:
-            logger.error(f"Erro ao executar ordem: {e}")
-            raise
+            logger.error(f"Erro ao extrair sinal: {e}")
+            return None
+
+    def _exibir_sinal(self, sinal, symbol, timeframe):
+        try:
+            mensagem = (
+                f"Sinal detectado:\n"
+                f"Par: {symbol}\n"
+                f"Timeframe: {timeframe}\n"
+                f"Direção: {sinal['direcao']}\n"
+                f"Força: {sinal['forca']}\n"
+                f"Confiança: {sinal['confianca']:.2f}\n"
+                f"Stop Loss: {sinal.get('stop_loss', 'N/A')}\n"
+                f"Take Profit: {sinal.get('take_profit', 'N/A')}"
+            )
+            logger.info(mensagem)
+        except Exception as e:
+            logger.error(f"Erro ao exibir sinal: {e}")
+
+    def _executar_ordem_automatica(self, dados, symbol, timeframe):
+        try:
+            sinal = self._extrair_sinal(dados)
+            if not sinal:
+                return {
+                    "status": "NEUTRO",
+                    "ordem_id": None,
+                    "resultado": "Nenhum sinal válido",
+                }
+
+            direcao = sinal["direcao"]
+            stop_loss = sinal.get("stop_loss")
+            take_profit = sinal.get("take_profit")
+            alavancagem = dados.get("calculo_alavancagem", 3)
+
+            preco_atual = float(dados["crus"][-1][4])  # Último preço de fechamento
+            quantidade = self._calcular_quantidade(preco_atual, alavancagem)
+
+            ordem = {
+                "symbol": symbol,
+                "type": "market",
+                "side": "buy" if direcao == "ALTA" else "sell",
+                "amount": quantidade,
+                "leverage": alavancagem,
+            }
+
+            if stop_loss:
+                ordem["stopLossPrice"] = stop_loss
+            if take_profit:
+                ordem["takeProfitPrice"] = take_profit
+
+            logger.info(f"Executando ordem automática: {ordem}")
+            resposta = self._exchange.create_order(
+                symbol=symbol,
+                type="market",
+                side=ordem["side"],
+                amount=quantidade,
+                params={
+                    "leverage": alavancagem,
+                    "stopLossPrice": stop_loss,
+                    "takeProfitPrice": take_profit,
+                },
+            )
+
+            ordem_id = resposta.get("id")
+            self._ordens_pendentes[ordem_id] = ordem
+            return {"status": "EXECUTADO", "ordem_id": ordem_id, "resultado": resposta}
+        except Exception as e:
+            logger.error(f"Erro ao executar ordem automática: {e}")
+            return {"status": "ERRO", "ordem_id": None, "resultado": str(e)}
+
+    def _calcular_quantidade(self, preco_atual, alavancagem):
+        try:
+            saldo = self._exchange.fetch_balance()["free"]["USDT"]
+            risco = self._config["trading"]["risco_por_operacao"]  # Ex.: 0.01 (1%)
+            quantidade_base = (saldo * risco * alavancagem) / preco_atual
+            return round(quantidade_base, 3)  # Ajuste de precisão
+        except Exception as e:
+            logger.error(f"Erro ao calcular quantidade: {e}")
+            return 0.01  # Quantidade mínima padrão
