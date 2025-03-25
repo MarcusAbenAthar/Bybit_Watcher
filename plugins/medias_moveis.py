@@ -12,46 +12,57 @@ class MediasMoveis(Plugin):
     PLUGIN_TYPE = "essencial"
 
     def executar(self, *args, **kwargs) -> bool:
+        logger.debug(
+            f"Iniciando medias_moveis para {kwargs.get('symbol')} - {kwargs.get('timeframe')}"
+        )
         resultado_padrao = {
-            "medias_moveis": {
-                "direcao": "NEUTRO",
-                "forca": "FRACA",
-                "confianca": 0.0,
-                "indicadores": {"ma20": None, "ma50": None},
-            }
+            "direcao": "NEUTRO",
+            "forca": "FRACA",
+            "confianca": 0.0,
+            "indicadores": {"ma20": None, "ma50": None},
         }
         try:
-            dados = kwargs.get("dados")
+            dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
 
-            if not all([dados, symbol, timeframe]):
-                logger.error(f"Parâmetros necessários não fornecidos")
-                if isinstance(dados, dict):
-                    dados.update(resultado_padrao)
+            if not isinstance(dados_completos, dict) or not all([symbol, timeframe]):
+                logger.error(
+                    f"Parâmetros inválidos. Dados: {dados_completos}, Symbol: {symbol}, Timeframe: {timeframe}"
+                )
+                if isinstance(dados_completos, dict):
+                    dados_completos["processados"]["medias_moveis"] = resultado_padrao
                 return True
 
-            if not isinstance(dados, list) or len(dados) < 50:
-                logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
-                if isinstance(dados, dict):
-                    dados.update(resultado_padrao)
+            dados_crus = dados_completos.get("crus")
+            if (
+                not dados_crus
+                or not isinstance(dados_crus, list)
+                or len(dados_crus) < 50
+            ):
+                logger.warning(
+                    f"Dados insuficientes para {symbol} - {timeframe}. Crus: {dados_crus}"
+                )
+                dados_completos["processados"]["medias_moveis"] = resultado_padrao
                 return True
 
-            sinal = self.gerar_sinal(dados)
-            if isinstance(dados, dict):
-                dados["medias_moveis"] = sinal
+            sinal = self.gerar_sinal(dados_crus)
+            logger.debug(f"Sinal gerado para {symbol} - {timeframe}: {sinal}")
+            dados_completos["processados"]["medias_moveis"] = sinal
             return True
         except Exception as e:
             logger.error(f"Erro ao executar medias_moveis: {e}")
-            if isinstance(dados, dict):
-                dados.update(resultado_padrao)
+            dados_completos["processados"]["medias_moveis"] = resultado_padrao
             return True
 
-    def gerar_sinal(self, dados):
+    def gerar_sinal(self, dados_crus):
         try:
-            dados_extraidos = self._extrair_dados(dados, [4])
-            close = dados_extraidos[4]
+            # Assumindo que dados_crus é uma lista de listas [timestamp, open, high, low, close, volume, ...]
+            close = np.array(
+                [float(kline[4]) for kline in dados_crus]
+            )  # Extrai preços de fechamento
             if len(close) < 50:
+                logger.warning(f"menos de 50 klines disponíveis: {len(close)}")
                 return {
                     "direcao": "NEUTRO",
                     "forca": "FRACA",

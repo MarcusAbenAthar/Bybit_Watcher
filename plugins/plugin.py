@@ -70,13 +70,13 @@ class Plugin:
             self.PLUGIN_NAME = valor
 
     def _extrair_dados(
-        self, dados: List[Any], indices: List[int]
+        self, dados_completos: List[Any], indices: List[int]
     ) -> Dict[int, np.ndarray]:
         """
         Extrai e valida dados de candles para índices especificados.
 
         Args:
-            dados: Lista de candles
+            dados_completos: Lista de candles
             indices: Índices dos valores a extrair (ex.: 2=high, 4=close)
 
         Returns:
@@ -84,7 +84,7 @@ class Plugin:
         """
         try:
             valores = {idx: [] for idx in indices}
-            for candle in dados:
+            for candle in dados_completos:
                 if any(
                     candle[i] is None or str(candle[i]).strip() == "" for i in indices
                 ):
@@ -144,15 +144,15 @@ class Plugin:
                 logger.error(f"Plugin {self.nome} não inicializado")
                 return False
 
-            dados = kwargs.get("dados")
+            dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
 
-            if not all([dados, symbol, timeframe]):
+            if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"Parâmetros necessários não fornecidos em {self.nome}")
                 return False
 
-            if not isinstance(dados, list) or not dados:
+            if not isinstance(dados_completos, list) or not dados_completos:
                 logger.warning(f"Dados inválidos ou vazios em {self.nome}")
                 return False
 

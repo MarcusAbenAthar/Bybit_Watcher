@@ -49,7 +49,7 @@ class BancoDados(Plugin):
         Salva dados no banco conforme o tipo.
 
         Args:
-            dados: Dicionário com dados processados
+            dados_completos: Dicionário com dados processados
             symbol: Símbolo do par
             timeframe: Timeframe
             tipo: Tipo de dado ("klines", "sinais", "indicadores_tendencia", etc.)
@@ -58,16 +58,20 @@ class BancoDados(Plugin):
             bool: True se salvo com sucesso
         """
         try:
-            dados = kwargs.get("dados")
+            dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
             tipo = kwargs.get("tipo")
-            if not all([dados, symbol, timeframe, tipo]):
+            if not all([dados_completos, symbol, timeframe, tipo]):
                 logger.error("Parâmetros insuficientes")
                 return True
 
-            if tipo == "klines" and isinstance(dados["crus"], list) and dados["crus"]:
-                ultimo = dados["crus"][-1]
+            if (
+                tipo == "klines"
+                and isinstance(dados_completos["crus"], list)
+                and dados_completos["crus"]
+            ):
+                ultimo = dados_completos["crus"][-1]
                 query = """
                     INSERT INTO public.klines (symbol, timeframe, timestamp, open, high, low, close, volume)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -86,8 +90,8 @@ class BancoDados(Plugin):
                     query=query, params=params, commit=True
                 )
 
-            elif tipo == "sinais" and "sinais" in dados["processados"]:
-                sinal = dados["processados"]["sinais"]
+            elif tipo == "sinais" and "sinais" in dados_completos["processados"]:
+                sinal = dados_completos["processados"]["sinais"]
                 query = """
                     INSERT INTO public.sinais (symbol, timeframe, tipo, sinal, forca, confianca, stop_loss, take_profit, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -101,7 +105,7 @@ class BancoDados(Plugin):
                     sinal["confianca"],
                     sinal.get("stop_loss"),
                     sinal.get("take_profit"),
-                    int(dados["crus"][-1][0]),
+                    int(dados_completos["crus"][-1][0]),
                 )
                 return self._gerenciador.executar(
                     query=query, params=params, commit=True
@@ -114,10 +118,14 @@ class BancoDados(Plugin):
                 "indicadores_volume",
                 "outros_indicadores",
             ]:
-                indicadores = dados["processados"].get(tipo, {})
+                indicadores = dados_completos["processados"].get(tipo, {})
                 if not indicadores:
                     return True
-                timestamp = int(dados["crus"][-1][0]) if dados["crus"] else 0
+                timestamp = (
+                    int(dados_completos["crus"][-1][0])
+                    if dados_completos["crus"]
+                    else 0
+                )
                 if tipo == "indicadores_tendencia":
                     query = """
                         INSERT INTO public.indicadores_tendencia (symbol, timeframe, timestamp, sma, ema)

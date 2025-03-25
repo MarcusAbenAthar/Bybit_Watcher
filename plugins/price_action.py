@@ -20,35 +20,35 @@ class PriceAction(Plugin):
             }
         }
         try:
-            dados = kwargs.get("dados")
+            dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
 
-            if not all([dados, symbol, timeframe]):
+            if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"Parâmetros necessários não fornecidos")
-                if isinstance(dados, dict):
-                    dados.update(resultado_padrao)
+                if isinstance(dados_completos, dict):
+                    dados_completos.update(resultado_padrao)
                 return True
 
-            if not isinstance(dados, list) or len(dados) < 20:
+            if not isinstance(dados_completos, list) or len(dados_completos) < 20:
                 logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
-                if isinstance(dados, dict):
-                    dados.update(resultado_padrao)
+                if isinstance(dados_completos, dict):
+                    dados_completos.update(resultado_padrao)
                 return True
 
-            sinal = self.gerar_sinal(dados)
-            if isinstance(dados, dict):
-                dados["price_action"] = sinal
+            sinal = self.gerar_sinal(dados_completos)
+            if isinstance(dados_completos, dict):
+                dados_completos["price_action"] = sinal
             return True
         except Exception as e:
             logger.error(f"Erro ao executar price_action: {e}")
-            if isinstance(dados, dict):
-                dados.update(resultado_padrao)
+            if isinstance(dados_completos, dict):
+                dados_completos.update(resultado_padrao)
             return True
 
-    def gerar_sinal(self, dados):
+    def gerar_sinal(self, dados_completos):
         try:
-            dados_extraidos = self._extrair_dados(dados, [1, 2, 3, 4])
+            dados_extraidos = self._extrair_dados(dados_completos, [1, 2, 3, 4])
             open_prices, high, low, close = (
                 dados_extraidos[1],
                 dados_extraidos[2],

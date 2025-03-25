@@ -65,21 +65,37 @@ class GerenciadorBot(Plugin):
 
             for symbol in pares:
                 logger.info(f"Análise iniciada para {symbol}")
-                dados = {tf: {"crus": [], "processados": {}} for tf in timeframes}
+                dados_completos = {
+                    tf: {"crus": [], "processados": {}} for tf in timeframes
+                }
 
                 for tf in timeframes:
                     for plugin_name in plugins_analise:
                         plugin = self._gerente.obter_plugin(plugin_name)
                         if plugin:
-                            plugin.executar(
-                                dados_completos=dados[tf], symbol=symbol, timeframe=tf
+                            success = plugin.executar(
+                                dados_completos=dados_completos[tf],
+                                symbol=symbol,
+                                timeframe=tf,
                             )
+                            if not success:
+                                logger.warning(
+                                    f"Falha ao executar {plugin_name} para {symbol} - {tf}"
+                                )
                         else:
                             logger.warning(f"Plugin {plugin_name} não encontrado")
 
                     sinais_plugin = self._gerente.obter_plugin("plugins.sinais_plugin")
                     if sinais_plugin:
-                        sinais_plugin.executar(dados=dados, symbol=symbol)
+                        success = sinais_plugin.executar(
+                            dados_completos=dados_completos[tf],
+                            symbol=symbol,
+                            timeframe=tf,
+                        )
+                        if not success:
+                            logger.warning(
+                                f"Falha ao executar sinais_plugin para {symbol} - {tf}"
+                            )
                     else:
                         logger.error("SinaisPlugin não encontrado")
                         return False

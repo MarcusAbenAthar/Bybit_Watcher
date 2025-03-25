@@ -44,23 +44,23 @@ class ExecucaoOrdens(Plugin):
             "execucao_ordens": {"status": "NEUTRO", "ordem_id": None, "resultado": None}
         }
         try:
-            dados = kwargs.get("dados")
+            dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
 
-            if not all([dados, symbol, timeframe]):
+            if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"Parâmetros necessários não fornecidos")
-                if isinstance(dados, dict):
-                    dados.update(resultado_padrao)
+                if isinstance(dados_completos, dict):
+                    dados_completos.update(resultado_padrao)
                 return True
 
-            if not isinstance(dados, dict):
+            if not isinstance(dados_completos, dict):
                 logger.warning(
                     f"Dados devem ser um dicionário para {symbol} - {timeframe}"
                 )
                 return True
 
-            sinal = self._extrair_sinal(dados)
+            sinal = self._extrair_sinal(dados_completos)
             if not sinal or sinal.get("direcao") == "NEUTRO":
                 resultado = {
                     "status": "NEUTRO",
@@ -71,7 +71,7 @@ class ExecucaoOrdens(Plugin):
                 self._exibir_sinal(sinal, symbol, timeframe)
                 if self._config["trading"]["auto_trade"]:
                     resultado = self._executar_ordem_automatica(
-                        dados, symbol, timeframe
+                        dados_completos, symbol, timeframe
                     )
                 else:
                     resultado = {
@@ -80,16 +80,16 @@ class ExecucaoOrdens(Plugin):
                         "resultado": f"Sinal detectado: {sinal['direcao']} (Auto Trade OFF)",
                     }
 
-            if isinstance(dados, dict):
-                dados["execucao_ordens"] = resultado
+            if isinstance(dados_completos, dict):
+                dados_completos["execucao_ordens"] = resultado
             return True
         except Exception as e:
             logger.error(f"Erro ao executar execucao_ordens: {e}")
-            if isinstance(dados, dict):
-                dados.update(resultado_padrao)
+            if isinstance(dados_completos, dict):
+                dados_completos.update(resultado_padrao)
             return True
 
-    def _extrair_sinal(self, dados):
+    def _extrair_sinal(self, dados_completos):
         try:
             for plugin in [
                 "analise_candles",
@@ -98,11 +98,11 @@ class ExecucaoOrdens(Plugin):
                 "calculo_risco",
             ]:
                 if (
-                    plugin in dados
-                    and "direcao" in dados[plugin]
-                    and dados[plugin]["direcao"] != "NEUTRO"
+                    plugin in dados_completos
+                    and "direcao" in dados_completos[plugin]
+                    and dados_completos[plugin]["direcao"] != "NEUTRO"
                 ):
-                    return dados[plugin]
+                    return dados_completos[plugin]
             return None
         except Exception as e:
             logger.error(f"Erro ao extrair sinal: {e}")
@@ -124,9 +124,9 @@ class ExecucaoOrdens(Plugin):
         except Exception as e:
             logger.error(f"Erro ao exibir sinal: {e}")
 
-    def _executar_ordem_automatica(self, dados, symbol, timeframe):
+    def _executar_ordem_automatica(self, dados_completos, symbol, timeframe):
         try:
-            sinal = self._extrair_sinal(dados)
+            sinal = self._extrair_sinal(dados_completos)
             if not sinal:
                 return {
                     "status": "NEUTRO",
@@ -137,9 +137,11 @@ class ExecucaoOrdens(Plugin):
             direcao = sinal["direcao"]
             stop_loss = sinal.get("stop_loss")
             take_profit = sinal.get("take_profit")
-            alavancagem = dados.get("calculo_alavancagem", 3)
+            alavancagem = dados_completos.get("calculo_alavancagem", 3)
 
-            preco_atual = float(dados["crus"][-1][4])  # Último preço de fechamento
+            preco_atual = float(
+                dados_completos["crus"][-1][4]
+            )  # Último preço de fechamento
             quantidade = self._calcular_quantidade(preco_atual, alavancagem)
 
             ordem = {

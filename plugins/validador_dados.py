@@ -26,43 +26,45 @@ class ValidadorDados(Plugin):
 
     def executar(self, *args, **kwargs) -> bool:
         try:
-            dados = kwargs.get("dados_completos")  # Ajustado pra dados_completos
+            dados_completos = kwargs.get(
+                "dados_completos"
+            )  # Ajustado pra dados_completos
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
 
-            if not all([dados, symbol, timeframe]):
+            if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"Parâmetros necessários não fornecidos")
                 return True
 
-            if not isinstance(dados, dict) or "crus" not in dados:
+            if not isinstance(dados_completos, dict) or "crus" not in dados_completos:
                 logger.warning(
                     f"Dados devem ser um dicionário com 'crus' para {symbol} - {timeframe}"
                 )
                 return True
 
-            dados_crus = dados["crus"]
+            dados_crus = dados_completos["crus"]
             if not isinstance(dados_crus, list):
                 logger.warning(f"'crus' deve ser uma lista para {symbol} - {timeframe}")
                 return True
 
             if self._validar_dados(dados_crus, symbol, timeframe):
                 logger.info(f"Dados validados para {symbol} ({timeframe})")
-                dados["validador_dados"] = {"status": "VALIDO"}
+                dados_completos["validador_dados"] = {"status": "VALIDO"}
                 return True
             else:
-                dados["validador_dados"] = {"status": "INVALIDO"}
+                dados_completos["validador_dados"] = {"status": "INVALIDO"}
                 return True
         except Exception as e:
             logger.error(f"Erro ao executar validador_dados: {e}")
             return True
 
-    def _validar_dados(self, dados, symbol, timeframe):
+    def _validar_dados(self, dados_completos, symbol, timeframe):
         if not self._validar_symbol(symbol) or not self._validar_timeframe(timeframe):
             return False
-        if len(dados) < self.min_candles:
-            logger.error(f"Quantidade insuficiente de candles: {len(dados)}")
+        if len(dados_completos) < self.min_candles:
+            logger.error(f"Quantidade insuficiente de candles: {len(dados_completos)}")
             return False
-        return all(self._validar_candle(candle) for candle in dados)
+        return all(self._validar_candle(candle) for candle in dados_completos)
 
     def _validar_symbol(self, symbol):
         return isinstance(symbol, str) and symbol.endswith(("USDT", "USD", "BTC"))

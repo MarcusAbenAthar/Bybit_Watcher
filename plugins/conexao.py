@@ -68,29 +68,17 @@ class Conexao(Plugin):
             return False
 
     def executar(self, *args, **kwargs) -> bool:
-        """
-        Busca klines da Bybit e armazena nos dados fornecidos.
-
-        Args:
-            dados: Dicionário pra armazenar os klines
-            symbol: Símbolo do par (ex.: "BTCUSDT")
-            timeframe: Timeframe (ex.: "1h")
-            limit: Número de candles a buscar (padrão: 100)
-
-        Returns:
-            bool: True se executado (mesmo com erros tratados), False apenas em falhas críticas
-        """
         try:
-            dados = kwargs.get("dados")
+            dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
             limit = kwargs.get("limit", 100)
 
-            if not all([dados, symbol, timeframe]):
+            if not all([dados_completos, symbol, timeframe]):
                 logger.error("Parâmetros necessários não fornecidos")
                 return True
 
-            if not isinstance(dados, dict):
+            if not isinstance(dados_completos, dict):
                 logger.warning(
                     f"Dados devem ser um dicionário para {symbol} - {timeframe}"
                 )
@@ -98,8 +86,10 @@ class Conexao(Plugin):
 
             klines = self.obter_klines(symbol, timeframe, limit)
             if klines:
-                dados["crus"] = klines
-                logger.debug(f"Klines obtidos para {symbol} - {timeframe}")
+                dados_completos["crus"] = klines
+                logger.debug(
+                    f"Klines obtidos para {symbol} - {timeframe}, tamanho: {len(klines)}"
+                )
             return True
         except Exception as e:
             logger.error(f"Erro ao executar conexao: {e}")

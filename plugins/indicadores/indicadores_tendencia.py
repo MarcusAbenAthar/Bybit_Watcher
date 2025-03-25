@@ -57,10 +57,12 @@ class IndicadoresTendencia(Plugin):
         if config:
             self.config.update(config)
 
-    def calcular_medias_moveis(self, dados: pd.DataFrame) -> Dict[str, pd.Series]:
+    def calcular_medias_moveis(
+        self, dados_completos: pd.DataFrame
+    ) -> Dict[str, pd.Series]:
         """Calcula diferentes tipos de médias móveis."""
         try:
-            close = dados["close"]
+            close = dados_completos["close"]
             return {
                 "sma_rapida": close.rolling(self.config["sma_rapida"]).mean(),
                 "sma_lenta": close.rolling(self.config["sma_lenta"]).mean(),
@@ -80,10 +82,10 @@ class IndicadoresTendencia(Plugin):
                 "ema_lenta": pd.Series(),
             }
 
-    def calcular_macd(self, dados: pd.DataFrame) -> Dict[str, pd.Series]:
+    def calcular_macd(self, dados_completos: pd.DataFrame) -> Dict[str, pd.Series]:
         """Calcula o MACD e suas componentes."""
         try:
-            close = dados["close"]
+            close = dados_completos["close"]
             ema_rapida = close.ewm(span=self.config["ema_rapida"], adjust=False).mean()
             ema_lenta = close.ewm(span=self.config["ema_lenta"], adjust=False).mean()
             macd_line = ema_rapida - ema_lenta
@@ -100,12 +102,12 @@ class IndicadoresTendencia(Plugin):
                 "histogram": pd.Series(),
             }
 
-    def calcular_adx(self, dados: pd.DataFrame) -> Dict[str, pd.Series]:
+    def calcular_adx(self, dados_completos: pd.DataFrame) -> Dict[str, pd.Series]:
         """Calcula o ADX (Average Directional Index)."""
         try:
-            high = dados["high"]
-            low = dados["low"]
-            close = dados["close"]
+            high = dados_completos["high"]
+            low = dados_completos["low"]
+            close = dados_completos["close"]
             periodo = self.config["adx_periodo"]
 
             tr1 = high - low
@@ -129,12 +131,12 @@ class IndicadoresTendencia(Plugin):
             logger.error(f"Erro ao calcular ADX: {e}")
             return {"adx": pd.Series(), "pdi": pd.Series(), "ndi": pd.Series()}
 
-    def calcular_atr(self, dados: pd.DataFrame, periodo: int = 14) -> float:
+    def calcular_atr(self, dados_completos: pd.DataFrame, periodo: int = 14) -> float:
         """Calcula o ATR para definição de TP/SL."""
         try:
-            high = dados["high"]
-            low = dados["low"]
-            close = dados["close"]
+            high = dados_completos["high"]
+            low = dados_completos["low"]
+            close = dados_completos["close"]
             tr1 = high - low
             tr2 = abs(high - close.shift(1))
             tr3 = abs(low - close.shift(1))
@@ -144,26 +146,26 @@ class IndicadoresTendencia(Plugin):
             logger.error(f"Erro ao calcular ATR: {e}")
             return 0
 
-    def gerar_sinal(self, dados: pd.DataFrame) -> Dict[str, any]:
+    def gerar_sinal(self, dados_completos: pd.DataFrame) -> Dict[str, any]:
         """
         Gera sinais de trading baseados nos indicadores.
 
         Args:
-            dados: DataFrame com OHLCV
+            dados_completos: DataFrame com OHLCV
 
         Returns:
             Dict com sinais e níveis de TP/SL
         """
         resultado_padrao = {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0}
         try:
-            if len(dados) < 20:
+            if len(dados_completos) < 20:
                 logger.warning("Dados insuficientes para gerar sinal")
                 return resultado_padrao
 
             # Calcula todos os indicadores
-            medias = self.calcular_medias_moveis(dados)
-            macd = self.calcular_macd(dados)
-            adx = self.calcular_adx(dados)
+            medias = self.calcular_medias_moveis(dados_completos)
+            macd = self.calcular_macd(dados_completos)
+            adx = self.calcular_adx(dados_completos)
 
             confirmacoes_compra = 0
             confirmacoes_venda = 0
@@ -213,8 +215,8 @@ class IndicadoresTendencia(Plugin):
                     forca = "MÉDIA"
 
             # Gera sinal com TP/SL
-            atr = self.calcular_atr(dados)
-            preco_atual = dados["close"].iloc[-1]
+            atr = self.calcular_atr(dados_completos)
+            preco_atual = dados_completos["close"].iloc[-1]
 
             if confianca_compra >= self.config["min_confianca"]:
                 stop_loss = preco_atual - (atr * 1.5)

@@ -20,7 +20,7 @@ class OutrosIndicadores(Plugin):
         Executa o cálculo de indicadores adicionais e gera sinal.
 
         Args:
-            dados: Lista de candles [timestamp, open, high, low, close, volume]
+            dados_completos: Lista de candles [timestamp, open, high, low, close, volume]
             symbol: Símbolo do par (ex.: "XRPUSDT")
             timeframe: Timeframe analisado (ex.: "1h")
 
@@ -43,43 +43,43 @@ class OutrosIndicadores(Plugin):
             }
         }
         try:
-            dados = kwargs.get("dados")
+            dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
 
-            if not all([dados, symbol, timeframe]):
+            if not all([dados_completos, symbol, timeframe]):
                 logger.error("Parâmetros necessários não fornecidos")
-                if isinstance(dados, dict):
-                    dados.update(resultado_padrao)
+                if isinstance(dados_completos, dict):
+                    dados_completos.update(resultado_padrao)
                 return True
 
             if (
-                not isinstance(dados, list) or len(dados) < 52
+                not isinstance(dados_completos, list) or len(dados_completos) < 52
             ):  # Ichimoku exige 52 períodos
                 logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
-                if isinstance(dados, dict):
-                    dados.update(resultado_padrao)
+                if isinstance(dados_completos, dict):
+                    dados_completos.update(resultado_padrao)
                 return True
 
-            indicadores = self._calcular_indicadores(dados)
-            sinal = self._gerar_sinal(dados)
+            indicadores = self._calcular_indicadores(dados_completos)
+            sinal = self._gerar_sinal(dados_completos)
             indicadores.update(sinal)
 
-            if isinstance(dados, dict):
-                dados["outros_indicadores"] = indicadores
+            if isinstance(dados_completos, dict):
+                dados_completos["outros_indicadores"] = indicadores
             logger.debug(f"Indicadores calculados para {symbol} - {timeframe}")
             return True
         except Exception as e:
             logger.error(f"Erro ao executar outros_indicadores: {e}")
-            if isinstance(dados, dict):
-                dados.update(resultado_padrao)
+            if isinstance(dados_completos, dict):
+                dados_completos.update(resultado_padrao)
             return True
 
-    def _calcular_indicadores(self, dados):
+    def _calcular_indicadores(self, dados_completos):
         """Calcula Ichimoku, Fibonacci e Pivot Points."""
-        ichimoku = self._calcular_ichimoku(dados)
-        fibonacci = self._calcular_fibonacci(dados)
-        pivot_points = self._calcular_pivot_points(dados)
+        ichimoku = self._calcular_ichimoku(dados_completos)
+        fibonacci = self._calcular_fibonacci(dados_completos)
+        pivot_points = self._calcular_pivot_points(dados_completos)
         return {
             "ichimoku": {
                 "tenkan_sen": (
@@ -111,11 +111,15 @@ class OutrosIndicadores(Plugin):
             },
         }
 
-    def _calcular_ichimoku(self, dados):
+    def _calcular_ichimoku(self, dados_completos):
         """Calcula componentes do Ichimoku Cloud."""
         try:
-            high = np.array([float(candle[2]) for candle in dados], dtype=np.float64)
-            low = np.array([float(candle[3]) for candle in dados], dtype=np.float64)
+            high = np.array(
+                [float(candle[2]) for candle in dados_completos], dtype=np.float64
+            )
+            low = np.array(
+                [float(candle[3]) for candle in dados_completos], dtype=np.float64
+            )
             if len(high) < 52:
                 return {
                     "tenkan_sen": np.array([]),
@@ -148,11 +152,15 @@ class OutrosIndicadores(Plugin):
                 "senkou_span_b": np.array([]),
             }
 
-    def _calcular_fibonacci(self, dados):
+    def _calcular_fibonacci(self, dados_completos):
         """Calcula níveis de Fibonacci Retracement."""
         try:
-            high = np.array([float(candle[2]) for candle in dados], dtype=np.float64)
-            low = np.array([float(candle[3]) for candle in dados], dtype=np.float64)
+            high = np.array(
+                [float(candle[2]) for candle in dados_completos], dtype=np.float64
+            )
+            low = np.array(
+                [float(candle[3]) for candle in dados_completos], dtype=np.float64
+            )
             if not high.size or not low.size:
                 return {"23.6%": None, "38.2%": None, "50%": None, "61.8%": None}
             maximo, minimo = float(np.max(high)), float(np.min(low))
@@ -167,12 +175,12 @@ class OutrosIndicadores(Plugin):
             logger.error(f"Erro ao calcular Fibonacci: {e}")
             return {"23.6%": None, "38.2%": None, "50%": None, "61.8%": None}
 
-    def _calcular_pivot_points(self, dados):
+    def _calcular_pivot_points(self, dados_completos):
         """Calcula Pivot Points do último candle."""
         try:
-            if not dados:
+            if not dados_completos:
                 return {"PP": None, "R1": None, "S1": None}
-            ultimo = dados[-1]
+            ultimo = dados_completos[-1]
             h, l, c = float(ultimo[2]), float(ultimo[3]), float(ultimo[4])
             pp = (h + l + c) / 3
             r1 = 2 * pp - l
@@ -182,13 +190,13 @@ class OutrosIndicadores(Plugin):
             logger.error(f"Erro ao calcular Pivot Points: {e}")
             return {"PP": None, "R1": None, "S1": None}
 
-    def _gerar_sinal(self, dados):
+    def _gerar_sinal(self, dados_completos):
         """Gera sinal baseado nos indicadores calculados."""
         try:
-            ultimo_preco = float(dados[-1][4])
-            ichimoku = self._calcular_ichimoku(dados)
-            fibonacci = self._calcular_fibonacci(dados)
-            pivot_points = self._calcular_pivot_points(dados)
+            ultimo_preco = float(dados_completos[-1][4])
+            ichimoku = self._calcular_ichimoku(dados_completos)
+            fibonacci = self._calcular_fibonacci(dados_completos)
+            pivot_points = self._calcular_pivot_points(dados_completos)
 
             confirmacoes_alta = 0
             confirmacoes_baixa = 0

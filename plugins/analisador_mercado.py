@@ -13,25 +13,14 @@ class AnalisadorMercado(Plugin):
     def __init__(self, gerente=None):
         super().__init__(gerente=gerente)
         self._gerente = gerente
-        self.timeframes = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
 
     def inicializar(self, config: Dict) -> bool:
         if not super().inicializar(config):
             return False
-        plugins = {
-            "conexao": "plugins.conexao",
-            "sinais_plugin": "plugins.sinais_plugin",
-            "analise_candles": "plugins.analise_candles",
-            "medias_moveis": "plugins.medias_moveis",
-            "price_action": "plugins.price_action",
-            "indicadores_tendencia": "plugins.indicadores.indicadores_tendencia",
-        }
-        for attr, plugin_key in plugins.items():
-            plugin = self._gerente.obter_plugin(plugin_key)
-            if not plugin:
-                logger.error(f"Plugin {plugin_key} não encontrado")
-                return False
-            setattr(self, f"_{attr}", plugin)
+        logger.info(
+            "AnalisadorMercado inicializado com timeframes do config: %s",
+            self._config["timeframes"],
+        )
         return True
 
     def executar(self, *args, **kwargs) -> bool:
@@ -39,50 +28,56 @@ class AnalisadorMercado(Plugin):
             "analise_mercado": {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0}
         }
         try:
-            dados = kwargs.get("dados")
+            dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
             config = kwargs.get("config", self._config)
 
-            if not all([dados, symbol, timeframe]):
-                logger.error(f"Parâmetros necessários não fornecidos")
-                if isinstance(dados, dict):
-                    dados.update(resultado_padrao)
+            if not all([dados_completos, symbol, timeframe]):
+                logger.error("Parâmetros necessários não fornecidos")
+                if isinstance(dados_completos, dict):
+                    dados_completos.update(resultado_padrao)
                 return True
 
-            if not isinstance(dados, dict):
+            if not isinstance(dados_completos, dict):
                 logger.warning(
                     f"Dados devem ser um dicionário para {symbol} - {timeframe}"
                 )
                 return True
 
-            resultados = self._executar_analises(dados, symbol, timeframe, config)
-            dados.update(resultados)
+            resultados = self._executar_analises(
+                dados_completos, symbol, timeframe, config
+            )
+            dados_completos.update(resultados)
             return True
         except Exception as e:
             logger.error(f"Erro ao executar analisador_mercado: {e}")
-            if isinstance(dados, dict):
-                dados.update(resultado_padrao)
+            if isinstance(dados_completos, dict):
+                dados_completos.update(resultado_padrao)
             return True
 
     def _executar_analises(
-        self, dados: Dict, symbol: str, timeframe: str, config: Dict
+        self, dados_completos: Dict, symbol: str, timeframe: str, config: Dict
     ) -> Dict:
         try:
-            resultados = {}
-            for plugin_name, plugin in [
-                ("candles", self._analise_candles),
-                ("medias_moveis", self._medias_moveis),
-                ("price_action", self._price_action),
-                ("tendencia", self._indicadores_tendencia),
-            ]:
-                plugin.executar(
-                    dados=dados, symbol=symbol, timeframe=timeframe, config=config
-                )
-                resultados[plugin_name] = dados.get(
-                    plugin_name,
+            # Pegar resultados já processados pelos plugins anteriores
+            resultados = {
+                "candles": dados_completos.get(
+                    "candles", {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0}
+                ),
+                "medias_moveis": dados_completos.get(
+                    "medias_moveis",
                     {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0},
-                )
+                ),
+                "price_action": dados_completos.get(
+                    "price_action",
+                    {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0},
+                ),
+                "tendencia": dados_completos.get(
+                    "tendencia",
+                    {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0},
+                ),
+            }
 
             direcao, forca, confianca = self._consolidar_resultados(resultados)
             return {

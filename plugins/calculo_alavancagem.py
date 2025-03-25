@@ -14,36 +14,38 @@ class CalculoAlavancagem(Plugin):
     def executar(self, *args, **kwargs) -> bool:
         resultado_padrao = {"calculo_alavancagem": 3}
         try:
-            dados = kwargs.get("dados")
+            dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
             config = kwargs.get("config", self._config)
 
-            if not all([dados, symbol, timeframe]):
+            if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"Parâmetros necessários não fornecidos")
-                if isinstance(dados, dict):
-                    dados.update(resultado_padrao)
+                if isinstance(dados_completos, dict):
+                    dados_completos.update(resultado_padrao)
                 return True
 
-            if not isinstance(dados, list) or len(dados) < 14:
+            if not isinstance(dados_completos, list) or len(dados_completos) < 14:
                 logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
-                if isinstance(dados, dict):
-                    dados.update(resultado_padrao)
+                if isinstance(dados_completos, dict):
+                    dados_completos.update(resultado_padrao)
                 return True
 
-            alavancagem = self.calcular_alavancagem(dados, symbol, timeframe, config)
-            if isinstance(dados, dict):
-                dados["calculo_alavancagem"] = alavancagem
+            alavancagem = self.calcular_alavancagem(
+                dados_completos, symbol, timeframe, config
+            )
+            if isinstance(dados_completos, dict):
+                dados_completos["calculo_alavancagem"] = alavancagem
             return True
         except Exception as e:
             logger.error(f"Erro ao executar calculo_alavancagem: {e}")
-            if isinstance(dados, dict):
-                dados.update(resultado_padrao)
+            if isinstance(dados_completos, dict):
+                dados_completos.update(resultado_padrao)
             return True
 
-    def calcular_alavancagem(self, dados, symbol, timeframe, config):
+    def calcular_alavancagem(self, dados_completos, symbol, timeframe, config):
         try:
-            dados_extraidos = self._extrair_dados(dados, [2, 3, 4])
+            dados_extraidos = self._extrair_dados(dados_completos, [2, 3, 4])
             high, low, close = (
                 dados_extraidos[2],
                 dados_extraidos[3],

@@ -29,36 +29,36 @@ class AnaliseCandles(Plugin):
             }
         }
         try:
-            dados = kwargs.get("dados")
+            dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
             config = kwargs.get("config", self._config)
 
-            if not all([dados, symbol, timeframe]):
+            if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"Parâmetros necessários não fornecidos")
-                if isinstance(dados, dict):
-                    dados.update(resultado_padrao)
+                if isinstance(dados_completos, dict):
+                    dados_completos.update(resultado_padrao)
                 return True
 
-            if not isinstance(dados, list) or len(dados) < 20:
+            if not isinstance(dados_completos, list) or len(dados_completos) < 20:
                 logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
-                if isinstance(dados, dict):
-                    dados.update(resultado_padrao)
+                if isinstance(dados_completos, dict):
+                    dados_completos.update(resultado_padrao)
                 return True
 
-            sinal = self.gerar_sinal(dados, symbol, timeframe, config)
-            if isinstance(dados, dict):
-                dados["candles"] = sinal
+            sinal = self.gerar_sinal(dados_completos, symbol, timeframe, config)
+            if isinstance(dados_completos, dict):
+                dados_completos["candles"] = sinal
             return True
         except Exception as e:
             logger.error(f"Erro ao executar analise_candles: {e}")
-            if isinstance(dados, dict):
-                dados.update(resultado_padrao)
+            if isinstance(dados_completos, dict):
+                dados_completos.update(resultado_padrao)
             return True
 
-    def gerar_sinal(self, dados, symbol, timeframe, config):
+    def gerar_sinal(self, dados_completos, symbol, timeframe, config):
         try:
-            dados_extraidos = self._extrair_dados(dados, [1, 2, 3, 4, 5])
+            dados_extraidos = self._extrair_dados(dados_completos, [1, 2, 3, 4, 5])
             open_prices, high, low, close, volume = (
                 dados_extraidos[1],
                 dados_extraidos[2],
@@ -87,7 +87,7 @@ class AnaliseCandles(Plugin):
                     "padrao": None,
                 }
 
-            ultimo_candle = dados[-1]
+            ultimo_candle = dados_completos[-1]
             alavancagem = config.get("trading", {}).get(
                 "alavancagem_maxima", 10
             )  # Default 10x se não houver config
@@ -103,8 +103,8 @@ class AnaliseCandles(Plugin):
                     direcao = "ALTA" if padrao_info["sinal"] == "compra" else "BAIXA"
                     stop_loss = padrao_info["stop_loss"](ultimo_candle, alavancagem)
                     take_profit = padrao_info["take_profit"](ultimo_candle, alavancagem)
-                    forca = self._calcular_forca(dados)
-                    confianca = self._calcular_confianca(dados)
+                    forca = self._calcular_forca(dados_completos)
+                    confianca = self._calcular_confianca(dados_completos)
                     return {
                         "direcao": direcao,
                         "forca": forca,
@@ -147,9 +147,9 @@ class AnaliseCandles(Plugin):
             logger.error(f"Erro ao identificar padrões TA-Lib: {e}")
             return {}
 
-    def _calcular_forca(self, dados):
+    def _calcular_forca(self, dados_completos):
         try:
-            dados_extraidos = self._extrair_dados(dados, [4, 5])
+            dados_extraidos = self._extrair_dados(dados_completos, [4, 5])
             close, volume = dados_extraidos[4], dados_extraidos[5]
             if not close.size or not volume.size:
                 return "FRACA"
@@ -161,9 +161,9 @@ class AnaliseCandles(Plugin):
             logger.error(f"Erro ao calcular força: {e}")
             return "FRACA"
 
-    def _calcular_confianca(self, dados):
+    def _calcular_confianca(self, dados_completos):
         try:
-            dados_extraidos = self._extrair_dados(dados, [4, 5])
+            dados_extraidos = self._extrair_dados(dados_completos, [4, 5])
             close, volume = dados_extraidos[4], dados_extraidos[5]
             if not close.size or not volume.size:
                 return 0.0

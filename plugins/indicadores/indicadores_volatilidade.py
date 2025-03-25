@@ -21,10 +21,10 @@ class IndicadoresVolatilidade(Plugin):
         self.gerente = gerente
         self.banco_dados = self.gerente.obter_plugin("banco_dados")
 
-    def _extrair_dados(self, dados, indices):
+    def _extrair_dados(self, dados_completos, indices):
         try:
             valores = {idx: [] for idx in indices}
-            for candle in dados:
+            for candle in dados_completos:
                 if any(
                     candle[i] is None or str(candle[i]).strip() == "" for i in indices
                 ):
@@ -42,12 +42,14 @@ class IndicadoresVolatilidade(Plugin):
                 return {idx: np.array([]) for idx in indices}
             return {idx: np.array(valores[idx], dtype=np.float64) for idx in indices}
         except Exception as e:
-            logger.error(f"Erro ao extrair dados: {e}")
+            logger.error(f"Erro ao extrair dados_completos: {e}")
             return {idx: np.array([]) for idx in indices}
 
-    def calcular_bandas_de_bollinger(self, dados, periodo=20, desvio_padrao=2):
+    def calcular_bandas_de_bollinger(
+        self, dados_completos, periodo=20, desvio_padrao=2
+    ):
         try:
-            dados_extraidos = self._extrair_dados(dados, [4])
+            dados_extraidos = self._extrair_dados(dados_completos, [4])
             close = dados_extraidos[4]
             if len(close) < periodo:
                 logger.warning(
@@ -64,9 +66,9 @@ class IndicadoresVolatilidade(Plugin):
             logger.error(f"Erro ao calcular Bandas de Bollinger: {e}")
             return np.array([]), np.array([]), np.array([])
 
-    def calcular_atr(self, dados, periodo=14):
+    def calcular_atr(self, dados_completos, periodo=14):
         try:
-            dados_extraidos = self._extrair_dados(dados, [2, 3, 4])
+            dados_extraidos = self._extrair_dados(dados_completos, [2, 3, 4])
             high, low, close = (
                 dados_extraidos[2],
                 dados_extraidos[3],
@@ -82,11 +84,11 @@ class IndicadoresVolatilidade(Plugin):
             logger.error(f"Erro ao calcular ATR: {e}")
             return np.array([])
 
-    def calcular_volatilidade(self, dados, periodo=14):
+    def calcular_volatilidade(self, dados_completos, periodo=14):
         try:
-            if len(dados) < periodo:
+            if len(dados_completos) < periodo:
                 return 0.0
-            dados_extraidos = self._extrair_dados(dados, [4])
+            dados_extraidos = self._extrair_dados(dados_completos, [4])
             close = dados_extraidos[4]
             std = talib.STDDEV(close, timeperiod=periodo)
             return (
@@ -98,7 +100,7 @@ class IndicadoresVolatilidade(Plugin):
             logger.error(f"Erro ao calcular volatilidade: {e}")
             return 0.0
 
-    def gerar_sinal(self, dados, indicador, tipo, symbol, timeframe, config):
+    def gerar_sinal(self, dados_completos, indicador, tipo, symbol, timeframe, config):
         resultado_padrao = {
             "direcao": "NEUTRO",
             "forca": "FRACA",
@@ -107,17 +109,19 @@ class IndicadoresVolatilidade(Plugin):
             "take_profit": None,
         }
         try:
-            if len(dados) < 20:
+            if len(dados_completos) < 20:
                 return resultado_padrao
 
-            ultimo_preco = float(dados[-1][4])
-            volatilidade = self.calcular_volatilidade(dados)
+            ultimo_preco = float(dados_completos[-1][4])
+            volatilidade = self.calcular_volatilidade(dados_completos)
             total_indicadores = 0
             confirmacoes_compra = 0
             confirmacoes_venda = 0
 
             if indicador == "bandas_de_bollinger":
-                upper, middle, lower = self.calcular_bandas_de_bollinger(dados)
+                upper, middle, lower = self.calcular_bandas_de_bollinger(
+                    dados_completos
+                )
                 if upper.size and middle.size and lower.size:
                     total_indicadores += 1
                     if tipo == "rompimento_superior" and ultimo_preco > upper[-1]:
@@ -126,10 +130,10 @@ class IndicadoresVolatilidade(Plugin):
                         confirmacoes_venda += 1
 
             elif indicador == "atr":
-                atr = self.calcular_atr(dados)
-                if atr.size and len(dados) > 1:
+                atr = self.calcular_atr(dados_completos)
+                if atr.size and len(dados_completos) > 1:
                     total_indicadores += 1
-                    penultimo_preco = float(dados[-2][4])
+                    penultimo_preco = float(dados_completos[-2][4])
                     if (
                         tipo == "rompimento_alta"
                         and ultimo_preco > penultimo_preco + atr[-1]
@@ -177,24 +181,24 @@ class IndicadoresVolatilidade(Plugin):
             "sinais": {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0},
         }
         try:
-            dados = kwargs.get("dados")
+            dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
 
-            if not all([dados, symbol, timeframe]):
+            if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"Parâmetros necessários não fornecidos")
-                if isinstance(dados, dict):
-                    dados["volatilidade"] = resultado_padrao
+                if isinstance(dados_completos, dict):
+                    dados_completos["volatilidade"] = resultado_padrao
                 return True
 
-            if not isinstance(dados, list) or len(dados) < 20:
+            if not isinstance(dados_completos, list) or len(dados_completos) < 20:
                 logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
-                if isinstance(dados, dict):
-                    dados["volatilidade"] = resultado_padrao
+                if isinstance(dados_completos, dict):
+                    dados_completos["volatilidade"] = resultado_padrao
                 return True
 
-            upper, middle, lower = self.calcular_bandas_de_bollinger(dados)
-            atr = self.calcular_atr(dados)
+            upper, middle, lower = self.calcular_bandas_de_bollinger(dados_completos)
+            atr = self.calcular_atr(dados_completos)
 
             resultado = {
                 "bandas_bollinger": {
@@ -206,12 +210,12 @@ class IndicadoresVolatilidade(Plugin):
                 "sinais": {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0},
             }
 
-            if isinstance(dados, dict):
-                dados["volatilidade"] = resultado
+            if isinstance(dados_completos, dict):
+                dados_completos["volatilidade"] = resultado
 
             if self.banco_dados and hasattr(self.banco_dados, "conn"):
                 try:
-                    timestamp = int(dados[-1][0] / 1000)
+                    timestamp = int(dados_completos[-1][0] / 1000)
                     cursor = self.banco_dados.conn.cursor()
                     cursor.execute(
                         """
@@ -244,6 +248,6 @@ class IndicadoresVolatilidade(Plugin):
             return True
         except Exception as e:
             logger.error(f"Erro ao executar indicadores volatilidade: {e}")
-            if isinstance(dados, dict):
-                dados["volatilidade"] = resultado_padrao
+            if isinstance(dados_completos, dict):
+                dados_completos["volatilidade"] = resultado_padrao
             return True
