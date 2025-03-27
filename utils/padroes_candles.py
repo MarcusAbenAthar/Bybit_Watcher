@@ -2,424 +2,614 @@
 # Descrição: Dicionário com os padrões de candles e suas respectivas funções de stop loss e take profit.
 
 PADROES_CANDLES = {
-    # Padrões 1-10
-    "dois_corvos_alta": {
+    "2crows_alta": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "dois_corvos_baixa": {
+    "2crows_baixa": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "tres_corvos_negros_alta": {
+    "3blackcrows_alta": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
     },
-    "tres_corvos_negros_baixa": {
+    "3blackcrows_baixa": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
     },
-    "tres_dentro_cima_baixo_alta": {
+    "3inside_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "tres_dentro_cima_baixo_baixa": {
+    "3inside_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "golpe_de_tres_linhas_alta": {
+    "3linestrike_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
     },
-    "golpe_de_tres_linhas_baixa": {
+    "3linestrike_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
     },
-    "tres_fora_cima_baixo_alta": {
+    "3outside_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "tres_fora_cima_baixo_baixa": {
+    "3outside_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    # Padrões 11-20
-    "tres_estrelas_no_sul_alta": {
+    "3starsinsouth_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
     },
-    "tres_estrelas_no_sul_baixa": {
+    "3starsinsouth_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
     },
-    "tres_soldados_brancos_alta": {
+    "3whitesoldiers_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "tres_soldados_brancos_baixa": {
+    "3whitesoldiers_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "bebe_abandonado_alta": {
+    "abandonedbaby_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
     },
-    "bebe_abandonado_baixa": {
+    "abandonedbaby_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
     },
-    "avanco_de_bloco_alta": {
+    "advanceblock_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "avanco_de_bloco_baixa": {
+    "advanceblock_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "cinturao_alta": {
+    "belthold_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
     },
-    "cinturao_baixa": {
+    "belthold_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
     },
-    # Padrões 21-30
-    "rompimento_de_alta": {
+    "breakaway_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "rompimento_de_baixa": {
+    "breakaway_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "fechamento_marubozu_alta": {
+    "closingmarubozu_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
     },
-    "fechamento_marubozu_baixa": {
+    "closingmarubozu_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
     },
-    "engolimento_de_bebe_alta": {
+    "concealbabyswall_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "engolimento_de_bebe_baixa": {
+    "concealbabyswall_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "contra_ataque_alta": {
+    "counterattack_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
     },
-    "contra_ataque_baixa": {
+    "counterattack_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
     },
-    "cobertura_de_nuvem_escura_alta": {
+    "darkcloudcover_alta": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "darkcloudcover_baixa": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "cobertura_de_nuvem_escura_baixa": {
-        "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (1.5 / alavancagem),
-    },
-    # Padrões 31-40
     "doji_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
     },
     "doji_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
     },
-    "doji_estrela_alta": {
+    "dojistar_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "doji_estrela_baixa": {
+    "dojistar_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "libelula_doji_alta": {
+    "dragonflydoji_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
     },
-    "libelula_doji_baixa": {
+    "dragonflydoji_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
     },
-    "engolfo_alta": {
+    "engulfing_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    # Padrões 31-40
-    "estrela_da_manha_alta": {
-        "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (2 / alavancagem),
-    },
-    "estrela_da_manha_baixa": {
+    "engulfing_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "estrela_da_noite_alta": {
-        "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (1.5 / alavancagem),
-    },
-    "estrela_da_noite_baixa": {
+    "eveningdojistar_alta": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
     },
-    "lacuna_lateral_lado_branco_alta": {
+    "eveningdojistar_baixa": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
     },
-    "lacuna_lateral_lado_branco_baixa": {
+    "eveningstar_alta": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "lapide_doji_alta": {
+    "eveningstar_baixa": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "lapide_doji_baixa": {
-        "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (1.5 / alavancagem),
-    },
-    "martelo_alta": {
+    "gapsidesidewhite_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
     },
-    "martelo_baixa": {
+    "gapsidesidewhite_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
     },
-    # Padrões 41-50
-    "enforcado_alta": {
+    "gravestonedoji_alta": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "gravestonedoji_baixa": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "enforcado_baixa": {
+    "hammer_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "hammer_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "hangingman_alta": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "hangingman_baixa": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
     },
     "harami_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
     },
     "harami_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
     },
-    "harami_cruzado_alta": {
+    "haramicross_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "harami_cruzado_baixa": {
+    "haramicross_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    "onda_alta_alta": {
+    "highwave_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
     },
-    "onda_alta_baixa": {
+    "highwave_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
     },
     "hikkake_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
     },
     "hikkake_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.05 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (1.5 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
     },
-    # Padrões 51-52
-    "hikkake_modificado_alta": {
+    "hikkakemod_alta": {
         "sinal": "compra",
-        "stop_loss": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
     },
-    "hikkake_modificado_baixa": {
+    "hikkakemod_baixa": {
         "sinal": "venda",
-        "stop_loss": lambda data, alavancagem: data[2]
-        + (data[2] - data[3]) * (0.1 / alavancagem),
-        "take_profit": lambda data, alavancagem: data[3]
-        - (data[2] - data[3]) * (2 / alavancagem),
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "homingpigeon_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "homingpigeon_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "identical3crows_alta": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "identical3crows_baixa": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "inneck_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "inneck_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "invertedhammer_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "invertedhammer_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "kicking_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "kicking_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "kickingbylength_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "kickingbylength_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "ladderbottom_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "ladderbottom_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "longleggeddoji_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "longleggeddoji_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "longline_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "longline_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "marubozu_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "marubozu_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "matchinglow_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "matchinglow_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "mathold_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "mathold_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "morningdojistar_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "morningdojistar_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "morningstar_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "morningstar_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "onneck_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "onneck_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "piercing_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "piercing_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "rickshawman_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "rickshawman_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "risefall3methods_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "risefall3methods_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "separatinglines_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "separatinglines_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "shootingstar_alta": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "shootingstar_baixa": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "shortline_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "shortline_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "spinningtop_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "spinningtop_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "stalledpattern_alta": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "stalledpattern_baixa": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "sticksandwich_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "sticksandwich_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "takuri_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "takuri_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "tasukigap_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "tasukigap_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "thrusting_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "thrusting_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "tristar_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "tristar_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "unique3river_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "unique3river_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "upsidegap2crows_alta": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "upsidegap2crows_baixa": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.1 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (2 / alavancagem),
+    },
+    "xsidegap3methods_alta": {
+        "sinal": "compra",
+        "stop_loss": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (1.5 / alavancagem),
+    },
+    "xsidegap3methods_baixa": {
+        "sinal": "venda",
+        "stop_loss": lambda data, alavancagem: data[2] + (data[2] - data[3]) * (0.05 / alavancagem),
+        "take_profit": lambda data, alavancagem: data[3] - (data[2] - data[3]) * (1.5 / alavancagem),
     },
 }

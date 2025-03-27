@@ -58,17 +58,19 @@ class SinaisPlugin(Plugin):
         ]
         indicadores = {}
         confianca_total = 0
-        alavancagem = dados_completos.get(
-            "calculo_alavancagem", 3
-        )  # Valor padrão se não houver
+        alavancagem = dados_completos.get("calculo_alavancagem", 3)  # Valor padrão
 
         # Coletar resultados dos plugins de análise
         for plugin in plugins_analise:
-            resultado = dados_completos.get("processados", {}).get(
-                plugin, {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0}
-            )
+            resultado = dados_completos.get("processados", {}).get(plugin, {})
             indicadores[plugin] = resultado
-            confianca_total += resultado["confianca"]
+            # Tenta pegar 'confianca' diretamente ou de 'sinais', com padrão 0.0
+            confianca = (
+                resultado.get("confianca", 0.0)
+                if "confianca" in resultado
+                else resultado.get("sinais", {}).get("confianca", 0.0)
+            )
+            confianca_total += confianca
 
         confianca = confianca_total / len(plugins_analise) if plugins_analise else 0.0
         direcao = indicadores.get("calculo_risco", {}).get("direcao", "NEUTRO")

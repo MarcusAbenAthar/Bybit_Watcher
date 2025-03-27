@@ -15,7 +15,7 @@ def carregar_config() -> dict:
 
     # Configurações fixas
     config = {
-        "pares": "XRPUSDT",  # Par padrão ou "All" pra todos os pares
+        "pares": "BTCUSDT",  # Par padrão ou "All" pra todos os pares
         "timeframes": ["1m", "5m", "15m", "30m", "1h", "4h", "1d"],
         "trading": {
             "auto_trade": False,  # Chave on/off pro auto trade

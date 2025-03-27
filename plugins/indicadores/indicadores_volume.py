@@ -1,4 +1,3 @@
-# indicadores_volume.py
 from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 import pandas as pd
 from pandas_ta import volume

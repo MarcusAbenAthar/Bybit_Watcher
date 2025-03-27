@@ -79,12 +79,6 @@ Bybit_Watcher/
 │   ├── padroes_candles.py  # Implementação do padroes_candles
 │   └── sinais_logging.py   # Implementação do sinais_logging
 │
-├── tests/                  # Testes unitários
-│   ├── __init__.py
-│   ├── test_conexao.py
-│   ├── test_banco_dados.py
-│   └── ... (outros testes)
-│
 └── logs/                   # Diretório de logs
     ├── bot/
     │   └── bot_DD-MM-YYYY.log

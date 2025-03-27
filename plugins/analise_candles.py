@@ -10,7 +10,7 @@ logger = get_logger(__name__)
 
 class AnaliseCandles(Plugin):
     PLUGIN_NAME = "analise_candles"
-    PLUGIN_TYPE = "adicional"
+    PLUGIN_TYPE = "essencial"
 
     def __init__(self, gerente=None):
         super().__init__(gerente=gerente)
@@ -23,8 +23,6 @@ class AnaliseCandles(Plugin):
                 "direcao": "NEUTRO",
                 "forca": "FRACA",
                 "confianca": 0.0,
-                "stop_loss": None,
-                "take_profit": None,
                 "padrao": None,
             }
         }
@@ -40,13 +38,18 @@ class AnaliseCandles(Plugin):
                     dados_completos.update(resultado_padrao)
                 return True
 
-            if not isinstance(dados_completos, list) or len(dados_completos) < 20:
+            klines = dados_completos.get("crus", [])
+            logger.debug(
+                f"Verificando klines para {symbol} - {timeframe}, tamanho: {len(klines)}"
+            )
+            if not isinstance(klines, list) or len(klines) < 20:
                 logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
                 if isinstance(dados_completos, dict):
                     dados_completos.update(resultado_padrao)
                 return True
 
-            sinal = self.gerar_sinal(dados_completos, symbol, timeframe, config)
+            sinal = self.gerar_sinal(klines, symbol, timeframe, config)
+            logger.info(f"Sinal gerado para {symbol} - {timeframe}: {sinal}")
             if isinstance(dados_completos, dict):
                 dados_completos["candles"] = sinal
             return True
@@ -58,6 +61,7 @@ class AnaliseCandles(Plugin):
 
     def gerar_sinal(self, dados_completos, symbol, timeframe, config):
         try:
+            logger.debug(f"Iniciando geração de sinal para {symbol} - {timeframe}")
             dados_extraidos = self._extrair_dados(dados_completos, [1, 2, 3, 4, 5])
             open_prices, high, low, close, volume = (
                 dados_extraidos[1],
@@ -66,60 +70,60 @@ class AnaliseCandles(Plugin):
                 dados_extraidos[4],
                 dados_extraidos[5],
             )
+            logger.debug(f"Dados extraídos: {len(close)} candles")
             if len(close) < 20:
+                logger.warning(f"Menos de 20 candles para {symbol} - {timeframe}")
                 return {
                     "direcao": "NEUTRO",
                     "forca": "FRACA",
                     "confianca": 0.0,
-                    "stop_loss": None,
-                    "take_profit": None,
                     "padrao": None,
                 }
 
             padroes = self._identificar_padroes_talib(open_prices, high, low, close)
+            logger.debug(f"Padrões identificados: {list(padroes.keys())}")
             if not padroes:
+                logger.debug(f"Nenhum padrão encontrado para {symbol} - {timeframe}")
                 return {
                     "direcao": "NEUTRO",
                     "forca": "FRACA",
                     "confianca": 0.0,
-                    "stop_loss": None,
-                    "take_profit": None,
                     "padrao": None,
                 }
 
-            ultimo_candle = dados_completos[-1]
-            alavancagem = config.get("trading", {}).get(
-                "alavancagem_maxima", 10
-            )  # Default 10x se não houver config
+            # Verificar padrão no candle anterior
             for padrao_nome, resultado in padroes.items():
-                if resultado[-1] != 0:
+                if len(resultado) >= 2 and resultado[-2] != 0:  # Candle anterior
                     chave_padrao = (
-                        f"{padrao_nome}_{'alta' if resultado[-1] > 0 else 'baixa'}"
+                        f"{padrao_nome}_{'alta' if resultado[-2] > 0 else 'baixa'}"
                     )
                     if chave_padrao not in PADROES_CANDLES:
+                        logger.debug(
+                            f"Padrão {chave_padrao} não mapeado em PADROES_CANDLES"
+                        )
                         continue
 
                     padrao_info = PADROES_CANDLES[chave_padrao]
                     direcao = "ALTA" if padrao_info["sinal"] == "compra" else "BAIXA"
-                    stop_loss = padrao_info["stop_loss"](ultimo_candle, alavancagem)
-                    take_profit = padrao_info["take_profit"](ultimo_candle, alavancagem)
+                    logger.info(
+                        f"Padrão {padrao_nome} detectado no candle anterior para {symbol} - {timeframe}"
+                    )
                     forca = self._calcular_forca(dados_completos)
                     confianca = self._calcular_confianca(dados_completos)
                     return {
                         "direcao": direcao,
                         "forca": forca,
                         "confianca": confianca,
-                        "stop_loss": stop_loss,
-                        "take_profit": take_profit,
                         "padrao": padrao_nome,
                     }
 
+            logger.debug(
+                f"Nenhum padrão ativo encontrado no candle anterior para {symbol} - {timeframe}"
+            )
             return {
                 "direcao": "NEUTRO",
                 "forca": "FRACA",
                 "confianca": 0.0,
-                "stop_loss": None,
-                "take_profit": None,
                 "padrao": None,
             }
         except Exception as e:
@@ -128,8 +132,6 @@ class AnaliseCandles(Plugin):
                 "direcao": "NEUTRO",
                 "forca": "FRACA",
                 "confianca": 0.0,
-                "stop_loss": None,
-                "take_profit": None,
                 "padrao": None,
             }
 
@@ -154,7 +156,9 @@ class AnaliseCandles(Plugin):
             if not close.size or not volume.size:
                 return "FRACA"
             variacao_preco = abs(close[-1] - close[-2]) / close[-2]
-            volume_relativo = volume[-1] / np.mean(volume)
+            volume_relativo = (
+                volume[-1] / np.mean(volume[-10:]) if len(volume) >= 10 else 1.0
+            )
             forca = variacao_preco * volume_relativo
             return "FORTE" if forca > 0.5 else "MÉDIA" if forca > 0.2 else "FRACA"
         except Exception as e:
@@ -165,14 +169,23 @@ class AnaliseCandles(Plugin):
         try:
             dados_extraidos = self._extrair_dados(dados_completos, [4, 5])
             close, volume = dados_extraidos[4], dados_extraidos[5]
-            if not close.size or not volume.size:
+            if not close.size or not volume.size or np.mean(volume[-10:]) == 0:
                 return 0.0
-            volatilidade = np.std(close)
-            volume_medio = np.mean(volume)
-            confianca = min(
-                max((volatilidade * volume_medio) / (100 * volume_medio), 0.0), 1.0
+            volatilidade = (
+                np.std(close[-10:]) / np.mean(close[-10:]) if len(close) >= 10 else 0.0
             )
-            return confianca * 100
+            volume_relativo = (
+                volume[-1] / np.mean(volume[-10:]) if len(volume) >= 10 else 1.0
+            )
+            confianca = min(max(volatilidade * volume_relativo * 100, 0.0), 100.0)
+            return round(confianca, 2)
         except Exception as e:
             logger.error(f"Erro ao calcular confiança: {e}")
             return 0.0
+
+    def _extrair_dados(self, dados, indices):
+        try:
+            return {i: np.array([d[i] for d in dados]) for i in indices}
+        except Exception as e:
+            logger.error(f"Erro ao extrair dados: {e}")
+            return {i: np.array([]) for i in indices}
