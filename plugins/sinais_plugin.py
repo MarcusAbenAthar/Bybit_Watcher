@@ -74,7 +74,7 @@ class SinaisPlugin(Plugin):
 
         confianca = confianca_total / len(plugins_analise) if plugins_analise else 0.0
         direcao = indicadores.get("calculo_risco", {}).get("direcao", "NEUTRO")
-        forca = "MÉDIA"  # Pode ser ajustado conforme lógica adicional
+        forca = "Média"  # Pode ser ajustado conforme lógica adicional
 
         return {
             "direcao": direcao,

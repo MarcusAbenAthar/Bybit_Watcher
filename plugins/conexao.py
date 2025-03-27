@@ -26,7 +26,7 @@ class Conexao(Plugin):
         self.exchange = None
         self._mercado = os.getenv("BYBIT_MARKET", "linear")
         self._pares_usdt = []
-        self._gerente = gerente  # Armazena se fornecido, mas não é usado aqui
+        self._gerente = gerente  # Armazena se fornecido
 
     def inicializar(self, config: dict) -> bool:
         """
@@ -90,6 +90,17 @@ class Conexao(Plugin):
                 logger.debug(
                     f"Klines obtidos para {symbol} - {timeframe}, tamanho: {len(klines)}"
                 )
+                # Passar os klines pro gerenciador_banco
+                if self._gerente:
+                    gerenciador_banco = self._gerente.obter_plugin(
+                        "plugins.gerenciadores.gerenciador_banco"
+                    )
+                    if gerenciador_banco:
+                        gerenciador_banco.executar(
+                            {"symbol": symbol, "timeframe": timeframe, "klines": klines}
+                        )
+                    else:
+                        logger.error("Plugin gerenciador_banco não encontrado")
             return True
         except Exception as e:
             logger.error(f"Erro ao executar conexao: {e}")

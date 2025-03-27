@@ -29,6 +29,30 @@ Path("logs").mkdir(exist_ok=True)
 os.makedirs("logs/erros", exist_ok=True)
 os.makedirs("logs/bot", exist_ok=True)
 os.makedirs("logs/sinais", exist_ok=True)
+os.makedirs("logs/banco", exist_ok=True)
+
+# Definir níveis personalizados
+DATA_LEVEL = 25  # Entre INFO (20) e WARNING (30)
+DATA_DEBUG_LEVEL = 15  # Entre DEBUG (10) e INFO (20)
+
+# Adicionar níveis personalizados ao logging
+logging.addLevelName(DATA_LEVEL, "DATA")
+logging.addLevelName(DATA_DEBUG_LEVEL, "DATA-DEBUG")
+
+
+# Funções helper pra usar os novos níveis
+def data(self, message, *args, **kwargs):
+    if self.isEnabledFor(DATA_LEVEL):
+        self._log(DATA_LEVEL, message, args, **kwargs)
+
+
+def data_debug(self, message, *args, **kwargs):
+    if self.isEnabledFor(DATA_DEBUG_LEVEL):
+        self._log(DATA_DEBUG_LEVEL, message, args, **kwargs)
+
+
+logging.Logger.data = data
+logging.Logger.data_debug = data_debug
 
 # Configurações Base
 BASE_CONFIG = {
@@ -63,7 +87,7 @@ BASE_CONFIG = {
             "maxBytes": 10485760,  # 10MB
             "backupCount": 10,
             "level": "DEBUG",
-            "encoding": "utf-8",  # Adicionado
+            "encoding": "utf-8",
         },
         # Handler para sinais de trading
         "sinais": {
@@ -73,7 +97,7 @@ BASE_CONFIG = {
             "maxBytes": 10485760,  # 10MB
             "backupCount": 10,
             "level": "INFO",
-            "encoding": "utf-8",  # Adicionado
+            "encoding": "utf-8",
         },
         # Handler para erros
         "erros": {
@@ -83,7 +107,17 @@ BASE_CONFIG = {
             "maxBytes": 10485760,  # 10MB
             "backupCount": 10,
             "level": "ERROR",
-            "encoding": "utf-8",  # Adicionado
+            "encoding": "utf-8",
+        },
+        # Novo handler para logs do banco
+        "banco": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": f"logs/banco/banco_{datetime.now():%d-%m-%Y}.log",
+            "formatter": "detalhado",
+            "maxBytes": 10485760,  # 10MB
+            "backupCount": 10,
+            "level": "DATA-DEBUG",  # Inclui DATA e DATA-DEBUG
+            "encoding": "utf-8",
         },
     },
     "loggers": {
@@ -105,6 +139,12 @@ BASE_CONFIG = {
         "plugins.gerente_plugin": {
             "level": "DEBUG",
             "handlers": ["console", "arquivo"],
+            "propagate": False,
+        },
+        # Novo logger específico para banco_dados
+        "plugins.banco_dados": {
+            "level": "DATA-DEBUG",  # Inclui DATA e DATA-DEBUG
+            "handlers": ["banco", "console"],
             "propagate": False,
         },
     },
@@ -138,5 +178,9 @@ def get_logger(nome: str) -> logging.Logger:
     """
     return logging.getLogger(nome)
 
+
+# Executa a configuração se for o ponto de entrada
+if __name__ == "__main__":
+    configurar_logging()
 
 # fim do arquivo logging_config.py

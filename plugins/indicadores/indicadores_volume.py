@@ -18,7 +18,7 @@ class IndicadoresVolume(Plugin):
         self.nome = self.PLUGIN_NAME
         self.config = config or {}
         self.gerente = gerente
-        self.banco_dados = self.gerente.obter_plugin("banco_dados")
+        self.banco_dados = self.gerente.obter_plugin("plugins.banco_dados")
         logger.debug("IndicadoresVolume inicializado")
 
     def _extrair_dados(self, dados_crus, indices):
