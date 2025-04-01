@@ -11,6 +11,9 @@ class PriceAction(Plugin):
     PLUGIN_TYPE = "essencial"
 
     def executar(self, *args, **kwargs) -> bool:
+        logger.debug(
+            f"Iniciando execução do PriceAction para {kwargs.get('symbol')} - {kwargs.get('timeframe')}"
+        )
         resultado_padrao = {
             "price_action": {
                 "direcao": "NEUTRO",
@@ -19,32 +22,80 @@ class PriceAction(Plugin):
                 "padrao": None,
             }
         }
-        try:
-            dados_completos = kwargs.get("dados_completos")
-            symbol = kwargs.get("symbol")
-            timeframe = kwargs.get("timeframe")
 
-            if not all([dados_completos, symbol, timeframe]):
-                logger.error(f"Parâmetros necessários não fornecidos")
-                if isinstance(dados_completos, dict):
-                    dados_completos.update(resultado_padrao)
-                return True
+        # Obter parâmetros com valores padrão
+        dados_completos = kwargs.get("dados_completos", {})
+        symbol = kwargs.get("symbol", "BTCUSDT")
+        timeframe = kwargs.get("timeframe", "1m")
+        min_klines = 20  # Requisito mínimo de klines
 
-            if not isinstance(dados_completos, list) or len(dados_completos) < 20:
-                logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
-                if isinstance(dados_completos, dict):
-                    dados_completos.update(resultado_padrao)
-                return True
-
-            sinal = self.gerar_sinal(dados_completos)
-            if isinstance(dados_completos, dict):
-                dados_completos["price_action"] = sinal
-            return True
-        except Exception as e:
-            logger.error(f"Erro ao executar price_action: {e}")
+        # Validação inicial dos parâmetros
+        if not dados_completos or not symbol or not timeframe:
+            logger.error(
+                f"Parâmetros necessários não fornecidos: dados_completos={bool(dados_completos)}, symbol={symbol}, timeframe={timeframe}"
+            )
             if isinstance(dados_completos, dict):
                 dados_completos.update(resultado_padrao)
             return True
+
+        # Verificar se dados_completos é um dicionário e contém klines suficientes
+        if not isinstance(dados_completos, dict) or "crus" not in dados_completos:
+            logger.warning(
+                f"Dados inválidos para {symbol} - {timeframe}: dados_completos não é dict ou não contém 'crus'"
+            )
+            if isinstance(dados_completos, dict):
+                dados_completos.update(resultado_padrao)
+            return True
+
+        klines = dados_completos.get("crus", [])
+        if len(klines) < min_klines:
+            logger.warning(
+                f"Dados insuficientes para {symbol} - {timeframe}: {len(klines)} klines, mínimo necessário: {min_klines}"
+            )
+            if isinstance(dados_completos, dict):
+                dados_completos.update(resultado_padrao)
+            return True
+
+        try:
+            # Gerar sinal de price action
+            sinal = self.gerar_sinal(klines)
+            logger.debug(
+                f"Sinal de Price Action gerado para {symbol} - {timeframe}: {sinal}"
+            )
+            dados_completos["price_action"] = sinal
+            logger.info(f"Price Action concluído para {symbol} - {timeframe}: {sinal}")
+            return True
+        except Exception as e:
+            logger.error(
+                f"Erro ao executar PriceAction para {symbol} - {timeframe}: {e}"
+            )
+            if isinstance(dados_completos, dict):
+                dados_completos.update(resultado_padrao)
+            return True
+
+    def _extrair_dados(self, dados_completos, indices):
+        try:
+            valores = {idx: [] for idx in indices}
+            for candle in dados_completos:
+                if any(
+                    candle[i] is None or str(candle[i]).strip() == "" for i in indices
+                ):
+                    continue
+                try:
+                    for idx in indices:
+                        valor = float(
+                            str(candle[idx]).replace("e", "").replace("E", "")
+                        )
+                        valores[idx].append(valor)
+                except (ValueError, TypeError):
+                    continue
+            if not all(valores.values()):
+                logger.warning(f"Dados insuficientes ou inválidos em {self.nome}")
+                return {idx: np.array([]) for idx in indices}
+            return {idx: np.array(valores[idx], dtype=np.float64) for idx in indices}
+        except Exception as e:
+            logger.error(f"Erro ao extrair dados em {self.nome}: {e}")
+            return {idx: np.array([]) for idx in indices}
 
     def gerar_sinal(self, dados_completos):
         try:

@@ -1,6 +1,7 @@
 # outros_indicadores.py
-"""Plugin para calcular indicadores adicionais como Ichimoku, Fibonacci e Pivot Points."""
+# Plugin para cálculo de indicadores adicionais (Ichimoku, Fibonacci, Pivot Points)
 
+from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 from utils.logging_config import get_logger
 import numpy as np
 import talib
@@ -10,117 +11,51 @@ logger = get_logger(__name__)
 
 
 class OutrosIndicadores(Plugin):
-    """Plugin para indicadores adicionais."""
-
     PLUGIN_NAME = "outros_indicadores"
     PLUGIN_TYPE = "indicador"
 
-    def executar(self, *args, **kwargs) -> bool:
-        """
-        Executa o cálculo de indicadores adicionais e gera sinal.
-
-        Args:
-            dados_completos: Lista de candles [timestamp, open, high, low, close, volume]
-            symbol: Símbolo do par (ex.: "XRPUSDT")
-            timeframe: Timeframe analisado (ex.: "1h")
-
-        Returns:
-            bool: True se executado com sucesso, mesmo com erros tratados
-        """
-        resultado_padrao = {
-            "outros_indicadores": {
-                "ichimoku": {
-                    "tenkan_sen": None,
-                    "kijun_sen": None,
-                    "senkou_span_a": None,
-                    "senkou_span_b": None,
-                },
-                "fibonacci": {"23.6%": None, "38.2%": None, "50%": None, "61.8%": None},
-                "pivot_points": {"PP": None, "R1": None, "S1": None},
-                "direcao": "NEUTRO",
-                "forca": "FRACA",
-                "confianca": 0.0,
-            }
+    def __init__(self, gerente: GerentePlugin):
+        super().__init__(gerente=gerente)
+        self._gerente = gerente
+        self.config = {
+            "ichimoku_tenkan_periodo": 9,
+            "ichimoku_kijun_periodo": 26,
+            "ichimoku_senkou_b_periodo": 52,
         }
+        logger.debug(f"{self.nome} inicializado")
+
+    def _extrair_dados(self, dados_completos, indices):
         try:
-            dados_completos = kwargs.get("dados_completos")
-            symbol = kwargs.get("symbol")
-            timeframe = kwargs.get("timeframe")
-
-            if not all([dados_completos, symbol, timeframe]):
-                logger.error("Parâmetros necessários não fornecidos")
-                if isinstance(dados_completos, dict):
-                    dados_completos.update(resultado_padrao)
-                return True
-
-            if (
-                not isinstance(dados_completos, list) or len(dados_completos) < 52
-            ):  # Ichimoku exige 52 períodos
-                logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
-                if isinstance(dados_completos, dict):
-                    dados_completos.update(resultado_padrao)
-                return True
-
-            indicadores = self._calcular_indicadores(dados_completos)
-            sinal = self._gerar_sinal(dados_completos)
-            indicadores.update(sinal)
-
-            if isinstance(dados_completos, dict):
-                dados_completos["outros_indicadores"] = indicadores
-            logger.debug(f"Indicadores calculados para {symbol} - {timeframe}")
-            return True
+            valores = {idx: [] for idx in indices}
+            for candle in dados_completos:
+                if any(
+                    candle[i] is None or str(candle[i]).strip() == "" for i in indices
+                ):
+                    continue
+                try:
+                    for idx in indices:
+                        valor = float(
+                            str(candle[idx]).replace("e", "").replace("E", "")
+                        )
+                        valores[idx].append(valor)
+                except (ValueError, TypeError):
+                    continue
+            if not all(valores.values()):
+                logger.warning(f"Dados insuficientes ou inválidos em {self.nome}")
+                return {idx: np.array([]) for idx in indices}
+            return {idx: np.array(valores[idx], dtype=np.float64) for idx in indices}
         except Exception as e:
-            logger.error(f"Erro ao executar outros_indicadores: {e}")
-            if isinstance(dados_completos, dict):
-                dados_completos.update(resultado_padrao)
-            return True
-
-    def _calcular_indicadores(self, dados_completos):
-        """Calcula Ichimoku, Fibonacci e Pivot Points."""
-        ichimoku = self._calcular_ichimoku(dados_completos)
-        fibonacci = self._calcular_fibonacci(dados_completos)
-        pivot_points = self._calcular_pivot_points(dados_completos)
-        return {
-            "ichimoku": {
-                "tenkan_sen": (
-                    float(ichimoku["tenkan_sen"][-1])
-                    if ichimoku["tenkan_sen"].size
-                    else None
-                ),
-                "kijun_sen": (
-                    float(ichimoku["kijun_sen"][-1])
-                    if ichimoku["kijun_sen"].size
-                    else None
-                ),
-                "senkou_span_a": (
-                    float(ichimoku["senkou_span_a"][-1])
-                    if ichimoku["senkou_span_a"].size
-                    else None
-                ),
-                "senkou_span_b": (
-                    float(ichimoku["senkou_span_b"][-1])
-                    if ichimoku["senkou_span_b"].size
-                    else None
-                ),
-            },
-            "fibonacci": {
-                k: float(v) if v is not None else None for k, v in fibonacci.items()
-            },
-            "pivot_points": {
-                k: float(v) if v is not None else None for k, v in pivot_points.items()
-            },
-        }
+            logger.error(f"Erro ao extrair dados em {self.nome}: {e}")
+            return {idx: np.array([]) for idx in indices}
 
     def _calcular_ichimoku(self, dados_completos):
-        """Calcula componentes do Ichimoku Cloud."""
         try:
-            high = np.array(
-                [float(candle[2]) for candle in dados_completos], dtype=np.float64
-            )
-            low = np.array(
-                [float(candle[3]) for candle in dados_completos], dtype=np.float64
-            )
-            if len(high) < 52:
+            dados_extraidos = self._extrair_dados(dados_completos, [2, 3])
+            high, low = dados_extraidos[2], dados_extraidos[3]
+            if len(high) < self.config["ichimoku_senkou_b_periodo"]:
+                logger.warning(
+                    f"Dados insuficientes para Ichimoku: {len(high)}/{self.config['ichimoku_senkou_b_periodo']}"
+                )
                 return {
                     "tenkan_sen": np.array([]),
                     "kijun_sen": np.array([]),
@@ -128,14 +63,17 @@ class OutrosIndicadores(Plugin):
                     "senkou_span_b": np.array([]),
                 }
             tenkan_sen = (
-                talib.MAX(high, timeperiod=9) + talib.MIN(low, timeperiod=9)
+                talib.MAX(high, timeperiod=self.config["ichimoku_tenkan_periodo"])
+                + talib.MIN(low, timeperiod=self.config["ichimoku_tenkan_periodo"])
             ) / 2
             kijun_sen = (
-                talib.MAX(high, timeperiod=26) + talib.MIN(low, timeperiod=26)
+                talib.MAX(high, timeperiod=self.config["ichimoku_kijun_periodo"])
+                + talib.MIN(low, timeperiod=self.config["ichimoku_kijun_periodo"])
             ) / 2
             senkou_span_a = (tenkan_sen + kijun_sen) / 2
             senkou_span_b = (
-                talib.MAX(high, timeperiod=52) + talib.MIN(low, timeperiod=52)
+                talib.MAX(high, timeperiod=self.config["ichimoku_senkou_b_periodo"])
+                + talib.MIN(low, timeperiod=self.config["ichimoku_senkou_b_periodo"])
             ) / 2
             return {
                 "tenkan_sen": tenkan_sen,
@@ -153,14 +91,9 @@ class OutrosIndicadores(Plugin):
             }
 
     def _calcular_fibonacci(self, dados_completos):
-        """Calcula níveis de Fibonacci Retracement."""
         try:
-            high = np.array(
-                [float(candle[2]) for candle in dados_completos], dtype=np.float64
-            )
-            low = np.array(
-                [float(candle[3]) for candle in dados_completos], dtype=np.float64
-            )
+            dados_extraidos = self._extrair_dados(dados_completos, [2, 3])
+            high, low = dados_extraidos[2], dados_extraidos[3]
             if not high.size or not low.size:
                 return {"23.6%": None, "38.2%": None, "50%": None, "61.8%": None}
             maximo, minimo = float(np.max(high)), float(np.min(low))
@@ -176,7 +109,6 @@ class OutrosIndicadores(Plugin):
             return {"23.6%": None, "38.2%": None, "50%": None, "61.8%": None}
 
     def _calcular_pivot_points(self, dados_completos):
-        """Calcula Pivot Points do último candle."""
         try:
             if not dados_completos:
                 return {"PP": None, "R1": None, "S1": None}
@@ -190,71 +122,85 @@ class OutrosIndicadores(Plugin):
             logger.error(f"Erro ao calcular Pivot Points: {e}")
             return {"PP": None, "R1": None, "S1": None}
 
-    def _gerar_sinal(self, dados_completos):
-        """Gera sinal baseado nos indicadores calculados."""
+    def executar(self, *args, **kwargs) -> bool:
+        resultado_padrao = {
+            "ichimoku": {
+                "tenkan_sen": None,
+                "kijun_sen": None,
+                "senkou_span_a": None,
+                "senkou_span_b": None,
+            },
+            "fibonacci": {"23.6%": None, "38.2%": None, "50%": None, "61.8%": None},
+            "pivot_points": {"PP": None, "R1": None, "S1": None},
+        }
         try:
-            ultimo_preco = float(dados_completos[-1][4])
-            ichimoku = self._calcular_ichimoku(dados_completos)
-            fibonacci = self._calcular_fibonacci(dados_completos)
-            pivot_points = self._calcular_pivot_points(dados_completos)
+            dados_completos = kwargs.get("dados_completos")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
 
-            confirmacoes_alta = 0
-            confirmacoes_baixa = 0
-            total = 0
+            if not all([dados_completos, symbol, timeframe]):
+                logger.error(f"Parâmetros necessários não fornecidos em {self.nome}")
+                if isinstance(dados_completos, dict):
+                    dados_completos["outros"] = resultado_padrao
+                return True
 
-            if ichimoku["tenkan_sen"].size:
-                total += 1
-                if (
-                    ichimoku["tenkan_sen"][-1] > ichimoku["kijun_sen"][-1]
-                    and ultimo_preco > ichimoku["senkou_span_a"][-1]
-                ):
-                    confirmacoes_alta += 1
-                elif (
-                    ichimoku["tenkan_sen"][-1] < ichimoku["kijun_sen"][-1]
-                    and ultimo_preco < ichimoku["senkou_span_a"][-1]
-                ):
-                    confirmacoes_baixa += 1
-
-            if fibonacci["50%"] is not None:
-                total += 1
-                if (
-                    ultimo_preco > fibonacci["50%"]
-                    and ultimo_preco <= fibonacci["61.8%"]
-                ):
-                    confirmacoes_alta += 1
-                elif (
-                    ultimo_preco < fibonacci["38.2%"]
-                    and ultimo_preco >= fibonacci["23.6%"]
-                ):
-                    confirmacoes_baixa += 1
-
-            if pivot_points["PP"] is not None:
-                total += 1
-                if (
-                    ultimo_preco > pivot_points["PP"]
-                    and ultimo_preco <= pivot_points["R1"]
-                ):
-                    confirmacoes_alta += 1
-                elif (
-                    ultimo_preco < pivot_points["PP"]
-                    and ultimo_preco >= pivot_points["S1"]
-                ):
-                    confirmacoes_baixa += 1
-
-            confianca = (
-                max(confirmacoes_alta, confirmacoes_baixa) / total * 100
-                if total > 0
-                else 0.0
+            klines = (
+                dados_completos.get("crus", [])
+                if isinstance(dados_completos, dict)
+                else dados_completos
             )
-            direcao = (
-                "ALTA"
-                if confirmacoes_alta > confirmacoes_baixa
-                else "BAIXA" if confirmacoes_baixa > confirmacoes_alta else "NEUTRO"
-            )
-            forca = (
-                "FORTE" if confianca >= 80 else "MÉDIA" if confianca >= 50 else "FRACA"
-            )
-            return {"direcao": direcao, "forca": forca, "confianca": confianca}
+            if (
+                not isinstance(klines, list) or len(klines) < 52
+            ):  # Ichimoku exige 52 períodos
+                logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
+                if isinstance(dados_completos, dict):
+                    dados_completos["outros"] = resultado_padrao
+                return True
+
+            ichimoku = self._calcular_ichimoku(klines)
+            fibonacci = self._calcular_fibonacci(klines)
+            pivot_points = self._calcular_pivot_points(klines)
+
+            resultado = {
+                "ichimoku": {
+                    "tenkan_sen": (
+                        float(ichimoku["tenkan_sen"][-1])
+                        if ichimoku["tenkan_sen"].size
+                        else None
+                    ),
+                    "kijun_sen": (
+                        float(ichimoku["kijun_sen"][-1])
+                        if ichimoku["kijun_sen"].size
+                        else None
+                    ),
+                    "senkou_span_a": (
+                        float(ichimoku["senkou_span_a"][-1])
+                        if ichimoku["senkou_span_a"].size
+                        else None
+                    ),
+                    "senkou_span_b": (
+                        float(ichimoku["senkou_span_b"][-1])
+                        if ichimoku["senkou_span_b"].size
+                        else None
+                    ),
+                },
+                "fibonacci": {
+                    k: float(v) if v is not None else None for k, v in fibonacci.items()
+                },
+                "pivot_points": {
+                    k: float(v) if v is not None else None
+                    for k, v in pivot_points.items()
+                },
+            }
+
+            if isinstance(dados_completos, dict):
+                dados_completos["outros"] = resultado
+                logger.debug(
+                    f"Indicadores adicionais calculados para {symbol} - {timeframe}"
+                )
+            return True
         except Exception as e:
-            logger.error(f"Erro ao gerar sinal: {e}")
-            return {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0}
+            logger.error(f"Erro ao executar {self.nome}: {e}")
+            if isinstance(dados_completos, dict):
+                dados_completos["outros"] = resultado_padrao
+            return True

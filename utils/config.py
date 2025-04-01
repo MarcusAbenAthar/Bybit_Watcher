@@ -37,7 +37,10 @@ def carregar_config() -> dict:
             "user": os.getenv("DB_USER"),
             "password": os.getenv("DB_PASSWORD"),
         },
-        "logging": {"level": "INFO"},  # Nível de log padrão
+        "logging": {
+            "level": "INFO",  # Nível de log padrão
+            "debug_enabled": False,  # Chave on/off para debug
+        },
     }
 
     # Processa os pares

@@ -30,6 +30,18 @@ os.makedirs("logs/erros", exist_ok=True)
 os.makedirs("logs/bot", exist_ok=True)
 os.makedirs("logs/sinais", exist_ok=True)
 
+# Definir nível personalizado EXECUÇÃO (entre DEBUG=10 e INFO=20)
+EXECUTION_LEVEL = 15
+logging.addLevelName(EXECUTION_LEVEL, "EXECUÇÃO")
+
+
+def execution(self, message, *args, **kwargs):
+    if self.isEnabledFor(EXECUTION_LEVEL):
+        self._log(EXECUTION_LEVEL, message, args, **kwargs)
+
+
+logging.Logger.execution = execution
+
 # Configurações Base
 BASE_CONFIG = {
     "version": 1,
@@ -49,23 +61,20 @@ BASE_CONFIG = {
         },
     },
     "handlers": {
-        # Handler para console
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "detalhado",
-            "level": "DEBUG",
+            "level": EXECUTION_LEVEL,  # Garante que EXECUÇÃO seja visível
         },
-        # Handler para log geral
         "arquivo": {
             "class": "logging.handlers.RotatingFileHandler",
             "filename": f"logs/bot/bot_{datetime.now():%d-%m-%Y}.log",
             "formatter": "detalhado",
             "maxBytes": 10485760,  # 10MB
             "backupCount": 10,
-            "level": "DEBUG",
-            "encoding": "utf-8",  # Adicionado
+            "level": EXECUTION_LEVEL,  # Garante que EXECUÇÃO seja visível
+            "encoding": "utf-8",
         },
-        # Handler para sinais de trading
         "sinais": {
             "class": "logging.handlers.RotatingFileHandler",
             "filename": f"logs/sinais/sinais_{datetime.now():%d-%m-%Y}.log",
@@ -73,9 +82,8 @@ BASE_CONFIG = {
             "maxBytes": 10485760,  # 10MB
             "backupCount": 10,
             "level": "INFO",
-            "encoding": "utf-8",  # Adicionado
+            "encoding": "utf-8",
         },
-        # Handler para erros
         "erros": {
             "class": "logging.handlers.RotatingFileHandler",
             "filename": f"logs/erros/erros_{datetime.now():%d-%m-%Y}.log",
@@ -83,27 +91,23 @@ BASE_CONFIG = {
             "maxBytes": 10485760,  # 10MB
             "backupCount": 10,
             "level": "ERROR",
-            "encoding": "utf-8",  # Adicionado
+            "encoding": "utf-8",
         },
     },
     "loggers": {
-        # Logger raiz
         "": {
             "handlers": ["console", "arquivo", "erros"],
-            "level": "DEBUG",
+            "level": EXECUTION_LEVEL,  # Nível mínimo para raiz
             "propagate": True,
         },
-        # Logger específico para sinais
         "sinais": {"handlers": ["sinais"], "level": "INFO", "propagate": False},
-        # Loggers específicos para cada plugin
         "plugins": {
-            "level": "DEBUG",
+            "level": EXECUTION_LEVEL,  # Garante EXECUÇÃO para plugins
             "handlers": ["console", "arquivo", "erros"],
             "propagate": False,
         },
-        # Logger específico para gerente_plugin
         "plugins.gerente_plugin": {
-            "level": "DEBUG",
+            "level": EXECUTION_LEVEL,
             "handlers": ["console", "arquivo"],
             "propagate": False,
         },
@@ -111,16 +115,32 @@ BASE_CONFIG = {
 }
 
 
-def configurar_logging():
-    """Configura o sistema de logging."""
+def configurar_logging(config=None):
+    """Configura o sistema de logging com base no config fornecido.
+
+    Args:
+        config (dict, optional): Configurações do sistema, incluindo "logging.debug_enabled".
+    """
     try:
+        debug_enabled = (
+            config.get("logging", {}).get("debug_enabled", False) if config else False
+        )
+        level = (
+            logging.DEBUG if debug_enabled else EXECUTION_LEVEL
+        )  # Usa EXECUTION como mínimo
+
+        # Ajusta os níveis dos loggers
+        BASE_CONFIG["loggers"][""]["level"] = level
+        BASE_CONFIG["loggers"]["plugins"]["level"] = level
+        BASE_CONFIG["loggers"]["plugins.gerente_plugin"]["level"] = level
+
         logging.config.dictConfig(BASE_CONFIG)
         logger = logging.getLogger(__name__)
-        # Bloqueia completamente logs de bibliotecas externas
         logging.getLogger("urllib3").setLevel(logging.CRITICAL)
         logging.getLogger("ccxt").setLevel(logging.CRITICAL)
         logging.getLogger("requests").setLevel(logging.CRITICAL)
         logger.info("Sistema de logging inicializado")
+        return logger
     except Exception as e:
         print(f"Erro ao configurar logging: {e}")
         raise
@@ -137,6 +157,3 @@ def get_logger(nome: str) -> logging.Logger:
         logging.Logger: Logger configurado
     """
     return logging.getLogger(nome)
-
-
-# fim do arquivo logging_config.py

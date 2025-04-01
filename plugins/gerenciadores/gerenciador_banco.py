@@ -1,4 +1,3 @@
-# gerenciador_banco.py
 """Gerenciador centralizado de conexões com o banco de dados PostgreSQL."""
 
 from utils.logging_config import get_logger
@@ -175,7 +174,10 @@ class GerenciadorBanco(Plugin):
     def _conectar(self) -> bool:
         """Estabelece conexão com o banco."""
         try:
+            if self._conn and not self._conn.closed:
+                return True
             self._conn = psycopg2.connect(**self._config["database"])
+            logger.debug("Conexão com o banco estabelecida")
             return True
         except Exception as e:
             logger.error(f"Erro ao conectar ao banco: {e}")
@@ -199,7 +201,7 @@ class GerenciadorBanco(Plugin):
             logger.error(f"Erro ao criar tabelas: {e}")
             return False
 
-    def executar(self, *args, **kwargs) -> bool:
+    def executar(self, *args, **kwargs) -> tuple[bool, list | None]:
         """
         Executa uma query no banco.
 
@@ -209,19 +211,39 @@ class GerenciadorBanco(Plugin):
             commit: Bool pra commitar
 
         Returns:
-            bool: True se executado com sucesso
+            tuple[bool, list | None]: (Sucesso, Resultados da query ou None)
         """
         query = kwargs.get("query")
         params = kwargs.get("params", ())
         commit = kwargs.get("commit", False)
         try:
+            if not self._conn or self._conn.closed:
+                logger.warning("Conexão perdida, tentando reconectar...")
+                if not self._conectar():
+                    return False, None
+            logger.debug(f"Executando query: {query} com params={params}")
             with self._conn.cursor() as cur:
                 cur.execute(query, params)
+                resultados = cur.fetchall() if cur.description else None
                 if commit:
                     self._conn.commit()
-            return True
+                    logger.debug("Query comitada com sucesso")
+            return True, resultados
         except Exception as e:
             logger.error(f"Erro ao executar query: {e}")
+            if commit:
+                self._conn.rollback()
+            return False, None
+
+    def fechar(self) -> bool:
+        """Fecha a conexão com o banco."""
+        try:
+            if self._conn and not self._conn.closed:
+                self._conn.close()
+                logger.info("Conexão com o banco fechada")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao fechar conexão: {e}")
             return False
 
     @property

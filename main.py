@@ -1,4 +1,3 @@
-# main.py
 """Bot de análise de mercado cripto seguindo as Regras de Ouro."""
 
 import logging
@@ -14,10 +13,6 @@ from utils.logging_config import configurar_logging
 
 load_dotenv()
 logger = logging.getLogger(__name__)
-
-logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
-)
 
 PLUGINS_ESSENCIAIS = {
     "plugins.conexao": "Conexão com a Bybit",
@@ -43,9 +38,12 @@ PLUGINS_ADICIONAIS = {
 }
 
 
-def inicializar_bot() -> GerentePlugin:
+def inicializar_bot(config: dict) -> GerentePlugin:
     """
     Inicializa o bot de forma segura.
+
+    Args:
+        config (dict): Configurações do bot
 
     Returns:
         GerentePlugin: Gerenciador inicializado
@@ -54,7 +52,6 @@ def inicializar_bot() -> GerentePlugin:
         RuntimeError: Se falhar a inicialização
     """
     try:
-        config = carregar_config()
         gerente = GerentePlugin()
         gerente.inicializar(config)
         logger.debug("GerentePlugin inicializado")
@@ -86,15 +83,15 @@ def inicializar_bot() -> GerentePlugin:
 def main() -> None:
     """Função principal do bot."""
     try:
-        configurar_logging()
+        # Carregar config e configurar logging
+        config = carregar_config()
+        configurar_logging(config)
         logger.info("Iniciando bot...")
         signal.signal(signal.SIGINT, signal_handler)
 
-        gerente_plugin = inicializar_bot()
+        gerente_plugin = inicializar_bot(config)
         gerenciador_bot = GerenciadorBot(gerente_plugin)
-        if not gerenciador_bot.inicializar(
-            gerente_plugin._config
-        ):  # Ajustado pra usar _config
+        if not gerenciador_bot.inicializar(config):
             raise RuntimeError("Falha ao inicializar gerenciador do bot")
 
         if not gerenciador_bot.iniciar():
@@ -103,10 +100,10 @@ def main() -> None:
 
         while True:
             try:
-                logger.debug("Iniciando ciclo de execução...")
+                logger.execution("Iniciando ciclo de execução")
                 if not gerenciador_bot.executar():
                     logger.warning("Falha no ciclo do gerenciador do bot")
-                logger.debug("Ciclo de execução concluído")
+                logger.execution("Ciclo de execução concluído")
                 time.sleep(15)
             except Exception as e:
                 logger.error(f"Erro no ciclo: {e}")

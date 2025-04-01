@@ -1,4 +1,3 @@
-# gerenciador_bot.py
 """Gerenciador principal do bot de trading."""
 
 from utils.logging_config import get_logger
@@ -63,16 +62,24 @@ class GerenciadorBot(Plugin):
                 "plugins.analisador_mercado",
             ]
 
+            logger.debug(f"Pares: {pares}, Timeframes: {timeframes}")
+            logger.debug(f"Plugins de análise: {plugins_analise}")
+
+            logger.execution(f"Ciclo iniciado para {pares}")
             for symbol in pares:
-                logger.info(f"Análise iniciada para {symbol}")
+                logger.execution(f"Análise iniciada para {symbol}")
                 dados_completos = {
                     tf: {"crus": [], "processados": {}} for tf in timeframes
                 }
 
                 for tf in timeframes:
+                    logger.debug(f"Processando timeframe {tf} para {symbol}")
                     for plugin_name in plugins_analise:
                         plugin = self._gerente.obter_plugin(plugin_name)
                         if plugin:
+                            logger.debug(
+                                f"Executando {plugin_name} para {symbol} - {tf}"
+                            )
                             success = plugin.executar(
                                 dados_completos=dados_completos[tf],
                                 symbol=symbol,
@@ -85,8 +92,13 @@ class GerenciadorBot(Plugin):
                         else:
                             logger.warning(f"Plugin {plugin_name} não encontrado")
 
+                    # Tentativa de executar o sinais_plugin
                     sinais_plugin = self._gerente.obter_plugin("plugins.sinais_plugin")
+                    logger.debug(
+                        f"Resultado de obter_plugin('plugins.sinais_plugin'): {sinais_plugin}"
+                    )
                     if sinais_plugin:
+                        logger.debug(f"Executando sinais_plugin para {symbol} - {tf}")
                         success = sinais_plugin.executar(
                             dados_completos=dados_completos[tf],
                             symbol=symbol,
@@ -96,11 +108,18 @@ class GerenciadorBot(Plugin):
                             logger.warning(
                                 f"Falha ao executar sinais_plugin para {symbol} - {tf}"
                             )
+                        else:
+                            logger.debug(
+                                f"sinais_plugin executado com sucesso para {symbol} - {tf}"
+                            )
                     else:
-                        logger.error("SinaisPlugin não encontrado")
+                        logger.error(
+                            f"SinaisPlugin não encontrado para {symbol} - {tf}"
+                        )
                         return False
 
-                logger.info(f"Análise concluída para {symbol}")
+                logger.execution(f"Análise concluída para {symbol}")
+            logger.execution(f"Ciclo concluído para {pares}")
             return True
         except Exception as e:
             logger.error(f"Erro ao executar ciclo: {e}")

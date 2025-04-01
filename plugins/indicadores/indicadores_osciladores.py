@@ -14,12 +14,9 @@ class IndicadoresOsciladores(Plugin):
     PLUGIN_NAME = "indicadores_osciladores"
     PLUGIN_TYPE = "indicador"
 
-    def __init__(self, gerente: GerentePlugin, config=None):
-        super().__init__()
-        self.nome = self.PLUGIN_NAME
-        self.config = config or {}
-        self.gerente = gerente
-        self.banco_dados = self.gerente.obter_plugin("banco_dados")
+    def __init__(self, gerente: GerentePlugin):
+        super().__init__(gerente=gerente)
+        self._gerente = gerente
 
     def _extrair_dados(self, dados_completos, indices):
         try:
@@ -38,11 +35,11 @@ class IndicadoresOsciladores(Plugin):
                 except (ValueError, TypeError):
                     continue
             if not all(valores.values()):
-                logger.warning("Dados insuficientes ou inválidos")
+                logger.warning(f"Dados insuficientes ou inválidos em {self.nome}")
                 return {idx: np.array([]) for idx in indices}
             return {idx: np.array(valores[idx], dtype=np.float64) for idx in indices}
         except Exception as e:
-            logger.error(f"Erro ao extrair dados_completos: {e}")
+            logger.error(f"Erro ao extrair dados em {self.nome}: {e}")
             return {idx: np.array([]) for idx in indices}
 
     def calcular_rsi(self, dados_completos, symbol, timeframe, periodo=14):
@@ -142,86 +139,12 @@ class IndicadoresOsciladores(Plugin):
             logger.error(f"Erro ao calcular volatilidade: {e}")
             return 0.0
 
-    def gerar_sinal(self, dados_completos, indicador, tipo, symbol, timeframe, config):
-        resultado_padrao = {
-            "direcao": "NEUTRO",
-            "forca": "FRACA",
-            "confianca": 0.0,
-            "stop_loss": None,
-            "take_profit": None,
-        }
-        try:
-            if len(dados_completos) < 20:
-                return resultado_padrao
-
-            ultimo_preco = float(dados_completos[-1][4])
-            volatilidade = self.calcular_volatilidade(dados_completos)
-            total_indicadores = 0
-            confirmacoes_compra = 0
-            confirmacoes_venda = 0
-
-            if indicador == "rsi":
-                rsi = self.calcular_rsi(dados_completos, symbol, timeframe)
-                if rsi.size:
-                    total_indicadores += 1
-                    if tipo == "sobrecompra" and rsi[-1] > 70:
-                        confirmacoes_venda += 1
-                    elif tipo == "sobrevenda" and rsi[-1] < 30:
-                        confirmacoes_compra += 1
-
-            elif indicador == "estocastico":
-                slowk, slowd = self.calcular_estocastico(dados_completos, timeframe)
-                if slowk.size and slowd.size:
-                    total_indicadores += 1
-                    if tipo == "sobrecompra" and slowk[-1] > 80 and slowd[-1] > 80:
-                        confirmacoes_venda += 1
-                    elif tipo == "sobrevenda" and slowk[-1] < 20 and slowd[-1] < 20:
-                        confirmacoes_compra += 1
-
-            elif indicador == "mfi":
-                mfi = self.calcular_mfi(dados_completos)
-                if mfi.size:
-                    total_indicadores += 1
-                    if tipo == "sobrecompra" and mfi[-1] > 80:
-                        confirmacoes_venda += 1
-                    elif tipo == "sobrevenda" and mfi[-1] < 20:
-                        confirmacoes_compra += 1
-
-            if total_indicadores == 0:
-                return resultado_padrao
-
-            confianca_compra = confirmacoes_compra / total_indicadores
-            confianca_venda = confirmacoes_venda / total_indicadores
-            forca = "FRACA" if total_indicadores < 2 else "MÉDIA"
-            ajuste_tp_sl = volatilidade * ultimo_preco
-
-            if confianca_compra >= 0.8:
-                return {
-                    "direcao": "ALTA",
-                    "forca": forca,
-                    "confianca": confianca_compra * 100,
-                    "stop_loss": ultimo_preco - ajuste_tp_sl * 1.5,
-                    "take_profit": ultimo_preco + ajuste_tp_sl * 2,
-                }
-            elif confianca_venda >= 0.8:
-                return {
-                    "direcao": "BAIXA",
-                    "forca": forca,
-                    "confianca": confianca_venda * 100,
-                    "stop_loss": ultimo_preco + ajuste_tp_sl * 1.5,
-                    "take_profit": ultimo_preco - ajuste_tp_sl * 2,
-                }
-            return resultado_padrao
-        except Exception as e:
-            logger.error(f"Erro ao gerar sinal: {e}")
-            return resultado_padrao
-
     def executar(self, *args, **kwargs) -> bool:
         resultado_padrao = {
             "rsi": None,
-            "estocastico": {"lento": None, "rapido": None},
+            "estocastico": {"slowk": None, "slowd": None},
             "mfi": None,
-            "sinais": {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0},
+            "volatilidade": 0.0,
         }
         try:
             dados_completos = kwargs.get("dados_completos")
@@ -229,69 +152,42 @@ class IndicadoresOsciladores(Plugin):
             timeframe = kwargs.get("timeframe")
 
             if not all([dados_completos, symbol, timeframe]):
-                logger.error(f"Parâmetros necessários não fornecidos")
+                logger.error(f"Parâmetros necessários não fornecidos em {self.nome}")
                 if isinstance(dados_completos, dict):
                     dados_completos["osciladores"] = resultado_padrao
                 return True
 
-            if not isinstance(dados_completos, list) or len(dados_completos) < 20:
+            klines = (
+                dados_completos.get("crus", [])
+                if isinstance(dados_completos, dict)
+                else dados_completos
+            )
+            if not isinstance(klines, list) or len(klines) < 20:
                 logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
                 if isinstance(dados_completos, dict):
                     dados_completos["osciladores"] = resultado_padrao
                 return True
 
-            rsi = self.calcular_rsi(dados_completos, symbol, timeframe)
-            slowk, slowd = self.calcular_estocastico(dados_completos, timeframe)
-            mfi = self.calcular_mfi(dados_completos)
+            rsi = self.calcular_rsi(klines, symbol, timeframe)
+            slowk, slowd = self.calcular_estocastico(klines, timeframe)
+            mfi = self.calcular_mfi(klines)
+            volatilidade = self.calcular_volatilidade(klines)
 
             resultado = {
-                "rsi": rsi[-1] if rsi.size > 0 else None,
+                "rsi": float(rsi[-1]) if rsi.size > 0 else None,
                 "estocastico": {
-                    "lento": slowk[-1] if slowk.size > 0 else None,
-                    "rapido": slowd[-1] if slowd.size > 0 else None,
+                    "slowk": float(slowk[-1]) if slowk.size > 0 else None,
+                    "slowd": float(slowd[-1]) if slowd.size > 0 else None,
                 },
-                "mfi": mfi[-1] if mfi.size > 0 else None,
-                "sinais": {"direcao": "NEUTRO", "forca": "FRACA", "confianca": 0.0},
+                "mfi": float(mfi[-1]) if mfi.size > 0 else None,
+                "volatilidade": volatilidade,
             }
 
             if isinstance(dados_completos, dict):
                 dados_completos["osciladores"] = resultado
-
-            if self.banco_dados and hasattr(self.banco_dados, "conn"):
-                try:
-                    timestamp = int(dados_completos[-1][0] / 1000)
-                    cursor = self.banco_dados.conn.cursor()
-                    cursor.execute(
-                        """
-                        INSERT INTO indicadores_osciladores (
-                            symbol, timeframe, timestamp, rsi, estocastico_lento,
-                            estocastico_rapido, mfi
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (symbol, timeframe, timestamp) 
-                        DO UPDATE SET
-                            rsi = EXCLUDED.rsi,
-                            estocastico_lento = EXCLUDED.estocastico_lento,
-                            estocastico_rapido = EXCLUDED.estocastico_rapido,
-                            mfi = EXCLUDED.mfi
-                        """,
-                        (
-                            symbol,
-                            timeframe,
-                            timestamp,
-                            resultado["rsi"],
-                            resultado["estocastico"]["lento"],
-                            resultado["estocastico"]["rapido"],
-                            resultado["mfi"],
-                        ),
-                    )
-                    self.banco_dados.conn.commit()
-                    logger.debug(f"Dados salvos no banco para {symbol} - {timeframe}")
-                except Exception as e:
-                    logger.error(f"Erro ao salvar no banco: {e}")
-
             return True
         except Exception as e:
-            logger.error(f"Erro ao executar indicadores osciladores: {e}")
+            logger.error(f"Erro ao executar {self.nome}: {e}")
             if isinstance(dados_completos, dict):
                 dados_completos["osciladores"] = resultado_padrao
             return True

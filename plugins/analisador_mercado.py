@@ -98,15 +98,34 @@ class AnalisadorMercado(Plugin):
             }
 
     def _consolidar_resultados(self, resultados: Dict) -> tuple:
+        logger.debug(f"Iniciando consolidação de resultados: {resultados}")
         try:
-            direcoes = [r["direcao"] for r in resultados.values()]
-            confiancas = [r["confianca"] for r in resultados.values()]
-            total_confirmacoes = sum(1 for d in direcoes if d != "NEUTRO")
+            direcoes = []
+            confiancas = []
+            for plugin_name, r in resultados.items():
+                direcao = r.get("direcao", "NEUTRO")  # Fallback para "NEUTRO"
+                confianca = r.get("confianca", 0.0)  # Fallback para 0.0
+                logger.debug(
+                    f"Plugin {plugin_name}: Direção={direcao}, Confiança={confianca}"
+                )
+                if direcao != "NEUTRO":
+                    direcoes.append(direcao)
+                    confiancas.append(confianca)
+
+            total_confirmacoes = len(direcoes)
+            logger.debug(
+                f"Total de confirmações: {total_confirmacoes}, Direções: {direcoes}"
+            )
             if total_confirmacoes == 0:
+                logger.debug("Nenhuma direção confirmada, retornando NEUTRO")
                 return "NEUTRO", "FRACA", 0.0
 
             direcao_predominante = max(set(direcoes), key=direcoes.count)
-            if direcao_predominante == "NEUTRO":
+            logger.debug(f"Direção predominante calculada: {direcao_predominante}")
+            if (
+                direcao_predominante == "NEUTRO"
+            ):  # Improvável, mas mantido por consistência
+                logger.debug("Direção predominante é NEUTRO, retornando padrão")
                 return "NEUTRO", "FRACA", 0.0
 
             confianca_media = sum(confiancas) / len(confiancas) if confiancas else 0.0
@@ -114,6 +133,9 @@ class AnalisadorMercado(Plugin):
                 "FORTE"
                 if total_confirmacoes >= 3
                 else "MÉDIA" if total_confirmacoes == 2 else "FRACA"
+            )
+            logger.info(
+                f"Resultado consolidado: Direção={direcao_predominante}, Força={forca}, Confiança={confianca_media}"
             )
             return direcao_predominante, forca, confianca_media
         except Exception as e:

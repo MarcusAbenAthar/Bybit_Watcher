@@ -1,4 +1,3 @@
-# analise_candles.py
 from utils.logging_config import get_logger
 import numpy as np
 import talib
@@ -20,10 +19,9 @@ class AnaliseCandles(Plugin):
     def executar(self, *args, **kwargs) -> bool:
         resultado_padrao = {
             "candles": {
-                "direcao": "NEUTRO",
+                "padroes": {},  # Dicionário para armazenar padrões e seus estados
                 "forca": "FRACA",
                 "confianca": 0.0,
-                "padrao": None,
             }
         }
         try:
@@ -48,10 +46,9 @@ class AnaliseCandles(Plugin):
                     dados_completos.update(resultado_padrao)
                 return True
 
-            sinal = self.gerar_sinal(klines, symbol, timeframe, config)
-            logger.info(f"Sinal gerado para {symbol} - {timeframe}: {sinal}")
+            resultado = self.analisar_padroes(klines, symbol, timeframe, config)
             if isinstance(dados_completos, dict):
-                dados_completos["candles"] = sinal
+                dados_completos["candles"] = resultado
             return True
         except Exception as e:
             logger.error(f"Erro ao executar analise_candles: {e}")
@@ -59,9 +56,9 @@ class AnaliseCandles(Plugin):
                 dados_completos.update(resultado_padrao)
             return True
 
-    def gerar_sinal(self, dados_completos, symbol, timeframe, config):
+    def analisar_padroes(self, dados_completos, symbol, timeframe, config):
         try:
-            logger.debug(f"Iniciando geração de sinal para {symbol} - {timeframe}")
+            logger.debug(f"Iniciando análise de padrões para {symbol} - {timeframe}")
             dados_extraidos = self._extrair_dados(dados_completos, [1, 2, 3, 4, 5])
             open_prices, high, low, close, volume = (
                 dados_extraidos[1],
@@ -74,65 +71,72 @@ class AnaliseCandles(Plugin):
             if len(close) < 20:
                 logger.warning(f"Menos de 20 candles para {symbol} - {timeframe}")
                 return {
-                    "direcao": "NEUTRO",
+                    "padroes": {},
                     "forca": "FRACA",
                     "confianca": 0.0,
-                    "padrao": None,
                 }
 
-            padroes = self._identificar_padroes_talib(open_prices, high, low, close)
-            logger.debug(f"Padrões identificados: {list(padroes.keys())}")
-            if not padroes:
+            padroes_talib = self._identificar_padroes_talib(
+                open_prices, high, low, close
+            )
+            if not padroes_talib:
                 logger.debug(f"Nenhum padrão encontrado para {symbol} - {timeframe}")
                 return {
-                    "direcao": "NEUTRO",
+                    "padroes": {},
                     "forca": "FRACA",
                     "confianca": 0.0,
-                    "padrao": None,
                 }
 
-            # Verificar padrão no candle anterior
-            for padrao_nome, resultado in padroes.items():
-                if len(resultado) >= 2 and resultado[-2] != 0:  # Candle anterior
+            padroes_detectados = {}
+            for padrao_nome, resultado in padroes_talib.items():
+                if len(resultado) < 2:
+                    continue
+                # Padrão formado (candle anterior)
+                if resultado[-2] != 0:
                     chave_padrao = (
                         f"{padrao_nome}_{'alta' if resultado[-2] > 0 else 'baixa'}"
                     )
-                    if chave_padrao not in PADROES_CANDLES:
-                        logger.debug(
-                            f"Padrão {chave_padrao} não mapeado em PADROES_CANDLES"
+                    if chave_padrao in PADROES_CANDLES:
+                        padroes_detectados[padrao_nome] = {
+                            "estado": "formado",
+                            "sinal": PADROES_CANDLES[chave_padrao]["sinal"],
+                            "timestamp": dados_completos[-2][
+                                0
+                            ],  # Timestamp do candle anterior
+                        }
+                        logger.info(
+                            f"Padrão {padrao_nome} formado em {symbol} - {timeframe}"
                         )
-                        continue
-
-                    padrao_info = PADROES_CANDLES[chave_padrao]
-                    direcao = "ALTA" if padrao_info["sinal"] == "compra" else "BAIXA"
-                    logger.info(
-                        f"Padrão {padrao_nome} detectado no candle anterior para {symbol} - {timeframe}"
+                # Padrão em formação (candle atual)
+                elif resultado[-1] != 0:
+                    chave_padrao = (
+                        f"{padrao_nome}_{'alta' if resultado[-1] > 0 else 'baixa'}"
                     )
-                    forca = self._calcular_forca(dados_completos)
-                    confianca = self._calcular_confianca(dados_completos)
-                    return {
-                        "direcao": direcao,
-                        "forca": forca,
-                        "confianca": confianca,
-                        "padrao": padrao_nome,
-                    }
+                    if chave_padrao in PADROES_CANDLES:
+                        padroes_detectados[padrao_nome] = {
+                            "estado": "em formação",
+                            "sinal": PADROES_CANDLES[chave_padrao]["sinal"],
+                            "timestamp": dados_completos[-1][
+                                0
+                            ],  # Timestamp do candle atual
+                        }
+                        logger.info(
+                            f"Padrão {padrao_nome} em formação em {symbol} - {timeframe}"
+                        )
 
-            logger.debug(
-                f"Nenhum padrão ativo encontrado no candle anterior para {symbol} - {timeframe}"
-            )
+            forca = self._calcular_forca(dados_completos)
+            confianca = self._calcular_confianca(dados_completos)
             return {
-                "direcao": "NEUTRO",
-                "forca": "FRACA",
-                "confianca": 0.0,
-                "padrao": None,
+                "padroes": padroes_detectados,
+                "forca": forca,
+                "confianca": confianca,
             }
         except Exception as e:
-            logger.error(f"Erro ao gerar sinal: {e}")
+            logger.error(f"Erro ao analisar padrões: {e}")
             return {
-                "direcao": "NEUTRO",
+                "padroes": {},
                 "forca": "FRACA",
                 "confianca": 0.0,
-                "padrao": None,
             }
 
     def _identificar_padroes_talib(self, open_prices, high, low, close):
@@ -185,7 +189,10 @@ class AnaliseCandles(Plugin):
 
     def _extrair_dados(self, dados, indices):
         try:
-            return {i: np.array([d[i] for d in dados]) for i in indices}
+            return {
+                i: np.array([float(d[i]) for d in dados], dtype=np.float64)
+                for i in indices
+            }
         except Exception as e:
             logger.error(f"Erro ao extrair dados: {e}")
             return {i: np.array([]) for i in indices}

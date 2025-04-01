@@ -1,4 +1,3 @@
-# gerenciador_plugins.py
 """Gerenciador de plugins do bot de trading."""
 
 from utils.logging_config import get_logger
@@ -32,17 +31,10 @@ class GerentePlugin:
         self._config = None
 
     def inicializar(self, config: dict) -> bool:
-        """
-        Inicializa o gerenciador com configurações.
-
-        Args:
-            config: Dicionário de configurações
-
-        Returns:
-            bool: True se inicializado com sucesso
-        """
+        """Inicializa o gerenciador com configurações."""
         try:
             self._config = config
+            logger.debug(f"Configurações recebidas: {self._config}")
             return self._carregar_essenciais()
         except Exception as e:
             logger.error(f"Erro ao inicializar GerentePlugin: {e}")
@@ -54,23 +46,19 @@ class GerentePlugin:
             if not self.carregar_plugin(nome):
                 logger.error(f"Falha ao carregar plugin essencial {nome}")
                 return False
-        logger.info("Plugins essenciais carregados")
+        logger.info(f"Plugins essenciais carregados: {list(self.plugins.keys())}")
         return True
 
     def carregar_plugin(self, nome_plugin: str) -> bool:
         """
         Carrega um plugin dinamicamente.
-
-        Args:
-            nome_plugin: Nome do plugin (ex.: "plugins.conexao")
-
-        Returns:
-            bool: True se carregado com sucesso
         """
         try:
             if nome_plugin in self.plugins:
+                logger.debug(f"Plugin {nome_plugin} já carregado")
                 return True
 
+            logger.debug(f"Tentando carregar {nome_plugin}")
             modulo = importlib.import_module(nome_plugin)
             plugin_class = next(
                 (
@@ -85,6 +73,10 @@ class GerentePlugin:
             if not plugin_class:
                 logger.error(f"Classe Plugin não encontrada em {nome_plugin}")
                 return False
+
+            logger.debug(
+                f"Classe encontrada para {nome_plugin}: {plugin_class.__name__}"
+            )
 
             # Instanciação específica pra cada plugin
             if nome_plugin == "plugins.banco_dados":
@@ -102,7 +94,9 @@ class GerentePlugin:
 
             if plugin.inicializar(self._config):
                 self.plugins[nome_plugin] = plugin
-                logger.info(f"Plugin {nome_plugin} carregado")
+                logger.info(
+                    f"Plugin {nome_plugin} carregado como {plugin.__class__.__name__}"
+                )
                 return True
             logger.error(f"Falha ao inicializar {nome_plugin}")
             return False
@@ -113,25 +107,26 @@ class GerentePlugin:
     def obter_plugin(self, nome_plugin: str) -> Plugin | None:
         """
         Obtém um plugin carregado ou tenta carregá-lo.
-
-        Args:
-            nome_plugin: Nome do plugin
-
-        Returns:
-            Plugin ou None se não encontrado
         """
+        logger.debug(f"Tentando obter plugin: {nome_plugin}")
+        logger.debug(f"Plugins atualmente carregados: {list(self.plugins.keys())}")
         if nome_plugin in self.plugins:
-            return self.plugins[nome_plugin]
+            plugin = self.plugins[nome_plugin]
+            logger.debug(
+                f"Plugin {nome_plugin} encontrado em self.plugins como {plugin.__class__.__name__}"
+            )
+            return plugin
         if self.carregar_plugin(nome_plugin):
-            return self.plugins.get(nome_plugin)
+            plugin = self.plugins.get(nome_plugin)
+            logger.debug(
+                f"Plugin {nome_plugin} carregado dinamicamente como {plugin.__class__.__name__}"
+            )
+            return plugin
+        logger.warning(f"Plugin {nome_plugin} não encontrado ou não pôde ser carregado")
         return None
 
     def finalizar(self) -> None:
-        """
-        Finaliza todos os plugins carregados.
-
-        Fecha conexões e libera recursos.
-        """
+        """Finaliza todos os plugins carregados."""
         try:
             for nome, plugin in self.plugins.items():
                 plugin.finalizar()

@@ -1,4 +1,3 @@
-# medias_moveis.py
 from utils.logging_config import get_logger
 import numpy as np
 import talib
@@ -31,7 +30,7 @@ class MediasMoveis(Plugin):
                     f"Parâmetros inválidos. Dados: {dados_completos}, Symbol: {symbol}, Timeframe: {timeframe}"
                 )
                 if isinstance(dados_completos, dict):
-                    dados_completos["processados"]["medias_moveis"] = resultado_padrao
+                    dados_completos["medias_moveis"] = resultado_padrao
                 return True
 
             dados_crus = dados_completos.get("crus")
@@ -43,26 +42,48 @@ class MediasMoveis(Plugin):
                 logger.warning(
                     f"Dados insuficientes para {symbol} - {timeframe}. Crus: {dados_crus}"
                 )
-                dados_completos["processados"]["medias_moveis"] = resultado_padrao
+                dados_completos["medias_moveis"] = resultado_padrao
                 return True
 
             sinal = self.gerar_sinal(dados_crus)
             logger.debug(f"Sinal gerado para {symbol} - {timeframe}: {sinal}")
-            dados_completos["processados"]["medias_moveis"] = sinal
+            dados_completos["medias_moveis"] = sinal
             return True
         except Exception as e:
             logger.error(f"Erro ao executar medias_moveis: {e}")
-            dados_completos["processados"]["medias_moveis"] = resultado_padrao
+            dados_completos["medias_moveis"] = resultado_padrao
             return True
+
+    def _extrair_dados(self, dados_completos, indices):
+        try:
+            valores = {idx: [] for idx in indices}
+            for candle in dados_completos:
+                if any(
+                    candle[i] is None or str(candle[i]).strip() == "" for i in indices
+                ):
+                    continue
+                try:
+                    for idx in indices:
+                        valor = float(
+                            str(candle[idx]).replace("e", "").replace("E", "")
+                        )
+                        valores[idx].append(valor)
+                except (ValueError, TypeError):
+                    continue
+            if not all(valores.values()):
+                logger.warning(f"Dados insuficientes ou inválidos em {self.nome}")
+                return {idx: np.array([]) for idx in indices}
+            return {idx: np.array(valores[idx], dtype=np.float64) for idx in indices}
+        except Exception as e:
+            logger.error(f"Erro ao extrair dados em {self.nome}: {e}")
+            return {idx: np.array([]) for idx in indices}
 
     def gerar_sinal(self, dados_crus):
         try:
-            # Assumindo que dados_crus é uma lista de listas [timestamp, open, high, low, close, volume, ...]
-            close = np.array(
-                [float(kline[4]) for kline in dados_crus]
-            )  # Extrai preços de fechamento
+            dados_extraidos = self._extrair_dados(dados_crus, [4])  # Apenas close
+            close = dados_extraidos[4]
             if len(close) < 50:
-                logger.warning(f"menos de 50 klines disponíveis: {len(close)}")
+                logger.warning(f"Menos de 50 klines disponíveis: {len(close)}")
                 return {
                     "direcao": "NEUTRO",
                     "forca": "FRACA",
