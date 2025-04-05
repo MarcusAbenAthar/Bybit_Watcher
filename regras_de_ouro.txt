@@ -23,6 +23,7 @@ Cada plugin segue:
 * Responsabilidade única
 * Interface padronizada
 * Documentação completa
+* Todo plugin deve ser independente e possível de simular com mocks
 
 Esta estrutura:
 

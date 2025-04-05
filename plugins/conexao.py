@@ -87,9 +87,9 @@ class Conexao(Plugin):
             klines = self.obter_klines(symbol, timeframe, limit)
             if klines:
                 dados_completos["crus"] = klines
-                logger.debug(
-                    f"Klines obtidos para {symbol} - {timeframe}, tamanho: {len(klines)}"
-                )
+                # logger.debug(
+                #     f"Klines obtidos para {symbol} - {timeframe}, tamanho: {len(klines)}"
+                # )
             return True
         except Exception as e:
             logger.error(f"Erro ao executar conexao: {e}")

@@ -16,7 +16,7 @@ def carregar_config() -> dict:
     # Configurações fixas
     config = {
         "pares": "BTCUSDT",  # Par padrão ou "All" pra todos os pares
-        "timeframes": ["1m", "5m", "15m", "30m", "1h", "4h", "1d"],
+        "timeframes": ["1d"],
         "trading": {
             "auto_trade": False,  # Chave on/off pro auto trade
             "risco_por_operacao": 0.01,  # 1% do saldo por operação
@@ -39,7 +39,7 @@ def carregar_config() -> dict:
         },
         "logging": {
             "level": "INFO",  # Nível de log padrão
-            "debug_enabled": False,  # Chave on/off para debug
+            "debug_enabled": True,  # Chave on/off para debug
         },
     }
 
@@ -73,5 +73,3 @@ def carregar_config() -> dict:
 if __name__ == "__main__":
     # Exemplo de uso
     config = carregar_config()
-    print(f"Pares: {config['pares']}")
-    print(f"Risco por operação: {config['trading']['risco_por_operacao'] * 100}%")

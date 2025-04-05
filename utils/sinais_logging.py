@@ -16,7 +16,7 @@ SINAIS_LOGGING_CONFIG = {
     "handlers": {
         "sinais": {
             "class": "logging.FileHandler",
-            "filename": f"logs/sinais-{data_hoje}.log",  # Nome do arquivo com a data
+            "filename": f"logs/sinais/sinais_{data_hoje}.log",  # Nome do arquivo com a data
             "formatter": "sinais",
             "level": "INFO",
         }

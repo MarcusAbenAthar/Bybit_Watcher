@@ -35,7 +35,7 @@ class GerenciadorBot(Plugin):
             logger.info("GerenciadorBot inicializado")
             return True
         except Exception as e:
-            logger.error(f"Erro ao inicializar GerenciadorBot: {e}")
+            logger.error(f"Erro ao inicializar GerenciadorBot: {e}", exc_info=True)
             return False
 
     def executar(self, *args, **kwargs) -> bool:
@@ -62,8 +62,12 @@ class GerenciadorBot(Plugin):
                 "plugins.analisador_mercado",
             ]
 
-            logger.debug(f"Pares: {pares}, Timeframes: {timeframes}")
-            logger.debug(f"Plugins de análise: {plugins_analise}")
+            logger.debug(f"Pares configurados: {pares}")
+            logger.debug(f"Timeframes configurados: {timeframes}")
+            logger.debug(f"Plugins de análise registrados: {plugins_analise}")
+            logger.debug(
+                f"Plugins disponíveis no gerente: {list(self._gerente.plugins.keys())}"
+            )
 
             logger.execution(f"Ciclo iniciado para {pares}")
             for symbol in pares:
@@ -73,7 +77,7 @@ class GerenciadorBot(Plugin):
                 }
 
                 for tf in timeframes:
-                    logger.debug(f"Processando timeframe {tf} para {symbol}")
+                    logger.debug(f"Iniciando processamento de {symbol} - {tf}")
                     for plugin_name in plugins_analise:
                         plugin = self._gerente.obter_plugin(plugin_name)
                         if plugin:
@@ -86,35 +90,54 @@ class GerenciadorBot(Plugin):
                                 timeframe=tf,
                             )
                             if not success:
-                                logger.warning(
+                                logger.error(
                                     f"Falha ao executar {plugin_name} para {symbol} - {tf}"
                                 )
+                            else:
+                                logger.debug(
+                                    f"{plugin_name} executado com sucesso para {symbol} - {tf}"
+                                )
                         else:
-                            logger.warning(f"Plugin {plugin_name} não encontrado")
+                            logger.error(
+                                f"Plugin {plugin_name} não encontrado no gerente para {symbol} - {tf}"
+                            )
 
-                    # Tentativa de executar o sinais_plugin
+                    # Executar o sinais_plugin
                     sinais_plugin = self._gerente.obter_plugin("plugins.sinais_plugin")
                     logger.debug(
                         f"Resultado de obter_plugin('plugins.sinais_plugin'): {sinais_plugin}"
                     )
                     if sinais_plugin:
                         logger.debug(f"Executando sinais_plugin para {symbol} - {tf}")
-                        success = sinais_plugin.executar(
-                            dados_completos=dados_completos[tf],
-                            symbol=symbol,
-                            timeframe=tf,
+                        logger.debug(
+                            f"Dados completos antes de sinais_plugin: {dados_completos[tf]}"
                         )
-                        if not success:
-                            logger.warning(
-                                f"Falha ao executar sinais_plugin para {symbol} - {tf}"
+                        try:
+                            success = sinais_plugin.executar(
+                                dados_completos=dados_completos[tf],
+                                symbol=symbol,
+                                timeframe=tf,
                             )
-                        else:
-                            logger.debug(
-                                f"sinais_plugin executado com sucesso para {symbol} - {tf}"
+                            if not success:
+                                logger.error(
+                                    f"Falha ao executar sinais_plugin para {symbol} - {tf}"
+                                )
+                            else:
+                                logger.debug(
+                                    f"sinais_plugin executado com sucesso para {symbol} - {tf}"
+                                )
+                                logger.debug(
+                                    f"Dados completos após sinais_plugin: {dados_completos[tf]}"
+                                )
+                        except Exception as e:
+                            logger.error(
+                                f"Erro ao executar sinais_plugin para {symbol} - {tf}: {str(e)}",
+                                exc_info=True,
                             )
+                            return False
                     else:
                         logger.error(
-                            f"SinaisPlugin não encontrado para {symbol} - {tf}"
+                            f"SinaisPlugin não encontrado no gerente para {symbol} - {tf}"
                         )
                         return False
 
@@ -122,7 +145,7 @@ class GerenciadorBot(Plugin):
             logger.execution(f"Ciclo concluído para {pares}")
             return True
         except Exception as e:
-            logger.error(f"Erro ao executar ciclo: {e}")
+            logger.error(f"Erro geral ao executar ciclo: {e}", exc_info=True)
             return False
 
     def iniciar(self) -> bool:
@@ -132,7 +155,7 @@ class GerenciadorBot(Plugin):
             logger.info("Bot iniciado")
             return True
         except Exception as e:
-            logger.error(f"Erro ao iniciar bot: {e}")
+            logger.error(f"Erro ao iniciar bot: {e}", exc_info=True)
             return False
 
     def parar(self) -> bool:
@@ -142,5 +165,5 @@ class GerenciadorBot(Plugin):
             logger.info("Bot parado")
             return True
         except Exception as e:
-            logger.error(f"Erro ao parar bot: {e}")
+            logger.error(f"Erro ao parar bot: {e}", exc_info=True)
             return False

@@ -108,19 +108,11 @@ class GerentePlugin:
         """
         Obtém um plugin carregado ou tenta carregá-lo.
         """
-        logger.debug(f"Tentando obter plugin: {nome_plugin}")
-        logger.debug(f"Plugins atualmente carregados: {list(self.plugins.keys())}")
         if nome_plugin in self.plugins:
             plugin = self.plugins[nome_plugin]
-            logger.debug(
-                f"Plugin {nome_plugin} encontrado em self.plugins como {plugin.__class__.__name__}"
-            )
             return plugin
         if self.carregar_plugin(nome_plugin):
             plugin = self.plugins.get(nome_plugin)
-            logger.debug(
-                f"Plugin {nome_plugin} carregado dinamicamente como {plugin.__class__.__name__}"
-            )
             return plugin
         logger.warning(f"Plugin {nome_plugin} não encontrado ou não pôde ser carregado")
         return None
