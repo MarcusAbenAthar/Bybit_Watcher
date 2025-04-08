@@ -25,79 +25,78 @@ class CalculoAlavancagem(Plugin):
         }
         logger.debug(f"{self.nome} inicializado")
 
-    def _extrair_dados(self, dados_completos, indices):
+    def calcular_alavancagem(
+        self,
+        crus,
+        direcao=None,
+        confianca=0.0,
+        alavancagem_maxima=20,
+        alavancagem_minima=3,
+    ):
         try:
-            valores = {idx: [] for idx in indices}
-            for candle in dados_completos:
-                if any(
-                    candle[i] is None or str(candle[i]).strip() == "" for i in indices
-                ):
-                    continue
-                try:
-                    for idx in indices:
-                        valor = float(
-                            str(candle[idx]).replace("e", "").replace("E", "")
-                        )
-                        valores[idx].append(valor)
-                except (ValueError, TypeError):
-                    continue
-            if not all(valores.values()):
-                logger.warning(f"Dados insuficientes ou inválidos em {self.nome}")
-                return {idx: np.array([]) for idx in indices}
-            return {idx: np.array(valores[idx], dtype=np.float64) for idx in indices}
-        except Exception as e:
-            logger.error(f"Erro ao extrair dados em {self.nome}: {e}")
-            return {idx: np.array([]) for idx in indices}
-
-    def calcular_alavancagem(self, dados_completos, symbol, timeframe, config):
-        try:
-            dados_extraidos = self._extrair_dados(dados_completos, [2, 3, 4])
-            high, low, close = (
+            dados_extraidos = self._extrair_dados(crus, [2, 3, 4])
+            high_raw, low_raw, close_raw = (
                 dados_extraidos[2],
                 dados_extraidos[3],
                 dados_extraidos[4],
             )
+
+            # Normaliza os valores para garantir que sejam floats
+            def normalizar(valores):
+                return np.array(
+                    [
+                        float(x.get("valor", x)) if isinstance(x, dict) else float(x)
+                        for x in valores
+                    ]
+                )
+
+            high = normalizar(high_raw)
+            low = normalizar(low_raw)
+            close = normalizar(close_raw)
+
             if len(close) < 14:
-                logger.warning(f"Dados insuficientes para calcular ATR: {len(close)}")
-                return 3
+                logger.warning("Dados insuficientes para calcular ATR")
+                return alavancagem_minima
 
             atr = talib.ATR(high, low, close, timeperiod=14)
             if not atr.size:
-                return 3
+                return alavancagem_minima
 
             atr_atual = atr[-1]
-            preco_atual = float(close[-1])
+            preco_atual = close[-1]
             volatilidade = atr_atual / preco_atual
 
-            trading_config = config.get("trading", {})
-            alavancagem_maxima = int(trading_config.get("alavancagem_maxima", 20))
-            alavancagem_minima = int(trading_config.get("alavancagem_minima", 3))
-
+            # Alavancagem baseada em volatilidade
             if volatilidade < 0.001:
-                alavancagem_base = int(20 - (volatilidade * 10000))
+                alav_base = 20
             elif volatilidade < 0.005:
-                alavancagem_base = int(10 - (volatilidade - 0.001) * 1250)
+                alav_base = 10
             else:
-                alavancagem_base = int(5 - (volatilidade - 0.005) * 100)
+                alav_base = 5
 
-            timeframe_pesos = {
-                "1m": 1.0,
-                "5m": 0.95,
-                "15m": 0.9,
-                "30m": 0.85,
-                "1h": 0.8,
-                "4h": 0.7,
-                "1d": 0.6,
-            }
-            peso = timeframe_pesos.get(timeframe, 1.0)
-            alavancagem_ajustada = int(alavancagem_base / peso)
+            # Ajuste pela confiança
+            try:
+                confianca = float(confianca)
+            except (ValueError, TypeError):
+                logger.warning(
+                    f"Confiança inválida: {confianca}, usando 0.0 como fallback"
+                )
+                confianca = 0.0
 
-            return max(
-                alavancagem_minima, min(alavancagem_ajustada, alavancagem_maxima)
+            fator_conf = (confianca / 100) if confianca > 0 else 0.3
+            alavancagem_final = alav_base * fator_conf
+
+            # Se direção for neutra, usa o mínimo
+            if direcao == "NEUTRO":
+                return alavancagem_minima
+
+            return round(
+                max(alavancagem_minima, min(alavancagem_final, alavancagem_maxima)), 2
             )
+
         except Exception as e:
             logger.error(f"Erro ao calcular alavancagem: {e}")
-            return 3
+            return alavancagem_minima
 
     def executar(self, *args, **kwargs) -> bool:
         resultado_padrao = {"alavancagem": 3}
@@ -124,7 +123,7 @@ class CalculoAlavancagem(Plugin):
                     dados_completos.update(resultado_padrao)
                 return True
 
-            alavancagem = self.calcular_alavancagem(klines, symbol, timeframe, config)
+            alavancagem = self.calcular_alavancagem(klines)
             if isinstance(dados_completos, dict):
                 dados_completos["alavancagem"] = alavancagem
                 logger.debug(

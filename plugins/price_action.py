@@ -59,11 +59,8 @@ class PriceAction(Plugin):
         try:
             # Gerar sinal de price action
             sinal = self.gerar_sinal(klines)
-            logger.debug(
-                f"Sinal de Price Action gerado para {symbol} - {timeframe}: {sinal}"
-            )
             dados_completos["price_action"] = sinal
-            logger.info(f"Price Action concluído para {symbol} - {timeframe}: {sinal}")
+            logger.info(f"Price Action concluído para {symbol} - {timeframe}")
             return True
         except Exception as e:
             logger.error(
@@ -73,29 +70,29 @@ class PriceAction(Plugin):
                 dados_completos.update(resultado_padrao)
             return True
 
-    def _extrair_dados(self, dados_completos, indices):
-        try:
-            valores = {idx: [] for idx in indices}
-            for candle in dados_completos:
-                if any(
-                    candle[i] is None or str(candle[i]).strip() == "" for i in indices
-                ):
-                    continue
-                try:
-                    for idx in indices:
-                        valor = float(
-                            str(candle[idx]).replace("e", "").replace("E", "")
-                        )
-                        valores[idx].append(valor)
-                except (ValueError, TypeError):
-                    continue
-            if not all(valores.values()):
-                logger.warning(f"Dados insuficientes ou inválidos em {self.nome}")
-                return {idx: np.array([]) for idx in indices}
-            return {idx: np.array(valores[idx], dtype=np.float64) for idx in indices}
-        except Exception as e:
-            logger.error(f"Erro ao extrair dados em {self.nome}: {e}")
-            return {idx: np.array([]) for idx in indices}
+    # def _extrair_dados(self, dados_completos, indices):
+    #     try:
+    #         valores = {idx: [] for idx in indices}
+    #         for candle in dados_completos:
+    #             if any(
+    #                 candle[i] is None or str(candle[i]).strip() == "" for i in indices
+    #             ):
+    #                 continue
+    #             try:
+    #                 for idx in indices:
+    #                     valor = float(
+    #                         str(candle[idx]).replace("e", "").replace("E", "")
+    #                     )
+    #                     valores[idx].append(valor)
+    #             except (ValueError, TypeError):
+    #                 continue
+    #         if not all(valores.values()):
+    #             logger.warning(f"Dados insuficientes ou inválidos em {self.nome}")
+    #             return {idx: np.array([]) for idx in indices}
+    #         return {idx: np.array(valores[idx], dtype=np.float64) for idx in indices}
+    #     except Exception as e:
+    #         logger.error(f"Erro ao extrair dados em {self.nome}: {e}")
+    #         return {idx: np.array([]) for idx in indices}
 
     def gerar_sinal(self, dados_completos):
         try:

@@ -1,8 +1,9 @@
 from utils.logging_config import get_logger
 import numpy as np
 import talib
+import json
+import os
 from plugins.plugin import Plugin
-from utils.padroes_candles import PADROES_CANDLES
 
 logger = get_logger(__name__)
 
@@ -14,12 +15,12 @@ class AnaliseCandles(Plugin):
     def __init__(self, gerente=None):
         super().__init__(gerente=gerente)
         self._gerente = gerente
-        self.cache_padroes = {}
+        self.padroes_talib = self._carregar_padroes_talib()
 
     def executar(self, *args, **kwargs) -> bool:
         resultado_padrao = {
             "candles": {
-                "padroes": {},  # Dicionário para armazenar padrões e seus estados
+                "padroes": {},
                 "forca": "FRACA",
                 "confianca": 0.0,
             }
@@ -31,22 +32,19 @@ class AnaliseCandles(Plugin):
             config = kwargs.get("config", self._config)
 
             if not all([dados_completos, symbol, timeframe]):
-                logger.error(f"Parâmetros necessários não fornecidos")
+                logger.error("Parâmetros necessários não fornecidos")
                 if isinstance(dados_completos, dict):
                     dados_completos.update(resultado_padrao)
                 return True
 
             klines = dados_completos.get("crus", [])
-            logger.debug(
-                f"Verificando klines para {symbol} - {timeframe}, tamanho: {len(klines)}"
-            )
             if not isinstance(klines, list) or len(klines) < 20:
                 logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
                 if isinstance(dados_completos, dict):
                     dados_completos.update(resultado_padrao)
                 return True
 
-            resultado = self.analisar_padroes(klines, symbol, timeframe, config)
+            resultado = self.analisar_padroes(klines, symbol, timeframe)
             if isinstance(dados_completos, dict):
                 dados_completos["candles"] = resultado
             return True
@@ -56,132 +54,112 @@ class AnaliseCandles(Plugin):
                 dados_completos.update(resultado_padrao)
             return True
 
-    def analisar_padroes(self, dados_completos, symbol, timeframe, config):
+    def _carregar_padroes_talib(self):
         try:
-            logger.debug(f"Iniciando análise de padrões para {symbol} - {timeframe}")
-            dados_extraidos = self._extrair_dados(dados_completos, [1, 2, 3, 4, 5])
-            open_prices, high, low, close, volume = (
-                dados_extraidos[1],
-                dados_extraidos[2],
-                dados_extraidos[3],
-                dados_extraidos[4],
-                dados_extraidos[5],
-            )
-            logger.debug(f"Dados extraídos: {len(close)} candles")
-            if len(close) < 20:
-                logger.warning(f"Menos de 20 candles para {symbol} - {timeframe}")
-                return {
-                    "padroes": {},
-                    "forca": "FRACA",
-                    "confianca": 0.0,
-                }
+            caminho = os.path.join("utils", "padroes_talib.json")
+            with open(caminho, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return set(data.get("padroes_talib", []))
+        except Exception as e:
+            logger.error(f"Erro ao carregar padrões TA-Lib: {e}")
+            return set()
 
-            padroes_talib = self._identificar_padroes_talib(
-                open_prices, high, low, close
+    def analisar_padroes(self, dados, symbol, timeframe):
+        try:
+            logger.debug(f"Analisando padrões para {symbol} - {timeframe}")
+            ohlcv = self._extrair_dados(dados, [1, 2, 3, 4, 5])
+            open_, high, low, close, volume = (
+                ohlcv[1],
+                ohlcv[2],
+                ohlcv[3],
+                ohlcv[4],
+                ohlcv[5],
             )
-            if not padroes_talib:
-                logger.debug(f"Nenhum padrão encontrado para {symbol} - {timeframe}")
-                return {
-                    "padroes": {},
-                    "forca": "FRACA",
-                    "confianca": 0.0,
-                }
 
             padroes_detectados = {}
-            for padrao_nome, resultado in padroes_talib.items():
+            for func in talib.get_function_groups().get("Pattern Recognition", []):
+                nome_padrao = func.lower().replace("cdl", "")
+                if nome_padrao not in self.padroes_talib:
+                    continue
+
+                resultado = getattr(talib, func)(open_, high, low, close)
                 if len(resultado) < 2:
                     continue
-                # Padrão formado (candle anterior)
-                if resultado[-2] != 0:
-                    chave_padrao = (
-                        f"{padrao_nome}_{'alta' if resultado[-2] > 0 else 'baixa'}"
-                    )
-                    if chave_padrao in PADROES_CANDLES:
-                        padroes_detectados[padrao_nome] = {
-                            "estado": "formado",
-                            "sinal": PADROES_CANDLES[chave_padrao]["sinal"],
-                            "timestamp": dados_completos[-2][
-                                0
-                            ],  # Timestamp do candle anterior
-                        }
-                        logger.info(
-                            f"Padrão {padrao_nome} formado em {symbol} - {timeframe}"
-                        )
-                # Padrão em formação (candle atual)
-                elif resultado[-1] != 0:
-                    chave_padrao = (
-                        f"{padrao_nome}_{'alta' if resultado[-1] > 0 else 'baixa'}"
-                    )
-                    if chave_padrao in PADROES_CANDLES:
-                        padroes_detectados[padrao_nome] = {
-                            "estado": "em formação",
-                            "sinal": PADROES_CANDLES[chave_padrao]["sinal"],
-                            "timestamp": dados_completos[-1][
-                                0
-                            ],  # Timestamp do candle atual
-                        }
-                        logger.info(
-                            f"Padrão {padrao_nome} em formação em {symbol} - {timeframe}"
-                        )
 
-            forca = self._calcular_forca(dados_completos)
-            confianca = self._calcular_confianca(dados_completos)
+                for i in [-2, -1]:  # Verifica candle anterior e atual
+                    if resultado[i] == 0:
+                        continue
+                    direcao = "alta" if resultado[i] > 0 else "baixa"
+                    estado = "formado" if i == -2 else "em formação"
+                    timestamp = dados[i][0]
+
+                    padroes_detectados[nome_padrao] = {
+                        "estado": estado,
+                        "sinal": "compra" if direcao == "alta" else "venda",
+                        "stop_loss": self._calcular_stop_loss(low, high, direcao),
+                        "take_profit": self._calcular_take_profit(close, direcao),
+                        "timestamp": timestamp,
+                    }
+
+                    logger.info(
+                        f"Padrão {nome_padrao} detectado ({estado}) em {symbol}-{timeframe}"
+                    )
+                    break  # Evita sobrescrever com candle mais recente
+
             return {
                 "padroes": padroes_detectados,
-                "forca": forca,
-                "confianca": confianca,
+                "forca": self._calcular_forca(close, volume),
+                "confianca": self._calcular_confianca(close, volume),
             }
         except Exception as e:
-            logger.error(f"Erro ao analisar padrões: {e}")
+            logger.error(f"Erro na análise de padrões: {e}")
             return {
                 "padroes": {},
                 "forca": "FRACA",
                 "confianca": 0.0,
             }
 
-    def _identificar_padroes_talib(self, open_prices, high, low, close):
+    def _calcular_stop_loss(self, low, high, direcao):
         try:
-            padroes = {}
-            for nome_funcao in talib.get_function_groups()["Pattern Recognition"]:
-                funcao = getattr(talib, nome_funcao)
-                resultado = funcao(open_prices, high, low, close)
-                if resultado.size:
-                    nome_padrao = nome_funcao.lower().replace("cdl", "")
-                    padroes[nome_padrao] = resultado
-            return padroes
+            volatilidade = np.std(high[-10:] - low[-10:])
+            if direcao == "alta":
+                return round(low[-2] - (volatilidade * 1.5), 2)
+            else:
+                return round(high[-2] + (volatilidade * 1.5), 2)
         except Exception as e:
-            logger.error(f"Erro ao identificar padrões TA-Lib: {e}")
-            return {}
+            logger.error(f"Erro no cálculo de stop loss: {e}")
+            return None
 
-    def _calcular_forca(self, dados_completos):
+    def _calcular_take_profit(self, close, direcao):
         try:
-            dados_extraidos = self._extrair_dados(dados_completos, [4, 5])
-            close, volume = dados_extraidos[4], dados_extraidos[5]
-            if not close.size or not volume.size:
-                return "FRACA"
-            variacao_preco = abs(close[-1] - close[-2]) / close[-2]
-            volume_relativo = (
-                volume[-1] / np.mean(volume[-10:]) if len(volume) >= 10 else 1.0
+            volatilidade = np.std(close[-10:])
+            if direcao == "alta":
+                return round(close[-2] + (volatilidade * 2), 2)
+            else:
+                return round(close[-2] - (volatilidade * 2), 2)
+        except Exception as e:
+            logger.error(f"Erro no cálculo de take profit: {e}")
+            return None
+
+    def _calcular_forca(self, close, volume):
+        try:
+            variacao = abs(close[-1] - close[-2]) / close[-2]
+            vol_rel = volume[-1] / np.mean(volume[-10:]) if len(volume) >= 10 else 1
+            pontuacao = variacao * vol_rel
+            return (
+                "FORTE" if pontuacao > 0.5 else "MÉDIA" if pontuacao > 0.2 else "FRACA"
             )
-            forca = variacao_preco * volume_relativo
-            return "FORTE" if forca > 0.5 else "MÉDIA" if forca > 0.2 else "FRACA"
         except Exception as e:
             logger.error(f"Erro ao calcular força: {e}")
             return "FRACA"
 
-    def _calcular_confianca(self, dados_completos):
+    def _calcular_confianca(self, close, volume):
         try:
-            dados_extraidos = self._extrair_dados(dados_completos, [4, 5])
-            close, volume = dados_extraidos[4], dados_extraidos[5]
-            if not close.size or not volume.size or np.mean(volume[-10:]) == 0:
+            if len(close) < 10 or len(volume) < 10 or np.mean(volume[-10:]) == 0:
                 return 0.0
-            volatilidade = (
-                np.std(close[-10:]) / np.mean(close[-10:]) if len(close) >= 10 else 0.0
-            )
-            volume_relativo = (
-                volume[-1] / np.mean(volume[-10:]) if len(volume) >= 10 else 1.0
-            )
-            confianca = min(max(volatilidade * volume_relativo * 100, 0.0), 100.0)
+            volatilidade = np.std(close[-10:]) / np.mean(close[-10:])
+            vol_rel = volume[-1] / np.mean(volume[-10:])
+            confianca = min(max(volatilidade * vol_rel * 100, 0.0), 100.0)
             return round(confianca, 2)
         except Exception as e:
             logger.error(f"Erro ao calcular confiança: {e}")
@@ -194,5 +172,5 @@ class AnaliseCandles(Plugin):
                 for i in indices
             }
         except Exception as e:
-            logger.error(f"Erro ao extrair dados: {e}")
+            logger.error(f"Erro na extração de dados: {e}")
             return {i: np.array([]) for i in indices}

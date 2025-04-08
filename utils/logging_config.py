@@ -1,5 +1,5 @@
 # logging_config.py
-# Configuração centralizada de logs
+# Configuração centralizada de logs sem duplicações
 
 import logging
 import logging.config
@@ -8,13 +8,13 @@ from datetime import datetime
 import os
 from pathlib import Path
 
-# Criar diretório de logs e suas subpastas se não existir
+# Criação de diretórios de log
 Path("logs").mkdir(exist_ok=True)
 os.makedirs("logs/erros", exist_ok=True)
 os.makedirs("logs/bot", exist_ok=True)
 os.makedirs("logs/sinais", exist_ok=True)
 
-# Definir nível personalizado EXECUÇÃO (entre DEBUG=10 e INFO=20)
+# Nível personalizado entre DEBUG e INFO
 EXECUTION_LEVEL = 15
 logging.addLevelName(EXECUTION_LEVEL, "EXECUÇÃO")
 
@@ -26,7 +26,7 @@ def execution(self, message, *args, **kwargs):
 
 logging.Logger.execution = execution
 
-# Configurações Base
+# Configuração base
 BASE_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -36,7 +36,8 @@ BASE_CONFIG = {
             "datefmt": "%d-%m-%Y %H:%M:%S",
         },
         "sinais": {
-            "format": "%d-%m-%Y %H:%M:%S | SINAL | %(filename)s | %(message)s",
+            "format": "%(asctime)s | SINAL | %(filename)s | %(message)s",
+            "datefmt": "%d-%m-%Y %H:%M:%S",
         },
     },
     "handlers": {
@@ -49,7 +50,7 @@ BASE_CONFIG = {
             "class": "logging.handlers.RotatingFileHandler",
             "filename": f"logs/bot/bot_{datetime.now():%d-%m-%Y}.log",
             "formatter": "detalhado",
-            "maxBytes": 10485760,
+            "maxBytes": 10 * 1024 * 1024,
             "backupCount": 10,
             "level": "DEBUG",
             "encoding": "utf-8",
@@ -58,7 +59,7 @@ BASE_CONFIG = {
             "class": "logging.handlers.RotatingFileHandler",
             "filename": f"logs/sinais/sinais_{datetime.now():%d-%m-%Y}.log",
             "formatter": "sinais",
-            "maxBytes": 10485760,
+            "maxBytes": 10 * 1024 * 1024,
             "backupCount": 10,
             "level": "INFO",
             "encoding": "utf-8",
@@ -67,7 +68,7 @@ BASE_CONFIG = {
             "class": "logging.handlers.RotatingFileHandler",
             "filename": f"logs/erros/erros_{datetime.now():%d-%m-%Y}.log",
             "formatter": "detalhado",
-            "maxBytes": 10485760,
+            "maxBytes": 10 * 1024 * 1024,
             "backupCount": 10,
             "level": "ERROR",
             "encoding": "utf-8",
@@ -79,11 +80,12 @@ BASE_CONFIG = {
     "loggers": {
         "": {
             "handlers": ["console", "arquivo", "erros"],
-            "level": "INFO",  # Nível padrão, ajustado dinamicamente
-            "propagate": True,
+            "level": "INFO",  # Vai ser ajustado dinamicamente
+            "propagate": False,
         },
-        # "sinais": {"handlers": ["sinais"], "level": "INFO", "propagate": False},
-        "plugins": {"handlers": ["console", "arquivo", "erros"], "level": "INFO"},
+        # Loggers filhos só propagam
+        "plugins": {"level": "INFO", "propagate": True},
+        "sinais": {"handlers": ["sinais"], "level": "INFO", "propagate": False},
         "ccxt": {"handlers": ["null"], "propagate": False},
         "urllib3": {"handlers": ["null"], "propagate": False},
     },
@@ -91,22 +93,18 @@ BASE_CONFIG = {
 
 
 def configurar_logging(config=None):
-    """Configura o sistema de logging com base no config fornecido."""
+    """Configura o sistema de logging com base nas opções do config."""
     try:
-        # Extrai debug_enabled do config
         debug_enabled = False
-        if config and "logging" in config and "debug_enabled" in config["logging"]:
-            debug_enabled = config["logging"]["debug_enabled"]
+        if config and config.get("logging", {}).get("debug_enabled"):
+            debug_enabled = True
 
-        # Define o nível com base em debug_enabled
         level = logging.DEBUG if debug_enabled else EXECUTION_LEVEL
         BASE_CONFIG["loggers"][""]["level"] = level
         BASE_CONFIG["loggers"]["plugins"]["level"] = level
 
-        # Aplica a configuração
         logging.config.dictConfig(BASE_CONFIG)
 
-        # Logger para validação
         logger = logging.getLogger(__name__)
         logger.debug(
             f"Logging configurado com debug_enabled={debug_enabled}, nível={logging.getLevelName(level)}"
@@ -119,5 +117,6 @@ def configurar_logging(config=None):
 
 
 def get_logger(nome: str) -> logging.Logger:
-    """Obtém um logger configurado."""
-    return logging.getLogger(nome)
+    """Obtém um logger configurado e seguro contra duplicações."""
+    logger = logging.getLogger(nome)
+    return logger

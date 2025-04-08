@@ -32,7 +32,7 @@ class ValidadorDados(Plugin):
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
 
-            if not all([dados_completos, symbol, timeframe]):
+            if dados_completos is None or symbol is None or timeframe is None:
                 logger.error(f"Parâmetros necessários não fornecidos")
                 return True
 

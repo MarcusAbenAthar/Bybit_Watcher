@@ -62,12 +62,7 @@ class GerenciadorBot(Plugin):
                 "plugins.analisador_mercado",
             ]
 
-            logger.debug(f"Pares configurados: {pares}")
             logger.debug(f"Timeframes configurados: {timeframes}")
-            logger.debug(f"Plugins de análise registrados: {plugins_analise}")
-            logger.debug(
-                f"Plugins disponíveis no gerente: {list(self._gerente.plugins.keys())}"
-            )
 
             logger.execution(f"Ciclo iniciado para {pares}")
             for symbol in pares:
@@ -104,14 +99,8 @@ class GerenciadorBot(Plugin):
 
                     # Executar o sinais_plugin
                     sinais_plugin = self._gerente.obter_plugin("plugins.sinais_plugin")
-                    logger.debug(
-                        f"Resultado de obter_plugin('plugins.sinais_plugin'): {sinais_plugin}"
-                    )
                     if sinais_plugin:
                         logger.debug(f"Executando sinais_plugin para {symbol} - {tf}")
-                        logger.debug(
-                            f"Dados completos antes de sinais_plugin: {dados_completos[tf]}"
-                        )
                         try:
                             success = sinais_plugin.executar(
                                 dados_completos=dados_completos[tf],
@@ -126,9 +115,7 @@ class GerenciadorBot(Plugin):
                                 logger.debug(
                                     f"sinais_plugin executado com sucesso para {symbol} - {tf}"
                                 )
-                                logger.debug(
-                                    f"Dados completos após sinais_plugin: {dados_completos[tf]}"
-                                )
+
                         except Exception as e:
                             logger.error(
                                 f"Erro ao executar sinais_plugin para {symbol} - {tf}: {str(e)}",

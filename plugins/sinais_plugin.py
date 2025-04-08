@@ -1,15 +1,11 @@
 from utils.logging_config import get_logger
-from utils.sinais_logging import SINAIS_LOGGING_CONFIG
 from plugins.plugin import Plugin
-import logging.config
-import os
+import logging
 
 logger = get_logger(__name__)
-logger.handlers = []  # Limpa handlers existentes
-logger.addHandler(logging.StreamHandler())  # Adiciona apenas um
-logger.info(
-    f"Caminho absoluto do sinais_plugin.py: {os.path.abspath(__file__)}"
-)  # Aparece no log
+
+logger_sinais = logging.getLogger("sinais")
+# Logger específico para o handler 'sinais'
 
 
 class SinaisPlugin(Plugin):
@@ -29,15 +25,12 @@ class SinaisPlugin(Plugin):
             "plugins.indicadores.indicadores_volatilidade",
             "plugins.indicadores.indicadores_volume",
             "plugins.indicadores.outros_indicadores",
-            "plugins.analisador_mercado",
         ]
 
     def inicializar(self, config: dict) -> bool:
         if not super().inicializar(config):
             return False
         try:
-            logging.config.dictConfig(SINAIS_LOGGING_CONFIG)
-            logger.info("SinaisPlugin inicializado com config: %s", config)
             return True
         except Exception as e:
             logger.error("Erro ao inicializar SinaisPlugin: %s", e)
@@ -51,14 +44,6 @@ class SinaisPlugin(Plugin):
         dados_completos = kwargs.get("dados_completos", {})
         config = kwargs.get("config", self._config)
 
-        logger.debug(f"Dados recebidos: {dados_completos}")
-        logger.debug(
-            f"Plugins disponíveis no gerente: {list(self._gerente.plugins.keys())}"
-        )
-        logger.debug(
-            f"Configuração atual: {self._config}"
-        )  # Adicionado pra verificar o config
-
         resultado_padrao = {
             "sinais": {
                 "direcao": "NEUTRO",
@@ -68,7 +53,8 @@ class SinaisPlugin(Plugin):
                 "timestamp": None,
             }
         }
-        if not dados_completos or not symbol or not timeframe:
+
+        if dados_completos is None or symbol is None or timeframe is None:
             logger.error(
                 f"Parâmetros necessários não fornecidos: dados_completos={bool(dados_completos)}, symbol={symbol}, timeframe={timeframe}"
             )
@@ -126,13 +112,12 @@ class SinaisPlugin(Plugin):
                         dados_completos.update(resultado_padrao)
                     return False
 
-            logger.debug(f"Chamando _consolidar_sinais para {symbol} - {timeframe}")
             sinais = self._consolidar_sinais(dados_completos, symbol, timeframe)
-            logger.debug(f"Sinais calculados para {symbol} - {timeframe}: {sinais}")
             dados_completos["sinais"] = sinais
             logger.execution(f"Sinais consolidados para {symbol} - {timeframe}")
-            logger.info(f"Sinal consolidado para {symbol} - {timeframe}: {sinais}")
-            logger.debug(f"Execução concluída com sucesso para {symbol} - {timeframe}")
+            logger.execution(
+                f"SinaisPlugin executado com sucesso: {symbol} - {timeframe}"
+            )
             return True
 
         except Exception as e:
@@ -201,11 +186,10 @@ class SinaisPlugin(Plugin):
             confianca = max(0.0, min(confianca, 100.0))
             logger.debug(f"Confiança calculada: {confianca}")
 
+            # Alavancagem
             calc_alavancagem = self._gerente.obter_plugin("plugins.calculo_alavancagem")
-            if not calc_alavancagem:
-                logger.error("Plugin calculo_alavancagem não encontrado")
-                alavancagem = 0.0
-            else:
+            alavancagem = 0.0
+            if calc_alavancagem:
                 logger.debug(f"Config trading: {self._config.get('trading', 'N/A')}")
                 alavancagem = calc_alavancagem.calcular_alavancagem(
                     dados_completos["crus"],
@@ -215,10 +199,24 @@ class SinaisPlugin(Plugin):
                     alavancagem_minima=self._config["trading"]["alavancagem_minima"],
                 )
                 logger.debug(f"Alavancagem calculada: {alavancagem}")
+            else:
+                logger.error("Plugin calculo_alavancagem não encontrado")
 
             timestamp = (
                 dados_completos["crus"][-1][0] if dados_completos["crus"] else None
             )
+            resultado_candles = dados_completos.get("candles", {})
+            padroes = resultado_candles.get("padroes", {})
+
+            stop_loss = None
+            take_profit = None
+            if padroes:
+                padrao_escolhido = next(iter(padroes.values()))
+                stop_loss = padrao_escolhido.get("stop_loss")
+                take_profit = padrao_escolhido.get("take_profit")
+                logger.debug(
+                    f"SL/TP extraídos do padrão: SL={stop_loss}, TP={take_profit}"
+                )
 
             sinais = {
                 "direcao": direcao,
@@ -226,9 +224,21 @@ class SinaisPlugin(Plugin):
                 "confianca": round(confianca, 2),
                 "alavancagem": alavancagem,
                 "timestamp": timestamp,
+                "stop_loss": stop_loss,
+                "take_profit": take_profit,
             }
+
             logger.debug(f"Consolidação concluída: {sinais}")
+
+            # 💥 Aqui vai o log formatado pro handler 'sinais'
+            logger_sinais.info(
+                f"[{symbol} - {timeframe}]  DIREÇÃO: {direcao} | "
+                f"FORÇA: {forca} | CONFIANÇA: {round(confianca, 2)} | "
+                f"ALAVANCAGEM: {alavancagem}x | SL: {stop_loss} | TP: {take_profit}"
+            )
+
             return sinais
+
         except Exception as e:
             logger.error(f"Erro ao consolidar sinais: {str(e)}", exc_info=True)
             return {
@@ -237,4 +247,6 @@ class SinaisPlugin(Plugin):
                 "confianca": 0.0,
                 "alavancagem": 0.0,
                 "timestamp": None,
+                "stop_loss": None,
+                "take_profit": None,
             }

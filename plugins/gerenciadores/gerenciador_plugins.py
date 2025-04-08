@@ -34,7 +34,6 @@ class GerentePlugin:
         """Inicializa o gerenciador com configurações."""
         try:
             self._config = config
-            logger.debug(f"Configurações recebidas: {self._config}")
             return self._carregar_essenciais()
         except Exception as e:
             logger.error(f"Erro ao inicializar GerentePlugin: {e}")
@@ -46,7 +45,6 @@ class GerentePlugin:
             if not self.carregar_plugin(nome):
                 logger.error(f"Falha ao carregar plugin essencial {nome}")
                 return False
-        logger.info(f"Plugins essenciais carregados: {list(self.plugins.keys())}")
         return True
 
     def carregar_plugin(self, nome_plugin: str) -> bool:
@@ -55,10 +53,8 @@ class GerentePlugin:
         """
         try:
             if nome_plugin in self.plugins:
-                logger.debug(f"Plugin {nome_plugin} já carregado")
                 return True
 
-            logger.debug(f"Tentando carregar {nome_plugin}")
             modulo = importlib.import_module(nome_plugin)
             plugin_class = next(
                 (
@@ -73,11 +69,6 @@ class GerentePlugin:
             if not plugin_class:
                 logger.error(f"Classe Plugin não encontrada em {nome_plugin}")
                 return False
-
-            logger.debug(
-                f"Classe encontrada para {nome_plugin}: {plugin_class.__name__}"
-            )
-
             # Instanciação específica pra cada plugin
             if nome_plugin == "plugins.banco_dados":
                 gerenciador_banco = self.obter_plugin(
@@ -94,9 +85,6 @@ class GerentePlugin:
 
             if plugin.inicializar(self._config):
                 self.plugins[nome_plugin] = plugin
-                logger.info(
-                    f"Plugin {nome_plugin} carregado como {plugin.__class__.__name__}"
-                )
                 return True
             logger.error(f"Falha ao inicializar {nome_plugin}")
             return False

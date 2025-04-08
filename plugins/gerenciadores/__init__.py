@@ -14,8 +14,4 @@ from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
 __all__ = ["GerenciadorBanco", "GerenciadorBot", "GerentePlugin"]
 
 
-def __init__(self):
-    self.plugins = {}
-
-
 # fim do __init__.py

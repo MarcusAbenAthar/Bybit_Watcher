@@ -28,30 +28,6 @@ class IndicadoresTendencia(Plugin):
             "atr_periodo": 14,
         }
 
-    def _extrair_dados(self, dados_completos, indices):
-        try:
-            valores = {idx: [] for idx in indices}
-            for candle in dados_completos:
-                if any(
-                    candle[i] is None or str(candle[i]).strip() == "" for i in indices
-                ):
-                    continue
-                try:
-                    for idx in indices:
-                        valor = float(
-                            str(candle[idx]).replace("e", "").replace("E", "")
-                        )
-                        valores[idx].append(valor)
-                except (ValueError, TypeError):
-                    continue
-            if not all(valores.values()):
-                logger.warning(f"Dados insuficientes ou inválidos em {self.nome}")
-                return {idx: np.array([]) for idx in indices}
-            return {idx: np.array(valores[idx], dtype=np.float64) for idx in indices}
-        except Exception as e:
-            logger.error(f"Erro ao extrair dados em {self.nome}: {e}")
-            return {idx: np.array([]) for idx in indices}
-
     def calcular_medias_moveis(self, dados_completos) -> Dict[str, float]:
         try:
             dados_extraidos = self._extrair_dados(dados_completos, [4])

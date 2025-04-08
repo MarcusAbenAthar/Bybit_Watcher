@@ -119,7 +119,6 @@ class Plugin:
                     return False
 
             self.inicializado = True
-            logger.info(f"Plugin {self.nome} inicializado com sucesso")
             return True
         except Exception as e:
             logger.error(f"Erro ao inicializar plugin {self.nome}: {e}")
