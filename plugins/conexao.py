@@ -20,7 +20,7 @@ class Conexao(Plugin):
         Inicializa o plugin de conexão.
 
         Args:
-            gerente: Instância do GerentePlugin (opcional, injetado pelo GerentePlugin)
+            gerente: Instância do GerenciadorPlugins (opcional, injetado pelo GerenciadorPlugins)
         """
         super().__init__()
         self.exchange = None

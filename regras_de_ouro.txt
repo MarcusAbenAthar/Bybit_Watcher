@@ -54,6 +54,7 @@ Bybit_Watcher/
 │   ├── validador_dados.py  # Validação de dados
 │   ├── sinais_plugin.py    # Geração de sinais
 │   ├── analisador_mercado.py # Análise do mercado
+│   ├── sl_tp_estrategico.py  # Plugin de SL/TP com cérebro
 │   ├── execucao_ordens.py    # Execução de ordens
 │   │
 │   ├── indicadores/        # Subpacote de indicadores

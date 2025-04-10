@@ -9,41 +9,77 @@ from utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 
+def _validar_estilos_sltp(estilos: dict) -> dict:
+    """Valida os estilos SLTP para garantir que sl_mult e tp_mult sejam float > 0."""
+    estilos_validos = {}
+    for nome, params in estilos.items():
+        sl_mult = params.get("sl_mult")
+        tp_mult = params.get("tp_mult")
+        if (
+            isinstance(sl_mult, (int, float))
+            and sl_mult > 0
+            and isinstance(tp_mult, (int, float))
+            and tp_mult > 0
+        ):
+            estilos_validos[nome] = params
+        else:
+            logger.warning(
+                f"Estilo SLTP inválido removido: '{nome}' (sl_mult={sl_mult}, tp_mult={tp_mult})"
+            )
+    return estilos_validos
+
+
 def carregar_config() -> dict:
     """Carrega as configurações do bot diretamente do código."""
     load_dotenv()
 
-    # Configurações fixas
+    # Estilos de SL/TP dinâmicos
+    sltp_estilos = {
+        "conservador": {"sl_mult": 0.5, "tp_mult": 1.0},
+        "moderado": {"sl_mult": 1.0, "tp_mult": 1.5},
+        "agressivo": {"sl_mult": 1.5, "tp_mult": 3.0},
+    }
+
+    sltp_estilos = _validar_estilos_sltp(sltp_estilos)
+
+    sltp_estilo_padrao = "moderado"
+    if sltp_estilo_padrao not in sltp_estilos:
+        logger.warning(
+            f"Estilo padrão SLTP '{sltp_estilo_padrao}' não encontrado nos estilos. Usando o primeiro disponível."
+        )
+        sltp_estilo_padrao = next(iter(sltp_estilos), "moderado")
+
     config = {
-        "pares": "BTCUSDT",  # Par padrão ou "All" pra todos os pares
+        "pares": "XRPUSDT",
         "timeframes": ["1d"],
         "trading": {
-            "auto_trade": False,  # Chave on/off pro auto trade
-            "risco_por_operacao": 0.01,  # 1% do saldo por operação
-            "alavancagem_maxima": 20,  # Máximo de alavancagem
-            "alavancagem_minima": 3,  # Mínimo de alavancagem
+            "auto_trade": False,
+            "risco_por_operacao": 0.05,
+            "alavancagem_maxima": 20,
+            "alavancagem_minima": 5,
         },
         "medias_moveis": {
-            "periodo_curto": 20,  # Período da MA curta
-            "periodo_longo": 50,  # Período da MA longa
+            "periodo_curto": 20,
+            "periodo_longo": 50,
         },
         "bybit": {
-            "market": "linear",  # Tipo de mercado (futuros perpétuos)
-            "testnet": True,  # Usa testnet da Bybit
+            "market": "linear",
+            "testnet": True,
         },
+        "logging": {
+            "level": "INFO",
+            "debug_enabled": True,
+        },
+        "sltp_estilos": sltp_estilos,
+        "sltp_estilo_padrao": sltp_estilo_padrao,
         "database": {
             "host": os.getenv("DB_HOST"),
             "database": os.getenv("DB_NAME"),
             "user": os.getenv("DB_USER"),
             "password": os.getenv("DB_PASSWORD"),
         },
-        "logging": {
-            "level": "INFO",  # Nível de log padrão
-            "debug_enabled": True,  # Chave on/off para debug
-        },
     }
 
-    # Processa os pares
     if config["pares"] == "All":
         try:
             exchange = ccxt.bybit(
@@ -63,7 +99,7 @@ def carregar_config() -> dict:
             logger.info(f"Carregados {len(config['pares'])} pares da Bybit")
         except Exception as e:
             logger.error(f"Erro ao carregar pares da exchange: {e}")
-            config["pares"] = ["XRPUSDT"]  # Fallback
+            config["pares"] = ["BTCUSDT"]
     elif isinstance(config["pares"], str):
         config["pares"] = [config["pares"]]
 
@@ -71,5 +107,4 @@ def carregar_config() -> dict:
 
 
 if __name__ == "__main__":
-    # Exemplo de uso
     config = carregar_config()

@@ -1,53 +1,59 @@
 # plugin.py
-# Plugin Base Class
+# Plugin Base Class com Autoregistro por PLUGIN_NAME
 
-"""
-Classe base para plugins do sistema.
-
-Regras de Ouro:
-1. Autonomo - Gerencia seu próprio ciclo de vida
-2. Criterioso - Validações rigorosas
-3. Seguro - Tratamento de erros
-4. Certeiro - Operações precisas
-5. Eficiente - Performance otimizada
-6. Clareza - Bem documentado
-7. Modular - Responsabilidade única
-8. Plugins - Interface padronizada
-9. Testável - Métodos isolados
-10. Documentado - Docstrings completos
-"""
-
-from typing import Dict, Optional, Any, List
+from typing import Dict, Optional, Any, List, Type
 import numpy as np
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
+class PluginRegistry:
+    """
+    Registro global de plugins baseado no PLUGIN_NAME.
+    """
+
+    _registry: Dict[str, Type["Plugin"]] = {}
+
+    @classmethod
+    def registrar(cls, plugin_cls: Type["Plugin"]):
+        plugin_name = getattr(plugin_cls, "PLUGIN_NAME", None)
+        if not plugin_name:
+            raise ValueError(f"{plugin_cls.__name__} precisa definir PLUGIN_NAME.")
+        if plugin_name in cls._registry:
+            logger.warning(f"Plugin '{plugin_name}' já registrado. Sobrescrevendo...")
+        cls._registry[plugin_name] = plugin_cls
+        logger.debug(f"Plugin registrado: {plugin_name}")
+
+    @classmethod
+    def obter_plugin(cls, nome: str) -> Optional[Type["Plugin"]]:
+        return cls._registry.get(nome)
+
+    @classmethod
+    def todos(cls) -> Dict[str, Type["Plugin"]]:
+        return cls._registry.copy()
+
+
 class Plugin:
     """
     Classe base para plugins.
 
-    Atributos de Classe:
-        PLUGIN_NAME (str): Nome do plugin (deve ser sobrescrito)
-        PLUGIN_TYPE (str): Tipo do plugin (essencial ou adicional)
-
-    Atributos:
-        nome (str): Nome do plugin
-        descricao (str): Descrição do plugin
-        tipo (str): Tipo do plugin
-        inicializado (bool): Estado de inicialização
-        _config (dict): Configurações do plugin
-        _dependencias (List[Plugin]): Lista de dependências
+    Atributos esperados:
+        PLUGIN_NAME (str): Nome único do plugin
+        PLUGIN_TYPE (str): Tipo ("essencial" ou "adicional")
     """
 
     PLUGIN_NAME: Optional[str] = None
     PLUGIN_TYPE: Optional[str] = None
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        PluginRegistry.registrar(cls)
+
     def __init__(self, **kwargs):
-        self._nome = self.PLUGIN_NAME if self.PLUGIN_NAME else ""
+        self._nome = self.PLUGIN_NAME or self.__class__.__name__
         self.descricao = ""
-        self.tipo = self.PLUGIN_TYPE if self.PLUGIN_TYPE else ""
+        self.tipo = self.PLUGIN_TYPE or "adicional"
         self.inicializado = False
         self._config = None
         self._dependencias: List[Plugin] = []
@@ -59,9 +65,7 @@ class Plugin:
 
     @property
     def nome(self):
-        if hasattr(self, "_nome"):
-            return self._nome
-        return self.PLUGIN_NAME if self.PLUGIN_NAME else ""
+        return self._nome
 
     @nome.setter
     def nome(self, valor):
@@ -72,16 +76,6 @@ class Plugin:
     def _extrair_dados(
         self, dados_completos: List[Any], indices: List[int]
     ) -> Dict[int, np.ndarray]:
-        """
-        Extrai e valida dados de candles para índices especificados.
-
-        Args:
-            dados_completos: Lista de candles
-            indices: Índices dos valores a extrair (ex.: 2=high, 4=close)
-
-        Returns:
-            Dict com arrays numpy para cada índice ou arrays vazios se inválido
-        """
         try:
             valores = {idx: [] for idx in indices}
             for candle in dados_completos:
@@ -109,7 +103,6 @@ class Plugin:
         try:
             if self.inicializado:
                 return True
-
             self._config = config
             for dependencia in self._dependencias:
                 if not dependencia.inicializado:
@@ -117,7 +110,6 @@ class Plugin:
                         f"Dependência {dependencia.nome} não inicializada para {self.nome}"
                     )
                     return False
-
             self.inicializado = True
             return True
         except Exception as e:
@@ -125,19 +117,6 @@ class Plugin:
             return False
 
     def executar(self, *args, **kwargs) -> bool:
-        """
-        Executa o ciclo do plugin.
-
-        Args:
-            *args: Argumentos posicionais (ignorados)
-            **kwargs: Argumentos nomeados esperados:
-                dados (List): Lista de candles
-                symbol (str): Símbolo do par
-                timeframe (str): Timeframe da análise
-
-        Returns:
-            bool: True se executado com sucesso
-        """
         try:
             if not self.inicializado:
                 logger.error(f"Plugin {self.nome} não inicializado")
@@ -164,7 +143,6 @@ class Plugin:
         try:
             if not self.inicializado:
                 return
-
             self._config = None
             self._dependencias.clear()
             self.inicializado = False

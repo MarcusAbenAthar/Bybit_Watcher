@@ -6,7 +6,7 @@ import numpy as np
 import talib
 from utils.logging_config import get_logger
 from plugins.plugin import Plugin
-from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
+from plugins.gerenciadores.gerenciador_plugins import GerenciadorPlugins
 
 logger = get_logger(__name__)
 
@@ -15,7 +15,7 @@ class IndicadoresTendencia(Plugin):
     PLUGIN_NAME = "indicadores_tendencia"
     PLUGIN_TYPE = "indicador"
 
-    def __init__(self, gerente: GerentePlugin):
+    def __init__(self, gerente: GerenciadorPlugins):
         super().__init__(gerente=gerente)
         self._gerente = gerente
         self.config = {

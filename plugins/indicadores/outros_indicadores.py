@@ -1,7 +1,7 @@
 # outros_indicadores.py
 # Plugin para cálculo de indicadores adicionais (Ichimoku, Fibonacci, Pivot Points)
 
-from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
+from plugins.gerenciadores.gerenciador_plugins import GerenciadorPlugins
 from utils.logging_config import get_logger
 import numpy as np
 import talib
@@ -14,7 +14,7 @@ class OutrosIndicadores(Plugin):
     PLUGIN_NAME = "outros_indicadores"
     PLUGIN_TYPE = "indicador"
 
-    def __init__(self, gerente: GerentePlugin):
+    def __init__(self, gerente: GerenciadorPlugins):
         super().__init__(gerente=gerente)
         self._gerente = gerente
         self.config = {

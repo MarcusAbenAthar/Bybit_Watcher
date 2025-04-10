@@ -1,7 +1,7 @@
 # indicadores_osciladores.py
 # Plugin para cálculo de indicadores osciladores (RSI, Estocástico, MFI)
 
-from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
+from plugins.gerenciadores.gerenciador_plugins import GerenciadorPlugins
 from utils.logging_config import get_logger
 import talib
 import numpy as np
@@ -14,7 +14,7 @@ class IndicadoresOsciladores(Plugin):
     PLUGIN_NAME = "indicadores_osciladores"
     PLUGIN_TYPE = "indicador"
 
-    def __init__(self, gerente: GerentePlugin):
+    def __init__(self, gerente: GerenciadorPlugins):
         super().__init__(gerente=gerente)
         self._gerente = gerente
 

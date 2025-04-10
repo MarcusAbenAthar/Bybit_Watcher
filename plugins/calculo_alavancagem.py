@@ -1,7 +1,7 @@
 # calculo_alavancagem.py
 # Plugin para calcular alavancagem com base em volatilidade e timeframe
 
-from plugins.gerenciadores.gerenciador_plugins import GerentePlugin
+from plugins.gerenciadores.gerenciador_plugins import GerenciadorPlugins
 from utils.logging_config import get_logger
 import numpy as np
 import talib
@@ -14,7 +14,7 @@ class CalculoAlavancagem(Plugin):
     PLUGIN_NAME = "calculo_alavancagem"
     PLUGIN_TYPE = "analise"
 
-    def __init__(self, gerente: GerentePlugin):
+    def __init__(self, gerente: GerenciadorPlugins):
         super().__init__(gerente=gerente)
         self._gerente = gerente
         self.config = {

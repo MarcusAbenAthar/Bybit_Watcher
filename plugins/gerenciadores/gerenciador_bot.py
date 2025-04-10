@@ -1,21 +1,19 @@
 """Gerenciador principal do bot de trading."""
 
 from utils.logging_config import get_logger
-from plugins.plugin import Plugin
+from plugins.gerenciadores.gerenciadores import BaseGerenciador
 
 logger = get_logger(__name__)
 
 
-class GerenciadorBot(Plugin):
+class GerenciadorBot(BaseGerenciador):
     """Gerenciador central do bot."""
 
     PLUGIN_NAME = "gerenciador_bot"
     PLUGIN_TYPE = "essencial"
 
-    def __init__(self, gerente):
-        """Inicializa o gerenciador com o gerente de plugins."""
-        super().__init__()
-        self._gerente = gerente  # Obrigatório, injetado pelo main.py
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self._status = "parado"
 
     def inicializar(self, config: dict) -> bool:
@@ -63,8 +61,8 @@ class GerenciadorBot(Plugin):
             ]
 
             logger.debug(f"Timeframes configurados: {timeframes}")
-
             logger.execution(f"Ciclo iniciado para {pares}")
+
             for symbol in pares:
                 logger.execution(f"Análise iniciada para {symbol}")
                 dados_completos = {
@@ -88,20 +86,17 @@ class GerenciadorBot(Plugin):
                                 logger.error(
                                     f"Falha ao executar {plugin_name} para {symbol} - {tf}"
                                 )
-                            else:
-                                logger.debug(
-                                    f"{plugin_name} executado com sucesso para {symbol} - {tf}"
-                                )
                         else:
                             logger.error(
-                                f"Plugin {plugin_name} não encontrado no gerente para {symbol} - {tf}"
+                                f"Plugin {plugin_name} não encontrado no gerente"
                             )
 
-                    # Executar o sinais_plugin
                     sinais_plugin = self._gerente.obter_plugin("plugins.sinais_plugin")
                     if sinais_plugin:
-                        logger.debug(f"Executando sinais_plugin para {symbol} - {tf}")
                         try:
+                            logger.debug(
+                                f"Executando sinais_plugin para {symbol} - {tf}"
+                            )
                             success = sinais_plugin.executar(
                                 dados_completos=dados_completos[tf],
                                 symbol=symbol,
@@ -111,24 +106,15 @@ class GerenciadorBot(Plugin):
                                 logger.error(
                                     f"Falha ao executar sinais_plugin para {symbol} - {tf}"
                                 )
-                            else:
-                                logger.debug(
-                                    f"sinais_plugin executado com sucesso para {symbol} - {tf}"
-                                )
-
                         except Exception as e:
-                            logger.error(
-                                f"Erro ao executar sinais_plugin para {symbol} - {tf}: {str(e)}",
-                                exc_info=True,
-                            )
+                            logger.error(f"Erro no sinais_plugin: {e}", exc_info=True)
                             return False
                     else:
-                        logger.error(
-                            f"SinaisPlugin não encontrado no gerente para {symbol} - {tf}"
-                        )
+                        logger.error("Plugin sinais_plugin não encontrado")
                         return False
 
                 logger.execution(f"Análise concluída para {symbol}")
+
             logger.execution(f"Ciclo concluído para {pares}")
             return True
         except Exception as e:

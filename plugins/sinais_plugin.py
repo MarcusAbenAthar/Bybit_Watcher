@@ -211,12 +211,19 @@ class SinaisPlugin(Plugin):
             stop_loss = None
             take_profit = None
             if padroes:
-                padrao_escolhido = next(iter(padroes.values()))
-                stop_loss = padrao_escolhido.get("stop_loss")
-                take_profit = padrao_escolhido.get("take_profit")
-                logger.debug(
-                    f"SL/TP extraídos do padrão: SL={stop_loss}, TP={take_profit}"
-                )
+                direcao_to_sinal = {"ALTA": "compra", "BAIXA": "venda"}
+                sinal_esperado = direcao_to_sinal.get(direcao, None)
+
+                for padrao in padroes.values():
+                    if padrao.get("sinal") == sinal_esperado:
+                        stop_loss = padrao.get("stop_loss")
+                        take_profit = padrao.get("take_profit")
+                        break
+
+                if stop_loss is None or take_profit is None:
+                    logger.warning(
+                        f"Nenhum padrão com sinal '{sinal_esperado}' (direção '{direcao}') foi encontrado nos padrões detectados."
+                    )
 
             sinais = {
                 "direcao": direcao,
