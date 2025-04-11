@@ -1,4 +1,3 @@
-# calculo_risco.py
 from utils.logging_config import get_logger
 import numpy as np
 import talib
@@ -9,11 +8,13 @@ logger = get_logger(__name__)
 
 class CalculoRisco(Plugin):
     PLUGIN_NAME = "calculo_risco"
-    PLUGIN_TYPE = "essencial"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["risco", "volatilidade", "analise"]
+    PLUGIN_PRIORIDADE = 45
 
     def executar(self, *args, **kwargs) -> bool:
         logger.debug(
-            f"Iniciando execução do CalculoRisco para {kwargs.get('symbol')} - {kwargs.get('timeframe')}"
+            f"Iniciando execução do {self.nome} para {kwargs.get('symbol')} - {kwargs.get('timeframe')}"
         )
         resultado_padrao = {
             "calculo_risco": {
@@ -24,13 +25,10 @@ class CalculoRisco(Plugin):
             }
         }
 
-        # Obter parâmetros com valores padrão
         dados_completos = kwargs.get("dados_completos", {})
         symbol = kwargs.get("symbol", "BTCUSDT")
         timeframe = kwargs.get("timeframe", "1m")
-        min_klines = 50  # Requisito mínimo de klines
 
-        # Validação inicial dos parâmetros
         if not dados_completos or not symbol or not timeframe:
             logger.error(
                 f"Parâmetros necessários não fornecidos: dados_completos={bool(dados_completos)}, symbol={symbol}, timeframe={timeframe}"
@@ -39,34 +37,26 @@ class CalculoRisco(Plugin):
                 dados_completos.update(resultado_padrao)
             return True
 
-        # Verificar se dados_completos é um dicionário e contém klines suficientes
         if not isinstance(dados_completos, dict) or "crus" not in dados_completos:
-            logger.warning(
-                f"Dados inválidos para {symbol} - {timeframe}: dados_completos não é dict ou não contém 'crus'"
-            )
+            logger.warning(f"Dados inválidos para {symbol} - {timeframe}")
             if isinstance(dados_completos, dict):
                 dados_completos.update(resultado_padrao)
             return True
 
         klines = dados_completos.get("crus", [])
-        if len(klines) < min_klines:
-            logger.warning(
-                f"Dados insuficientes para {symbol} - {timeframe}: {len(klines)} klines, mínimo necessário: {min_klines}"
-            )
+        if len(klines) < 50:
+            logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
             if isinstance(dados_completos, dict):
                 dados_completos.update(resultado_padrao)
             return True
 
         try:
-            # Gerar sinal de cálculo de risco
             sinal = self.gerar_sinal(klines)
             dados_completos["calculo_risco"] = sinal
-            logger.info(f"CalculoRisco concluído para {symbol} - {timeframe}")
+            logger.info(f"{self.nome} concluído para {symbol} - {timeframe}")
             return True
         except Exception as e:
-            logger.error(
-                f"Erro ao executar CalculoRisco para {symbol} - {timeframe}: {e}"
-            )
+            logger.error(f"Erro ao executar {self.nome}: {e}")
             if isinstance(dados_completos, dict):
                 dados_completos.update(resultado_padrao)
             return True
@@ -80,6 +70,7 @@ class CalculoRisco(Plugin):
                 dados_extraidos[4],
                 dados_extraidos[5],
             )
+
             if len(close) < 50:
                 return {
                     "direcao": "NEUTRO",

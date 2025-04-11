@@ -12,7 +12,9 @@ class GerenciadorBanco(BaseGerenciador):
     """Gerenciador de conexões e estruturação do banco."""
 
     PLUGIN_NAME = "gerenciador_banco"
-    PLUGIN_TYPE = "essencial"
+    PLUGIN_CATEGORIA = "gerenciador"
+    PLUGIN_TAGS = ["banco", "persistencia"]
+    PLUGIN_PRIORIDADE = 10
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -29,8 +31,10 @@ class GerenciadorBanco(BaseGerenciador):
             bool: True se inicializado com sucesso
         """
         try:
-            if not super().inicializar(config):
-                return False
+            if self.inicializado:
+                return True
+
+            self._config = config
 
             if not self._conectar():
                 return False
@@ -38,10 +42,11 @@ class GerenciadorBanco(BaseGerenciador):
             if not self._criar_tabelas():
                 return False
 
+            self.inicializado = True
             logger.info("GerenciadorBanco inicializado com sucesso")
             return True
         except Exception as e:
-            logger.error(f"Erro ao inicializar GerenciadorBanco: {e}")
+            logger.error(f"Erro ao inicializar GerenciadorBanco: {e}", exc_info=True)
             return False
 
     def _conectar(self) -> bool:

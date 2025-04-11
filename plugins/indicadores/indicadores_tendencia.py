@@ -1,5 +1,4 @@
-# indicadores_tendencia.py
-# Plugin para cálculo de indicadores de tendência (SMA, EMA, MACD, ADX, ATR)
+# Plugin para cálculo de indicadores de tendência (SMA, EMA, MACD, ADX, ATR) de forma adaptativa
 
 from typing import Dict
 import numpy as np
@@ -14,169 +13,124 @@ logger = get_logger(__name__)
 class IndicadoresTendencia(Plugin):
     PLUGIN_NAME = "indicadores_tendencia"
     PLUGIN_TYPE = "indicador"
+    PLUGIN_TAGS = ["indicador", "tendencia"]
 
     def __init__(self, gerente: GerenciadorPlugins):
         super().__init__(gerente=gerente)
         self._gerente = gerente
-        self.config = {
-            "sma_rapida": 9,
-            "sma_lenta": 21,
-            "ema_rapida": 12,
-            "ema_lenta": 26,
+
+    def _ajustar_periodos(self, timeframe: str, volatilidade: float) -> dict:
+        multiplicador = 1.0
+        if timeframe == "1m":
+            multiplicador = 0.5
+        elif timeframe == "1d":
+            multiplicador = 1.5
+        multiplicador += min(max(volatilidade * 2, -0.5), 1.0)
+
+        return {
+            "sma_rapida": int(max(5, 9 * multiplicador)),
+            "sma_lenta": int(max(10, 21 * multiplicador)),
+            "ema_rapida": int(max(5, 12 * multiplicador)),
+            "ema_lenta": int(max(10, 26 * multiplicador)),
             "macd_signal": 9,
-            "adx_periodo": 14,
-            "atr_periodo": 14,
+            "adx_periodo": int(max(5, 14 * multiplicador)),
+            "atr_periodo": int(max(5, 14 * multiplicador)),
         }
 
-    def calcular_medias_moveis(self, dados_completos) -> Dict[str, float]:
+    def _extrair_ohlcv(self, dados) -> dict:
         try:
-            dados_extraidos = self._extrair_dados(dados_completos, [4])
-            close = dados_extraidos[4]
-            if len(close) < max(self.config["sma_lenta"], self.config["ema_lenta"]):
-                return {
-                    "sma_rapida": None,
-                    "sma_lenta": None,
-                    "ema_rapida": None,
-                    "ema_lenta": None,
-                }
-
-            sma_rapida = talib.SMA(close, timeperiod=self.config["sma_rapida"])
-            sma_lenta = talib.SMA(close, timeperiod=self.config["sma_lenta"])
-            ema_rapida = talib.EMA(close, timeperiod=self.config["ema_rapida"])
-            ema_lenta = talib.EMA(close, timeperiod=self.config["ema_lenta"])
-
             return {
-                "sma_rapida": float(sma_rapida[-1]) if sma_rapida.size else None,
-                "sma_lenta": float(sma_lenta[-1]) if sma_lenta.size else None,
-                "ema_rapida": float(ema_rapida[-1]) if ema_rapida.size else None,
-                "ema_lenta": float(ema_lenta[-1]) if ema_lenta.size else None,
+                "high": np.array([float(d[2]) for d in dados]),
+                "low": np.array([float(d[3]) for d in dados]),
+                "close": np.array([float(d[4]) for d in dados]),
             }
         except Exception as e:
-            logger.error(f"Erro ao calcular médias móveis: {e}")
-            return {
-                "sma_rapida": None,
-                "sma_lenta": None,
-                "ema_rapida": None,
-                "ema_lenta": None,
-            }
-
-    def calcular_macd(self, dados_completos) -> Dict[str, float]:
-        try:
-            dados_extraidos = self._extrair_dados(dados_completos, [4])
-            close = dados_extraidos[4]
-            if len(close) < self.config["ema_lenta"]:
-                return {"macd": None, "signal": None, "histogram": None}
-
-            macd_line, signal_line, histogram = talib.MACD(
-                close,
-                fastperiod=self.config["ema_rapida"],
-                slowperiod=self.config["ema_lenta"],
-                signalperiod=self.config["macd_signal"],
-            )
-            return {
-                "macd": float(macd_line[-1]) if macd_line.size else None,
-                "signal": float(signal_line[-1]) if signal_line.size else None,
-                "histogram": float(histogram[-1]) if histogram.size else None,
-            }
-        except Exception as e:
-            logger.error(f"Erro ao calcular MACD: {e}")
-            return {"macd": None, "signal": None, "histogram": None}
-
-    def calcular_adx(self, dados_completos) -> Dict[str, float]:
-        try:
-            dados_extraidos = self._extrair_dados(dados_completos, [2, 3, 4])
-            high, low, close = (
-                dados_extraidos[2],
-                dados_extraidos[3],
-                dados_extraidos[4],
-            )
-            if len(high) < self.config["adx_periodo"]:
-                return {"adx": None, "pdi": None, "ndi": None}
-
-            adx = talib.ADX(high, low, close, timeperiod=self.config["adx_periodo"])
-            pdi = talib.PLUS_DI(high, low, close, timeperiod=self.config["adx_periodo"])
-            ndi = talib.MINUS_DI(
-                high, low, close, timeperiod=self.config["adx_periodo"]
-            )
-
-            return {
-                "adx": float(adx[-1]) if adx.size else None,
-                "pdi": float(pdi[-1]) if pdi.size else None,
-                "ndi": float(ndi[-1]) if ndi.size else None,
-            }
-        except Exception as e:
-            logger.error(f"Erro ao calcular ADX: {e}")
-            return {"adx": None, "pdi": None, "ndi": None}
-
-    def calcular_atr(self, dados_completos) -> float:
-        try:
-            dados_extraidos = self._extrair_dados(dados_completos, [2, 3, 4])
-            high, low, close = (
-                dados_extraidos[2],
-                dados_extraidos[3],
-                dados_extraidos[4],
-            )
-            if len(high) < self.config["atr_periodo"]:
-                return 0.0
-
-            atr = talib.ATR(high, low, close, timeperiod=self.config["atr_periodo"])
-            return float(atr[-1]) if atr.size else 0.0
-        except Exception as e:
-            logger.error(f"Erro ao calcular ATR: {e}")
-            return 0.0
+            logger.error(f"Erro ao extrair OHLC: {e}")
+            return {"high": np.array([]), "low": np.array([]), "close": np.array([])}
 
     def executar(self, *args, **kwargs) -> bool:
         resultado_padrao = {
-            "medias_moveis": {
-                "sma_rapida": None,
-                "sma_lenta": None,
-                "ema_rapida": None,
-                "ema_lenta": None,
-            },
-            "macd": {"macd": None, "signal": None, "histogram": None},
-            "adx": {"adx": None, "pdi": None, "ndi": None},
+            "medias_moveis": {},
+            "macd": {},
+            "adx": {},
             "atr": 0.0,
         }
+
         try:
             dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
 
             if not all([dados_completos, symbol, timeframe]):
-                logger.error(f"Parâmetros necessários não fornecidos em {self.nome}")
+                logger.error(f"Parâmetros obrigatórios ausentes em {self.nome}")
                 if isinstance(dados_completos, dict):
                     dados_completos["tendencia"] = resultado_padrao
                 return True
 
-            klines = (
-                dados_completos.get("crus", [])
-                if isinstance(dados_completos, dict)
-                else dados_completos
+            candles = dados_completos.get("crus", [])
+            if not isinstance(candles, list) or len(candles) < 30:
+                logger.warning(f"Candles insuficientes para {symbol} - {timeframe}")
+                dados_completos["tendencia"] = resultado_padrao
+                return True
+
+            ohlc = self._extrair_ohlcv(candles)
+            close = ohlc["close"]
+            if len(close) < 30:
+                dados_completos["tendencia"] = resultado_padrao
+                return True
+
+            volatilidade = np.std(close[-14:]) / np.mean(close[-14:])
+            periodos = self._ajustar_periodos(timeframe, volatilidade)
+
+            # Médias móveis
+            sma_r = talib.SMA(close, timeperiod=periodos["sma_rapida"])
+            sma_l = talib.SMA(close, timeperiod=periodos["sma_lenta"])
+            ema_r = talib.EMA(close, timeperiod=periodos["ema_rapida"])
+            ema_l = talib.EMA(close, timeperiod=periodos["ema_lenta"])
+
+            # MACD
+            macd, signal, hist = talib.MACD(
+                close,
+                fastperiod=periodos["ema_rapida"],
+                slowperiod=periodos["ema_lenta"],
+                signalperiod=periodos["macd_signal"],
             )
-            if not isinstance(klines, list) or len(klines) < 20:
-                logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
-                if isinstance(dados_completos, dict):
-                    dados_completos["tendencia"] = resultado_padrao
-                return True
 
-            medias = self.calcular_medias_moveis(klines)
-            macd = self.calcular_macd(klines)
-            adx = self.calcular_adx(klines)
-            atr = self.calcular_atr(klines)
+            # ADX
+            adx = talib.ADX(
+                ohlc["high"], ohlc["low"], close, timeperiod=periodos["adx_periodo"]
+            )
+            pdi = talib.PLUS_DI(
+                ohlc["high"], ohlc["low"], close, timeperiod=periodos["adx_periodo"]
+            )
+            ndi = talib.MINUS_DI(
+                ohlc["high"], ohlc["low"], close, timeperiod=periodos["adx_periodo"]
+            )
 
-            resultado = {
-                "medias_moveis": medias,
-                "macd": macd,
-                "adx": adx,
-                "atr": atr,
+            # ATR
+            atr = talib.ATR(
+                ohlc["high"], ohlc["low"], close, timeperiod=periodos["atr_periodo"]
+            )
+
+            dados_completos["tendencia"] = {
+                "medias_moveis": {
+                    "sma_rapida": float(sma_r[-1]) if sma_r.size else None,
+                    "sma_lenta": float(sma_l[-1]) if sma_l.size else None,
+                    "ema_rapida": float(ema_r[-1]) if ema_r.size else None,
+                    "ema_lenta": float(ema_l[-1]) if ema_l.size else None,
+                },
+                "macd": {
+                    "macd": float(macd[-1]) if macd.size else None,
+                    "signal": float(signal[-1]) if signal.size else None,
+                    "histogram": float(hist[-1]) if hist.size else None,
+                },
+                "adx": {
+                    "adx": float(adx[-1]) if adx.size else None,
+                    "pdi": float(pdi[-1]) if pdi.size else None,
+                    "ndi": float(ndi[-1]) if ndi.size else None,
+                },
+                "atr": float(atr[-1]) if atr.size else 0.0,
             }
-
-            if isinstance(dados_completos, dict):
-                dados_completos["tendencia"] = resultado
-                logger.debug(
-                    f"Indicadores de tendência calculados para {symbol} - {timeframe}"
-                )
-
             return True
         except Exception as e:
             logger.error(f"Erro ao executar {self.nome}: {e}")

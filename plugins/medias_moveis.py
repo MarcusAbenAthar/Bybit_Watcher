@@ -8,97 +8,91 @@ logger = get_logger(__name__)
 
 class MediasMoveis(Plugin):
     PLUGIN_NAME = "medias_moveis"
-    PLUGIN_TYPE = "essencial"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["tendencia", "indicador", "mm"]
+    PLUGIN_PRIORIDADE = 40
 
     def executar(self, *args, **kwargs) -> bool:
-        logger.debug(
-            f"Iniciando medias_moveis para {kwargs.get('symbol')} - {kwargs.get('timeframe')}"
-        )
+        symbol = kwargs.get("symbol")
+        timeframe = kwargs.get("timeframe")
+        dados_completos = kwargs.get("dados_completos")
+
+        logger.debug(f"Iniciando medias_moveis para {symbol} - {timeframe}")
+
         resultado_padrao = {
-            "direcao": "NEUTRO",
+            "direcao": "LATERAL",
             "forca": "FRACA",
             "confianca": 0.0,
             "indicadores": {"ma20": None, "ma50": None},
         }
-        try:
-            dados_completos = kwargs.get("dados_completos")
-            symbol = kwargs.get("symbol")
-            timeframe = kwargs.get("timeframe")
 
-            if not isinstance(dados_completos, dict) or not all([symbol, timeframe]):
-                logger.error(
-                    f"Parâmetros inválidos. Dados: {dados_completos}, Symbol: {symbol}, Timeframe: {timeframe}"
-                )
-                if isinstance(dados_completos, dict):
-                    dados_completos["medias_moveis"] = resultado_padrao
-                return True
-
-            dados_crus = dados_completos.get("crus")
-            if (
-                not dados_crus
-                or not isinstance(dados_crus, list)
-                or len(dados_crus) < 50
-            ):
-                logger.warning(
-                    f"Dados insuficientes para {symbol} - {timeframe}. Crus: {dados_crus}"
-                )
+        if not isinstance(dados_completos, dict) or not all([symbol, timeframe]):
+            logger.error("Parâmetros inválidos recebidos em medias_moveis")
+            if isinstance(dados_completos, dict):
                 dados_completos["medias_moveis"] = resultado_padrao
-                return True
-
-            sinal = self.gerar_sinal(dados_crus)
-            dados_completos["medias_moveis"] = sinal
             return True
-        except Exception as e:
-            logger.error(f"Erro ao executar medias_moveis: {e}")
+
+        dados_crus = dados_completos.get("crus", [])
+        if not isinstance(dados_crus, list) or len(dados_crus) < 50:
+            logger.warning(f"Dados crus insuficientes para {symbol} - {timeframe}")
             dados_completos["medias_moveis"] = resultado_padrao
             return True
 
-    def gerar_sinal(self, dados_crus):
         try:
-            dados_extraidos = self._extrair_dados(dados_crus, [4])  # Apenas close
-            close = dados_extraidos[4]
-            if len(close) < 50:
-                logger.warning(f"Menos de 50 klines disponíveis: {len(close)}")
-                return {
-                    "direcao": "NEUTRO",
-                    "forca": "FRACA",
-                    "confianca": 0.0,
-                    "indicadores": {"ma20": None, "ma50": None},
-                }
+            sinal = self.gerar_sinal(dados_crus)
+            dados_completos["medias_moveis"] = sinal
+            logger.info(f"medias_moveis concluído para {symbol} - {timeframe}")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao processar medias_moveis: {e}", exc_info=True)
+            dados_completos["medias_moveis"] = resultado_padrao
+            return True
 
-            ma20 = talib.SMA(close, timeperiod=20)
-            ma50 = talib.SMA(close, timeperiod=50)
+    def gerar_sinal(self, crus):
+        try:
+            closes = self._extrair_dados(crus, [4])[4]
+            if len(closes) < 50:
+                logger.warning("Menos de 50 candles disponíveis.")
+                return self._resultado_padrao()
+
+            ma20 = talib.SMA(closes, timeperiod=20)
+            ma50 = talib.SMA(closes, timeperiod=50)
+
+            if ma20[-1] is None or ma50[-1] is None:
+                return self._resultado_padrao()
+
             distancia = abs(ma20[-1] - ma50[-1]) / ma50[-1] * 100
+            tendencia_alta = sum(ma20[i] > ma50[i] for i in range(-5, 0))
+            tendencia_baixa = sum(ma20[i] < ma50[i] for i in range(-5, 0))
 
-            forca = (
-                "FORTE"
-                if distancia >= 2.0
-                else "MÉDIA" if distancia >= 1.0 else "FRACA"
+            direcao = (
+                "ALTA"
+                if tendencia_alta > tendencia_baixa
+                else "BAIXA" if tendencia_baixa > tendencia_alta else "LATERAL"
             )
-            tendencia_alta = sum(1 for i in range(-5, 0) if ma20[i] > ma50[i])
-            tendencia_baixa = sum(1 for i in range(-5, 0) if ma20[i] < ma50[i])
-
-            if tendencia_alta > tendencia_baixa:
-                direcao = "ALTA"
-                confianca = (tendencia_alta / 5) * 100
-            elif tendencia_baixa > tendencia_alta:
-                direcao = "BAIXA"
-                confianca = (tendencia_baixa / 5) * 100
-            else:
-                direcao = "NEUTRO"
-                confianca = 0.0
+            confianca = (
+                round((max(tendencia_alta, tendencia_baixa) / 5) * distancia, 2)
+                if direcao != "LATERAL"
+                else 0.0
+            )
+            forca = (
+                "FORTE" if confianca >= 70 else "MÉDIA" if confianca >= 30 else "FRACA"
+            )
 
             return {
                 "direcao": direcao,
                 "forca": forca,
                 "confianca": confianca,
-                "indicadores": {"ma20": float(ma20[-1]), "ma50": float(ma50[-1])},
+                "indicadores": {"ma20": round(ma20[-1], 4), "ma50": round(ma50[-1], 4)},
             }
         except Exception as e:
-            logger.error(f"Erro ao gerar sinal: {e}")
-            return {
-                "direcao": "NEUTRO",
-                "forca": "FRACA",
-                "confianca": 0.0,
-                "indicadores": {"ma20": None, "ma50": None},
-            }
+            logger.error(f"Erro ao gerar sinal MM: {e}")
+            return self._resultado_padrao()
+
+    def _resultado_padrao(self):
+        return {
+            "direcao": "LATERAL",
+            "forca": "FRACA",
+            "confianca": 0.0,
+            "indicadores": {"ma20": None, "ma50": None},
+        }

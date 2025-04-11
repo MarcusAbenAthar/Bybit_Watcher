@@ -1,0 +1,84 @@
+
+simulador_sinais_historico.py
+Função principal:
+Simular sinais de entrada a partir de dados históricos (das últimas 24h, por exemplo), com base nos padrões detectados e estratégias configuradas.
+
+Responsabilidades:
+
+Acessar os dados crus (crus) recentes.
+
+Rodar uma "análise hipotética" em cada candle, usando os mesmos critérios dos plugins reais:
+
+Padrões de candles
+
+SL/TP com os estilos configurados
+
+Direção do mercado naquele momento
+
+Verificar o resultado de cada sinal simulado (atingiu SL, TP ou nada).
+
+Armazenar localmente um histórico de performance simulada, por:
+
+Tipo de padrão
+
+Estilo de SLTP
+
+Indicador
+
+Timeframe
+
+Oferecer uma função avaliar_probabilidade(direcao, contexto) para o consolidador_confianca usar.
+
+Importância:
+Serve como "reality check" contínuo. É a fonte de aprendizado do sistema sem precisar operar.
+
+
+
+
+🔹 consolidador_confianca.py
+Função principal:
+Centralizar a avaliação de confiança, score e efetividade dos plugins de análise. Ele consolida dados de diversos plugins e os transforma em probabilidade real e confiável.
+
+Responsabilidades:
+
+Receber os resultados brutos de cada plugin:
+
+Direção
+
+Confiança individual
+
+Convergência/divergência com outros plugins
+
+Pesquisar no simulador_sinais_historico a eficácia histórica de cada padrão/indicador detectado naquele contexto.
+
+Aplicar pesos dinâmicos com base em:
+
+Efetividade do plugin (passada e atual)
+
+Tempo de execução
+
+Convergência entre sinais
+
+Tendência macro
+
+Gerar um score final de confiança, usado pelo sinais_plugin e pelo sltp.
+
+Eventualmente, definir o estilo SL/TP recomendado com base em:
+
+Probabilidade
+
+Contexto
+
+Histórico
+
+Importância:
+É o cérebro tático do bot. Se os outros plugins enxergam, ele interpreta. O SLTP e o executor de ordens vão confiar nele para agir com mais segurança e inteligência.
+
+
+
+
+Resumo rápido:
+
+Plugin                   -       	        Responsabilidade
+simulador_sinais_historico	  -             Simula sinais passados e mede sua efetividade
+consolidador_confianca         -        	Calcula a confiança real e recomenda ações com base no cenário e histórico

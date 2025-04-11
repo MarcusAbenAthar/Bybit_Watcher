@@ -13,7 +13,9 @@ class Conexao(Plugin):
     """Classe para gerenciar a conexão com a Bybit."""
 
     PLUGIN_NAME = "conexao"
-    PLUGIN_TYPE = "essencial"
+    PLUGIN_CATEGORIA = "infraestrutura"
+    PLUGIN_TAGS = ["conexao", "bybit", "api"]
+    PLUGIN_PRIORIDADE = 10
 
     def __init__(self, gerente=None):  # Adicionado 'gerente' como opcional
         """

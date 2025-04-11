@@ -1,20 +1,26 @@
 # logging_config.py
-# Configuração centralizada de logs sem duplicações
+# Configuração centralizada de logs com proteção contra duplicações e logs consistentes por dia.
 
 import logging
 import logging.config
 import logging.handlers
 from datetime import datetime
-import os
 from pathlib import Path
+import os
 
-# Criação de diretórios de log
-Path("logs").mkdir(exist_ok=True)
-os.makedirs("logs/erros", exist_ok=True)
-os.makedirs("logs/bot", exist_ok=True)
-os.makedirs("logs/sinais", exist_ok=True)
+# Diretórios de log garantidos
+log_root = Path("logs")
+log_root.mkdir(exist_ok=True)
+for sub in ["bot", "erros", "sinais"]:
+    (log_root / sub).mkdir(parents=True, exist_ok=True)
 
-# Nível personalizado entre DEBUG e INFO
+# Nome fixo por data (evita múltiplos arquivos no mesmo dia)
+log_data = datetime.now().strftime("%d-%m-%Y")
+log_arquivo = log_root / "bot" / f"bot_{log_data}.log"
+log_erros = log_root / "erros" / f"erros_{log_data}.log"
+log_sinais = log_root / "sinais" / f"sinais_{log_data}.log"
+
+# Nível personalizado EXECUÇÃO
 EXECUTION_LEVEL = 15
 logging.addLevelName(EXECUTION_LEVEL, "EXECUÇÃO")
 
@@ -26,7 +32,7 @@ def execution(self, message, *args, **kwargs):
 
 logging.Logger.execution = execution
 
-# Configuração base
+# Configuração base (dinâmica via configurar_logging)
 BASE_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -48,7 +54,7 @@ BASE_CONFIG = {
         },
         "arquivo": {
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": f"logs/bot/bot_{datetime.now():%d-%m-%Y}.log",
+            "filename": str(log_arquivo),
             "formatter": "detalhado",
             "maxBytes": 10 * 1024 * 1024,
             "backupCount": 10,
@@ -57,7 +63,7 @@ BASE_CONFIG = {
         },
         "sinais": {
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": f"logs/sinais/sinais_{datetime.now():%d-%m-%Y}.log",
+            "filename": str(log_sinais),
             "formatter": "sinais",
             "maxBytes": 10 * 1024 * 1024,
             "backupCount": 10,
@@ -66,7 +72,7 @@ BASE_CONFIG = {
         },
         "erros": {
             "class": "logging.handlers.RotatingFileHandler",
-            "filename": f"logs/erros/erros_{datetime.now():%d-%m-%Y}.log",
+            "filename": str(log_erros),
             "formatter": "detalhado",
             "maxBytes": 10 * 1024 * 1024,
             "backupCount": 10,
@@ -80,10 +86,9 @@ BASE_CONFIG = {
     "loggers": {
         "": {
             "handlers": ["console", "arquivo", "erros"],
-            "level": "INFO",  # Vai ser ajustado dinamicamente
+            "level": "INFO",  # Será sobrescrito dinamicamente
             "propagate": False,
         },
-        # Loggers filhos só propagam
         "plugins": {"level": "INFO", "propagate": True},
         "sinais": {"handlers": ["sinais"], "level": "INFO", "propagate": False},
         "ccxt": {"handlers": ["null"], "propagate": False},
@@ -93,13 +98,15 @@ BASE_CONFIG = {
 
 
 def configurar_logging(config=None):
-    """Configura o sistema de logging com base nas opções do config."""
+    """
+    Configura o sistema de logging com base nas opções do config.
+    """
     try:
-        debug_enabled = False
-        if config and config.get("logging", {}).get("debug_enabled"):
-            debug_enabled = True
-
+        debug_enabled = (
+            config.get("logging", {}).get("debug_enabled", False) if config else False
+        )
         level = logging.DEBUG if debug_enabled else EXECUTION_LEVEL
+
         BASE_CONFIG["loggers"][""]["level"] = level
         BASE_CONFIG["loggers"]["plugins"]["level"] = level
 
@@ -112,11 +119,15 @@ def configurar_logging(config=None):
         logger.info("Sistema de logging inicializado")
         return logger
     except Exception as e:
-        print(f"Erro ao configurar logging: {e}")
+        print(f"[LOGGING ERROR] Falha ao configurar logging: {e}")
         raise
 
 
 def get_logger(nome: str) -> logging.Logger:
-    """Obtém um logger configurado e seguro contra duplicações."""
+    """
+    Obtém um logger seguro contra duplicações e pronto para uso, mesmo se `configurar_logging` não foi chamado.
+    """
     logger = logging.getLogger(nome)
+    if not logger.hasHandlers():
+        configurar_logging()  # fallback de segurança
     return logger

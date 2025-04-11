@@ -1,34 +1,31 @@
-"""Gerenciador principal do bot de trading."""
+"""Gerenciador principal do bot de trading - versão inteligente com paralelismo."""
 
 from utils.logging_config import get_logger
 from plugins.gerenciadores.gerenciadores import BaseGerenciador
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import defaultdict
+from time import time
 
 logger = get_logger(__name__)
 
 
 class GerenciadorBot(BaseGerenciador):
-    """Gerenciador central do bot."""
+    """Gerenciador central e inteligente do bot."""
 
     PLUGIN_NAME = "gerenciador_bot"
-    PLUGIN_TYPE = "essencial"
+    PLUGIN_CATEGORIA = "gerenciador"
+    PLUGIN_TAGS = ["core", "controle"]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._status = "parado"
+        self._executor = ThreadPoolExecutor(max_workers=4)  # Ajustável
+        self._estado_ativo = defaultdict(dict)  # Guarda status por par-timeframe
 
     def inicializar(self, config: dict) -> bool:
-        """
-        Inicializa o gerenciador com configurações.
-
-        Args:
-            config: Dicionário de configurações do bot
-
-        Returns:
-            bool: True se inicializado com sucesso
-        """
         try:
-            if not super().inicializar(config):
-                return False
+            self._config = config
+            self.inicializado = True
             self._status = "iniciando"
             logger.info("GerenciadorBot inicializado")
             return True
@@ -37,105 +34,91 @@ class GerenciadorBot(BaseGerenciador):
             return False
 
     def executar(self, *args, **kwargs) -> bool:
-        try:
-            if self._status != "rodando":
-                logger.warning("Bot não está rodando, ciclo não executado")
-                return False
+        if self._status != "rodando":
+            logger.warning("Bot não está rodando")
+            return False
 
+        try:
             pares = self._config["pares"]
             timeframes = self._config["timeframes"]
-            plugins_analise = [
-                "plugins.conexao",
-                "plugins.validador_dados",
-                "plugins.indicadores.indicadores_tendencia",
-                "plugins.medias_moveis",
-                "plugins.calculo_alavancagem",
-                "plugins.analise_candles",
-                "plugins.price_action",
-                "plugins.calculo_risco",
-                "plugins.indicadores.indicadores_osciladores",
-                "plugins.indicadores.indicadores_volatilidade",
-                "plugins.indicadores.indicadores_volume",
-                "plugins.indicadores.outros_indicadores",
-                "plugins.analisador_mercado",
-            ]
+            plugins_analise = self._gerente.filtrar_por_tag("analise")
+            sinais_plugin = self._gerente.obter_plugin("sinais_plugin")
 
-            logger.debug(f"Timeframes configurados: {timeframes}")
-            logger.execution(f"Ciclo iniciado para {pares}")
+            if not sinais_plugin:
+                logger.error("Plugin sinais_plugin não encontrado")
+                return False
 
+            logger.execution(f"Iniciando ciclo para {len(pares)} pares")
+
+            tarefas = []
             for symbol in pares:
-                logger.execution(f"Análise iniciada para {symbol}")
-                dados_completos = {
-                    tf: {"crus": [], "processados": {}} for tf in timeframes
-                }
-
                 for tf in timeframes:
-                    logger.debug(f"Iniciando processamento de {symbol} - {tf}")
-                    for plugin_name in plugins_analise:
-                        plugin = self._gerente.obter_plugin(plugin_name)
-                        if plugin:
-                            logger.debug(
-                                f"Executando {plugin_name} para {symbol} - {tf}"
-                            )
-                            success = plugin.executar(
-                                dados_completos=dados_completos[tf],
-                                symbol=symbol,
-                                timeframe=tf,
-                            )
-                            if not success:
-                                logger.error(
-                                    f"Falha ao executar {plugin_name} para {symbol} - {tf}"
-                                )
-                        else:
-                            logger.error(
-                                f"Plugin {plugin_name} não encontrado no gerente"
-                            )
+                    tarefas.append(
+                        self._executor.submit(
+                            self._processar_par,
+                            symbol,
+                            tf,
+                            plugins_analise,
+                            sinais_plugin,
+                        )
+                    )
 
-                    sinais_plugin = self._gerente.obter_plugin("plugins.sinais_plugin")
-                    if sinais_plugin:
-                        try:
-                            logger.debug(
-                                f"Executando sinais_plugin para {symbol} - {tf}"
-                            )
-                            success = sinais_plugin.executar(
-                                dados_completos=dados_completos[tf],
-                                symbol=symbol,
-                                timeframe=tf,
-                            )
-                            if not success:
-                                logger.error(
-                                    f"Falha ao executar sinais_plugin para {symbol} - {tf}"
-                                )
-                        except Exception as e:
-                            logger.error(f"Erro no sinais_plugin: {e}", exc_info=True)
-                            return False
-                    else:
-                        logger.error("Plugin sinais_plugin não encontrado")
-                        return False
+            resultados = [t.result() for t in as_completed(tarefas)]
+            logger.execution(f"Ciclo finalizado para todos os pares")
 
-                logger.execution(f"Análise concluída para {symbol}")
-
-            logger.execution(f"Ciclo concluído para {pares}")
-            return True
+            return all(resultados)
         except Exception as e:
-            logger.error(f"Erro geral ao executar ciclo: {e}", exc_info=True)
+            logger.error(f"Erro geral no ciclo do bot: {e}", exc_info=True)
+            return False
+
+    def _processar_par(self, symbol, timeframe, plugins_analise, sinais_plugin) -> bool:
+        try:
+            logger.execution(f"Início do processamento: {symbol} - {timeframe}")
+            dados = {"crus": [], "processados": {}}
+
+            for plugin in plugins_analise:
+                try:
+                    success = plugin.executar(
+                        dados_completos=dados,
+                        symbol=symbol,
+                        timeframe=timeframe,
+                    )
+                    if not success:
+                        logger.warning(f"{plugin.nome} falhou: {symbol} - {timeframe}")
+                except Exception as e:
+                    logger.error(f"Erro no {plugin.nome}: {e}", exc_info=True)
+
+            success = sinais_plugin.executar(
+                dados_completos=dados,
+                symbol=symbol,
+                timeframe=timeframe,
+            )
+
+            if not success:
+                logger.warning(f"sinais_plugin falhou para {symbol} - {timeframe}")
+                return False
+
+            self._estado_ativo[symbol][timeframe] = {"timestamp": time()}
+            logger.execution(f"Processamento concluído: {symbol} - {timeframe}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro crítico em {symbol}-{timeframe}: {e}", exc_info=True)
             return False
 
     def iniciar(self) -> bool:
-        """Inicia o bot."""
         try:
             self._status = "rodando"
-            logger.info("Bot iniciado")
+            logger.info("Bot em execução")
             return True
         except Exception as e:
             logger.error(f"Erro ao iniciar bot: {e}", exc_info=True)
             return False
 
     def parar(self) -> bool:
-        """Para o bot."""
         try:
             self._status = "parado"
-            logger.info("Bot parado")
+            logger.info("Bot pausado")
             return True
         except Exception as e:
             logger.error(f"Erro ao parar bot: {e}", exc_info=True)

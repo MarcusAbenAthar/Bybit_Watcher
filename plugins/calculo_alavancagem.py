@@ -1,5 +1,4 @@
-# calculo_alavancagem.py
-# Plugin para calcular alavancagem com base em volatilidade e timeframe
+# Plugin para calcular alavancagem com base em volatilidade e confiança
 
 from plugins.gerenciadores.gerenciador_plugins import GerenciadorPlugins
 from utils.logging_config import get_logger
@@ -12,7 +11,9 @@ logger = get_logger(__name__)
 
 class CalculoAlavancagem(Plugin):
     PLUGIN_NAME = "calculo_alavancagem"
-    PLUGIN_TYPE = "analise"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["analise", "volatilidade", "alavancagem"]
+    PLUGIN_PRIORIDADE = 85
 
     def __init__(self, gerente: GerenciadorPlugins):
         super().__init__(gerente=gerente)
@@ -41,7 +42,6 @@ class CalculoAlavancagem(Plugin):
                 dados_extraidos[4],
             )
 
-            # Normaliza os valores para garantir que sejam floats
             def normalizar(valores):
                 return np.array(
                     [
@@ -66,7 +66,6 @@ class CalculoAlavancagem(Plugin):
             preco_atual = close[-1]
             volatilidade = atr_atual / preco_atual
 
-            # Alavancagem baseada em volatilidade
             if volatilidade < 0.001:
                 alav_base = 20
             elif volatilidade < 0.005:
@@ -74,19 +73,15 @@ class CalculoAlavancagem(Plugin):
             else:
                 alav_base = 5
 
-            # Ajuste pela confiança
             try:
                 confianca = float(confianca)
             except (ValueError, TypeError):
-                logger.warning(
-                    f"Confiança inválida: {confianca}, usando 0.0 como fallback"
-                )
+                logger.warning(f"Confiança inválida: {confianca}, usando fallback 0.0")
                 confianca = 0.0
 
             fator_conf = (confianca / 100) if confianca > 0 else 0.3
             alavancagem_final = alav_base * fator_conf
 
-            # Se direção for neutra, usa o mínimo
             if direcao == "NEUTRO":
                 return alavancagem_minima
 

@@ -1,11 +1,10 @@
 # indicadores_volatilidade.py
 # Plugin para cálculo de indicadores de volatilidade (Bandas de Bollinger, ATR)
 
-from plugins.gerenciadores.gerenciador_plugins import GerenciadorPlugins
+from plugins.plugin import Plugin
 from utils.logging_config import get_logger
 import talib
 import numpy as np
-from plugins.plugin import Plugin
 
 logger = get_logger(__name__)
 
@@ -13,70 +12,46 @@ logger = get_logger(__name__)
 class IndicadoresVolatilidade(Plugin):
     PLUGIN_NAME = "indicadores_volatilidade"
     PLUGIN_TYPE = "indicador"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["indicador", "volatilidade"]
+    PLUGIN_PRIORIDADE = 50
 
-    def __init__(self, gerente: GerenciadorPlugins):
-        super().__init__(gerente=gerente)
-        self._gerente = gerente
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.config = {
-            "bb_periodo": 20,
+            "bb_periodo_base": 20,
             "bb_desvio_padrao": 2,
-            "atr_periodo": 14,
-            "volatilidade_periodo": 14,
+            "atr_periodo_base": 14,
+            "volatilidade_periodo_base": 14,
         }
 
-    def calcular_bandas_de_bollinger(self, dados_completos):
+    def _ajustar_periodos(self, timeframe: str, volatilidade: float = 0.0) -> dict:
+        ajuste = int(volatilidade * 10)
+        if timeframe == "1m":
+            fator = 0.5
+        elif timeframe == "1d":
+            fator = 1.5
+        else:
+            fator = 1.0
+
+        return {
+            "bb": max(10, int(self.config["bb_periodo_base"] * fator) + ajuste),
+            "atr": max(10, int(self.config["atr_periodo_base"] * fator) + ajuste),
+            "vol": max(
+                10, int(self.config["volatilidade_periodo_base"] * fator) + ajuste
+            ),
+        }
+
+    def _calcular_volatilidade_base(self, close) -> float:
         try:
-            dados_extraidos = self._extrair_dados(dados_completos, [4])
-            close = dados_extraidos[4]
-            if len(close) < self.config["bb_periodo"]:
-                logger.warning(
-                    f"Dados insuficientes para Bandas de Bollinger: {len(close)}/{self.config['bb_periodo']}"
-                )
-                return np.array([]), np.array([]), np.array([])
-
-            banda_media = talib.SMA(close, timeperiod=self.config["bb_periodo"])
-            std_dev = talib.STDDEV(close, timeperiod=self.config["bb_periodo"])
-            banda_superior = banda_media + std_dev * self.config["bb_desvio_padrao"]
-            banda_inferior = banda_media - std_dev * self.config["bb_desvio_padrao"]
-            return banda_superior, banda_media, banda_inferior
-        except Exception as e:
-            logger.error(f"Erro ao calcular Bandas de Bollinger: {e}")
-            return np.array([]), np.array([]), np.array([])
-
-    def calcular_atr(self, dados_completos):
-        try:
-            dados_extraidos = self._extrair_dados(dados_completos, [2, 3, 4])
-            high, low, close = (
-                dados_extraidos[2],
-                dados_extraidos[3],
-                dados_extraidos[4],
-            )
-            if len(high) < self.config["atr_periodo"]:
-                logger.warning(
-                    f"Dados insuficientes para ATR: {len(high)}/{self.config['atr_periodo']}"
-                )
-                return np.array([])
-
-            atr = talib.ATR(high, low, close, timeperiod=self.config["atr_periodo"])
-            return atr
-        except Exception as e:
-            logger.error(f"Erro ao calcular ATR: {e}")
-            return np.array([])
-
-    def calcular_volatilidade(self, dados_completos):
-        try:
-            if len(dados_completos) < self.config["volatilidade_periodo"]:
-                return 0.0
-            dados_extraidos = self._extrair_dados(dados_completos, [4])
-            close = dados_extraidos[4]
-            std = talib.STDDEV(close, timeperiod=self.config["volatilidade_periodo"])
+            std = talib.STDDEV(close, timeperiod=10)
             return (
                 min(max(float(std[-1]) / float(close[-1]), 0.0), 1.0)
-                if len(std) > 0
+                if std.size
                 else 0.0
             )
         except Exception as e:
-            logger.error(f"Erro ao calcular volatilidade: {e}")
+            logger.error(f"Erro na volatilidade base: {e}")
             return 0.0
 
     def executar(self, *args, **kwargs) -> bool:
@@ -85,50 +60,62 @@ class IndicadoresVolatilidade(Plugin):
             "atr": None,
             "volatilidade": 0.0,
         }
+
         try:
             dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
 
             if not all([dados_completos, symbol, timeframe]):
-                logger.error(f"Parâmetros necessários não fornecidos em {self.nome}")
+                logger.error(f"Parâmetros obrigatórios ausentes em {self.nome}")
                 if isinstance(dados_completos, dict):
                     dados_completos["volatilidade"] = resultado_padrao
                 return True
 
-            klines = (
-                dados_completos.get("crus", [])
-                if isinstance(dados_completos, dict)
-                else dados_completos
-            )
+            klines = dados_completos.get("crus", [])
             if not isinstance(klines, list) or len(klines) < 20:
                 logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
-                if isinstance(dados_completos, dict):
-                    dados_completos["volatilidade"] = resultado_padrao
+                dados_completos["volatilidade"] = resultado_padrao
                 return True
 
-            upper, middle, lower = self.calcular_bandas_de_bollinger(klines)
-            atr = self.calcular_atr(klines)
-            volatilidade = self.calcular_volatilidade(klines)
+            close = self._extrair_dados(klines, [4])[4]
+            volatilidade_base = self._calcular_volatilidade_base(close)
+            periodos = self._ajustar_periodos(timeframe, volatilidade_base)
+
+            # Bollinger Bands
+            if len(close) < periodos["bb"]:
+                logger.warning(f"Menos de {periodos['bb']} candles para Bollinger")
+                upper, middle, lower = np.array([]), np.array([]), np.array([])
+            else:
+                upper, middle, lower = talib.BBANDS(
+                    close,
+                    timeperiod=periodos["bb"],
+                    nbdevup=self.config["bb_desvio_padrao"],
+                    nbdevdn=self.config["bb_desvio_padrao"],
+                    matype=0,
+                )
+
+            # ATR
+            dados_ohlc = self._extrair_dados(klines, [2, 3, 4])
+            high, low, close_atr = dados_ohlc[2], dados_ohlc[3], dados_ohlc[4]
+            atr = talib.ATR(high, low, close_atr, timeperiod=periodos["atr"])
+            atr_valor = float(atr[-1]) if atr.size > 0 else None
 
             resultado = {
                 "bandas_bollinger": {
-                    "superior": float(upper[-1]) if upper.size > 0 else None,
-                    "media": float(middle[-1]) if middle.size > 0 else None,
-                    "inferior": float(lower[-1]) if lower.size > 0 else None,
+                    "superior": float(upper[-1]) if upper.size else None,
+                    "media": float(middle[-1]) if middle.size else None,
+                    "inferior": float(lower[-1]) if lower.size else None,
                 },
-                "atr": float(atr[-1]) if atr.size > 0 else None,
-                "volatilidade": volatilidade,
+                "atr": atr_valor,
+                "volatilidade": round(volatilidade_base, 4),
             }
 
-            if isinstance(dados_completos, dict):
-                dados_completos["volatilidade"] = resultado
-                logger.debug(
-                    f"Indicadores de volatilidade calculados para {symbol} - {timeframe}"
-                )
+            dados_completos["volatilidade"] = resultado
+            logger.debug(f"Volatilidade calculada para {symbol} - {timeframe}")
             return True
         except Exception as e:
-            logger.error(f"Erro ao executar {self.nome}: {e}")
+            logger.error(f"Erro ao executar {self.nome}: {e}", exc_info=True)
             if isinstance(dados_completos, dict):
                 dados_completos["volatilidade"] = resultado_padrao
             return True

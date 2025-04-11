@@ -1,3 +1,5 @@
+# tabelas.py
+
 TABELAS = {
     "klines": """
             CREATE TABLE {schema}.klines (

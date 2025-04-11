@@ -1,4 +1,3 @@
-# price_action.py
 from utils.logging_config import get_logger
 import numpy as np
 from plugins.plugin import Plugin
@@ -7,146 +6,119 @@ logger = get_logger(__name__)
 
 
 class PriceAction(Plugin):
+    """
+    Plugin de análise de price action com reconhecimento de padrões simples de candle,
+    baseado em corpo, pavio e direção.
+    """
+
     PLUGIN_NAME = "price_action"
-    PLUGIN_TYPE = "essencial"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["price_action", "candles", "direcional"]
+    PLUGIN_PRIORIDADE = 40
 
     def executar(self, *args, **kwargs) -> bool:
-        logger.debug(
-            f"Iniciando execução do PriceAction para {kwargs.get('symbol')} - {kwargs.get('timeframe')}"
-        )
+        symbol = kwargs.get("symbol")
+        timeframe = kwargs.get("timeframe")
+        dados_completos = kwargs.get("dados_completos", {})
+
         resultado_padrao = {
             "price_action": {
-                "direcao": "NEUTRO",
+                "direcao": "LATERAL",
                 "forca": "FRACA",
                 "confianca": 0.0,
                 "padrao": None,
             }
         }
 
-        # Obter parâmetros com valores padrão
-        dados_completos = kwargs.get("dados_completos", {})
-        symbol = kwargs.get("symbol", "BTCUSDT")
-        timeframe = kwargs.get("timeframe", "1m")
-        min_klines = 20  # Requisito mínimo de klines
-
-        # Validação inicial dos parâmetros
-        if not dados_completos or not symbol or not timeframe:
-            logger.error(
-                f"Parâmetros necessários não fornecidos: dados_completos={bool(dados_completos)}, symbol={symbol}, timeframe={timeframe}"
-            )
-            if isinstance(dados_completos, dict):
-                dados_completos.update(resultado_padrao)
-            return True
-
-        # Verificar se dados_completos é um dicionário e contém klines suficientes
-        if not isinstance(dados_completos, dict) or "crus" not in dados_completos:
-            logger.warning(
-                f"Dados inválidos para {symbol} - {timeframe}: dados_completos não é dict ou não contém 'crus'"
-            )
-            if isinstance(dados_completos, dict):
-                dados_completos.update(resultado_padrao)
-            return True
+        if not all([symbol, timeframe, dados_completos]):
+            logger.error("Parâmetros obrigatórios ausentes para PriceAction.")
+            dados_completos.update(resultado_padrao)
+            return False
 
         klines = dados_completos.get("crus", [])
-        if len(klines) < min_klines:
+        if not isinstance(klines, list) or len(klines) < 20:
             logger.warning(
-                f"Dados insuficientes para {symbol} - {timeframe}: {len(klines)} klines, mínimo necessário: {min_klines}"
+                f"PriceAction ignorado por dados insuficientes para {symbol}-{timeframe}"
             )
-            if isinstance(dados_completos, dict):
-                dados_completos.update(resultado_padrao)
-            return True
+            dados_completos.update(resultado_padrao)
+            return False
 
         try:
-            # Gerar sinal de price action
             sinal = self.gerar_sinal(klines)
             dados_completos["price_action"] = sinal
-            logger.info(f"Price Action concluído para {symbol} - {timeframe}")
+            logger.info(f"PriceAction concluído para {symbol}-{timeframe}")
             return True
         except Exception as e:
-            logger.error(
-                f"Erro ao executar PriceAction para {symbol} - {timeframe}: {e}"
-            )
-            if isinstance(dados_completos, dict):
-                dados_completos.update(resultado_padrao)
-            return True
+            logger.error(f"Erro ao executar PriceAction: {e}", exc_info=True)
+            dados_completos.update(resultado_padrao)
+            return False
 
-    def gerar_sinal(self, dados_completos):
+    def gerar_sinal(self, klines: list) -> dict:
+        dados = self._extrair_dados(klines, [1, 2, 3, 4])
+        open_, high, low, close = dados[1], dados[2], dados[3], dados[4]
+
+        ultimo = {
+            "open": open_[-1],
+            "high": high[-1],
+            "low": low[-1],
+            "close": close[-1],
+        }
+
+        padrao = self._identificar_padrao(ultimo)
+        direcao = self._analisar_direcao(ultimo)
+        forca = self._calcular_forca(ultimo)
+
+        confianca = round(forca * 100, 2) if padrao != "doji" else 0.0
+        direcao_final = direcao if direcao != "LATERAL" else "LATERAL"
+        forca_label = "FORTE" if forca > 0.7 else "MÉDIA" if forca > 0.3 else "FRACA"
+
+        return {
+            "direcao": direcao_final,
+            "forca": forca_label,
+            "confianca": confianca,
+            "padrao": padrao,
+        }
+
+    def _identificar_padrao(self, candle: dict) -> str:
         try:
-            dados_extraidos = self._extrair_dados(dados_completos, [1, 2, 3, 4])
-            open_prices, high, low, close = (
-                dados_extraidos[1],
-                dados_extraidos[2],
-                dados_extraidos[3],
-                dados_extraidos[4],
-            )
-            if len(close) < 20:
-                return {
-                    "direcao": "NEUTRO",
-                    "forca": "FRACA",
-                    "confianca": 0.0,
-                    "padrao": None,
-                }
-
-            ultimo_candle = {
-                "open": open_prices[-1],
-                "high": high[-1],
-                "low": low[-1],
-                "close": close[-1],
-            }
-            padrao = self._identificar_padrao(ultimo_candle)
-            forca = self._calcular_forca(ultimo_candle)
-            tendencia = self._analisar_tendencia(ultimo_candle)
-
-            confianca = min(forca * 100, 100.0) if padrao != "indefinido" else 0.0
-            direcao = tendencia if tendencia != "LATERAL" else "NEUTRO"
-            forca_str = "FORTE" if forca > 0.7 else "MÉDIA" if forca > 0.3 else "FRACA"
-
-            return {
-                "direcao": direcao,
-                "forca": forca_str,
-                "confianca": confianca,
-                "padrao": padrao,
-            }
-        except Exception as e:
-            logger.error(f"Erro ao gerar sinal: {e}")
-            return {
-                "direcao": "NEUTRO",
-                "forca": "FRACA",
-                "confianca": 0.0,
-                "padrao": None,
-            }
-
-    def _identificar_padrao(self, candle):
-        try:
-            amplitude = candle["high"] - candle["low"]
             corpo = abs(candle["close"] - candle["open"])
-            if not amplitude:
+            range_ = candle["high"] - candle["low"]
+            if range_ == 0:
                 return "indefinido"
-            return (
-                "doji"
-                if corpo / amplitude < 0.1
-                else "alta" if candle["close"] > candle["open"] else "baixa"
-            )
+            proporcao = corpo / range_
+            if proporcao < 0.1:
+                return "doji"
+            return "alta" if candle["close"] > candle["open"] else "baixa"
         except Exception as e:
             logger.error(f"Erro ao identificar padrão: {e}")
             return "indefinido"
 
-    def _calcular_forca(self, candle):
+    def _calcular_forca(self, candle: dict) -> float:
         try:
-            amplitude = candle["high"] - candle["low"]
             corpo = abs(candle["close"] - candle["open"])
-            return corpo / amplitude if amplitude > 0 else 0.0
+            range_ = candle["high"] - candle["low"]
+            return round(corpo / range_, 4) if range_ > 0 else 0.0
         except Exception as e:
             logger.error(f"Erro ao calcular força: {e}")
             return 0.0
 
-    def _analisar_tendencia(self, candle):
+    def _analisar_direcao(self, candle: dict) -> str:
         try:
-            return (
-                "ALTA"
-                if candle["close"] > candle["open"]
-                else "BAIXA" if candle["close"] < candle["open"] else "LATERAL"
-            )
-        except Exception as e:
-            logger.error(f"Erro ao analisar tendência: {e}")
+            if candle["close"] > candle["open"]:
+                return "ALTA"
+            elif candle["close"] < candle["open"]:
+                return "BAIXA"
             return "LATERAL"
+        except Exception as e:
+            logger.error(f"Erro ao analisar direção: {e}")
+            return "LATERAL"
+
+    def _extrair_dados(self, dados: list, indices: list) -> dict:
+        try:
+            return {
+                i: np.array([float(k[i]) for k in dados], dtype=np.float64)
+                for i in indices
+            }
+        except Exception as e:
+            logger.error(f"Erro na extração dos dados: {e}")
+            return {i: np.array([]) for i in indices}
