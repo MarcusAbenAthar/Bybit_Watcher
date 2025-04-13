@@ -3,16 +3,19 @@
 import signal
 import sys
 import time
-import logging
-from dotenv import load_dotenv
-from plugins.gerenciadores.gerenciadores import BaseGerenciador
-from plugins.gerenciadores.gerenciador_plugins import GerenciadorPlugins
+from utils.logging_config import get_logger
 from utils.config import carregar_config
 from utils.handlers import signal_handler
 from utils.logging_config import configurar_logging
+from dotenv import load_dotenv
+from plugins.gerenciadores.gerenciadores import BaseGerenciador
+from plugins.gerenciadores.gerenciador_plugins import GerenciadorPlugins
+
 
 load_dotenv()
-logger = logging.getLogger(__name__)
+
+# Passando a flag de debug_enabled diretamente aqui
+logger = get_logger(__name__, debug_enabled=False)  # Ou False se não quiser debug
 
 
 def iniciar_bot():

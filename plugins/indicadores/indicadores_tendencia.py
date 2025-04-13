@@ -79,7 +79,9 @@ class IndicadoresTendencia(Plugin):
                 dados_completos["tendencia"] = resultado_padrao
                 return True
 
-            volatilidade = np.std(close[-14:]) / np.mean(close[-14:])
+            media = np.mean(close[-14:])
+            volatilidade = np.std(close[-14:]) / media if media != 0 else 0.0
+
             periodos = self._ajustar_periodos(timeframe, volatilidade)
 
             # Médias móveis

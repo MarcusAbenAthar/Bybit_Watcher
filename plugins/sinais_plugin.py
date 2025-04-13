@@ -8,7 +8,8 @@ logger_sinais = logging.getLogger("sinais")
 
 class SinaisPlugin(Plugin):
     """
-    Plugin responsável por consolidar dados de análise e gerar o sinal final com SL/TP, confiança e alavancagem.
+    Plugin responsável por consolidar dados de análise e gerar o sinal final
+    com SL/TP, confiança e alavancagem.
     """
 
     PLUGIN_NAME = "sinais_plugin"
@@ -16,8 +17,10 @@ class SinaisPlugin(Plugin):
     PLUGIN_TAGS = ["consolidacao", "sinal", "output"]
     PLUGIN_PRIORIDADE = 99
 
-    def __init__(self, **kwargs):
+    def __init__(self, calculo_alavancagem=None, calculo_risco=None, **kwargs):
         super().__init__(**kwargs)
+        self._calculo_alavancagem = calculo_alavancagem
+        self._calculo_risco = calculo_risco
 
     def inicializar(self, config: dict) -> bool:
         return super().inicializar(config)
@@ -34,7 +37,7 @@ class SinaisPlugin(Plugin):
 
         try:
             logger.execution(f"SinaisPlugin processando {symbol} - {timeframe}")
-            sinais = self._consolidar_sinais(dados_completos, symbol, timeframe, config)
+            sinais = self._gerar_sinal(dados_completos, symbol, timeframe)
             dados_completos["sinais"] = sinais
             logger.execution(f"Sinais consolidados com sucesso: {sinais}")
             return True
@@ -42,57 +45,16 @@ class SinaisPlugin(Plugin):
             logger.error(f"Erro na execução do SinaisPlugin: {e}", exc_info=True)
             return False
 
-    def _consolidar_sinais(
-        self, dados: dict, symbol: str, timeframe: str, config: dict
-    ) -> dict:
+    def _gerar_sinal(self, dados: dict, symbol: str, timeframe: str) -> dict:
         analise = dados.get("analise_mercado", {})
         direcao = analise.get("direcao", "NEUTRO")
         forca = analise.get("forca", "FRACA")
         confianca_base = analise.get("confianca", 0.0)
 
-        confiancas = []
-        for chave, info in dados.items():
-            if isinstance(info, dict) and "confianca" in info:
-                confianca = info.get("confianca", 0.0)
-                if confianca > 0:
-                    confiancas.append(confianca)
-                    if info.get("direcao") == direcao:
-                        confianca_base += 5
-                    elif info.get("direcao") not in [direcao, "NEUTRO"]:
-                        confianca_base -= 5
-
-        if confiancas:
-            media = sum(confiancas) / len(confiancas)
-            confianca = (confianca_base + media) / 2
-        else:
-            confianca = confianca_base
-
-        confianca = max(0.0, min(round(confianca, 2), 100.0))
-
-        alavancagem = 0.0
-        plugin_alav = self._gerente.obter_plugin("plugins.calculo_alavancagem")
-        if plugin_alav:
-            alavancagem = plugin_alav.calcular_alavancagem(
-                dados["crus"],
-                direcao=direcao,
-                confianca=confianca,
-                alavancagem_maxima=config["trading"]["alavancagem_maxima"],
-                alavancagem_minima=config["trading"]["alavancagem_minima"],
-            )
-
-        resultado_candles = dados.get("candles", {})
-        padroes = resultado_candles.get("padroes", {})
-        stop_loss, take_profit = None, None
-
-        if padroes:
-            esperado = {"ALTA": "compra", "BAIXA": "venda"}.get(direcao)
-            for padrao in padroes.values():
-                if padrao.get("sinal") == esperado:
-                    stop_loss = padrao.get("stop_loss")
-                    take_profit = padrao.get("take_profit")
-                    break
-
-        timestamp = dados["crus"][-1][0] if dados.get("crus") else None
+        confianca = self._calcular_confianca(dados, direcao, confianca_base)
+        alavancagem = self._calcular_alavancagem(dados, direcao, confianca)
+        stop_loss, take_profit = self._extrair_sl_tp(dados, direcao)
+        timestamp = self._extrair_timestamp(dados)
 
         sinal = {
             "direcao": direcao,
@@ -110,3 +72,61 @@ class SinaisPlugin(Plugin):
         )
 
         return sinal
+
+    def _calcular_confianca(self, dados: dict, direcao: str, base: float) -> float:
+        """
+        Consolida as confiabilidades dos plugins com base na direção.
+        """
+        confiancas = []
+        for info in dados.values():
+            if isinstance(info, dict) and "confianca" in info:
+                c = info.get("confianca", 0.0)
+                if c > 0:
+                    confiancas.append(c)
+                    dir_info = info.get("direcao")
+                    if dir_info == direcao:
+                        base += 5
+                    elif dir_info and dir_info not in ["NEUTRO", direcao]:
+                        base -= 5
+
+        media = sum(confiancas) / len(confiancas) if confiancas else 0.0
+        resultado = (base + media) / 2 if confiancas else base
+        return max(0.0, min(round(resultado, 2), 100.0))
+
+    def _calcular_alavancagem(self, dados, direcao, confianca) -> float:
+        """
+        Delega ao plugin de cálculo a decisão de alavancagem. Nenhum valor fixo aqui!
+        """
+        if not self._calculo_alavancagem:
+            logger.warning("Plugin de cálculo de alavancagem não disponível.")
+            return 0.0
+
+        try:
+            return self._calculo_alavancagem.calcular_alavancagem(
+                crus=dados.get("crus", []), direcao=direcao, confianca=confianca
+            )
+        except Exception as e:
+            logger.warning(f"Erro ao calcular alavancagem: {e}")
+            return 0.0
+
+    def _extrair_sl_tp(self, dados: dict, direcao: str):
+        """
+        Retorna stop loss e take profit com base nos padrões de candle.
+        """
+        esperado = {"ALTA": "compra", "BAIXA": "venda"}.get(direcao)
+        padroes = dados.get("candles", {}).get("padroes", {})
+        for padrao in padroes.values():
+            if padrao.get("sinal") == esperado:
+                return padrao.get("stop_loss"), padrao.get("take_profit")
+        return None, None
+
+    def _extrair_timestamp(self, dados: dict):
+        """
+        Retorna o timestamp da última candle disponível.
+        """
+        crus = dados.get("crus", [])
+        return (
+            crus[-1][0]
+            if crus and isinstance(crus[-1], (list, tuple)) and len(crus[-1]) > 0
+            else None
+        )

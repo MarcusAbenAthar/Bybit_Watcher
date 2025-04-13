@@ -3,7 +3,6 @@
 
 import logging
 import logging.config
-import logging.handlers
 from datetime import datetime
 from pathlib import Path
 import os
@@ -86,7 +85,7 @@ BASE_CONFIG = {
     "loggers": {
         "": {
             "handlers": ["console", "arquivo", "erros"],
-            "level": "INFO",  # Será sobrescrito dinamicamente
+            "level": "INFO",  # Este nível pode ser alterado para DEBUG mais tarde
             "propagate": False,
         },
         "plugins": {"level": "INFO", "propagate": True},
@@ -97,15 +96,13 @@ BASE_CONFIG = {
 }
 
 
-def configurar_logging(config=None):
+def configurar_logging(debug_enabled=False):
     """
-    Configura o sistema de logging com base nas opções do config.
+    Configura o sistema de logging com base na flag debug_enabled.
     """
     try:
-        debug_enabled = (
-            config.get("logging", {}).get("debug_enabled", False) if config else False
-        )
-        level = logging.DEBUG if debug_enabled else EXECUTION_LEVEL
+        # Se debug_enabled for True, ajusta o nível para DEBUG
+        level = logging.DEBUG if debug_enabled else logging.INFO
 
         BASE_CONFIG["loggers"][""]["level"] = level
         BASE_CONFIG["loggers"]["plugins"]["level"] = level
@@ -113,9 +110,6 @@ def configurar_logging(config=None):
         logging.config.dictConfig(BASE_CONFIG)
 
         logger = logging.getLogger(__name__)
-        logger.debug(
-            f"Logging configurado com debug_enabled={debug_enabled}, nível={logging.getLevelName(level)}"
-        )
         logger.info("Sistema de logging inicializado")
         return logger
     except Exception as e:
@@ -123,11 +117,14 @@ def configurar_logging(config=None):
         raise
 
 
-def get_logger(nome: str) -> logging.Logger:
+def get_logger(nome: str, debug_enabled=False) -> logging.Logger:
     """
-    Obtém um logger seguro contra duplicações e pronto para uso, mesmo se `configurar_logging` não foi chamado.
+    Obtém um logger seguro contra duplicações e pronto para uso, com configuração de nível dinâmico.
     """
+    # Configura o logging quando o logger for criado
     logger = logging.getLogger(nome)
     if not logger.hasHandlers():
-        configurar_logging()  # fallback de segurança
+        configurar_logging(
+            debug_enabled
+        )  # Configura o logging conforme a flag debug_enabled
     return logger

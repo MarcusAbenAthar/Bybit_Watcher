@@ -54,7 +54,7 @@ Bybit_Watcher/
 │   ├── validador_dados.py  # Validação de dados
 │   ├── sinais_plugin.py    # Geração de sinais
 │   ├── analisador_mercado.py # Análise do mercado
-│   ├── sl_tp_estrategico.py  # Plugin de SL/TP com cérebro
+│   ├── sltp.py               # Calculo de SL e TP com cérebro
 │   ├── execucao_ordens.py    # Execução de ordens
 │   │
 │   ├── indicadores/        # Subpacote de indicadores
@@ -69,15 +69,17 @@ Bybit_Watcher/
 │         ├── __init__.py
 │         ├── gerenciador_banco.py # Gerenciador de banco de dados
 │         ├── gerenciador_bot.py  # Gerenciador do bot
+│         ├── gerenciador.py  # Base do Gerenciador
 │         └── gerenciador_plugins.py # Gerenciador dos plugins
 │
 │
 ├── utils/                  # Utilitários
 │   ├── __init__.py
-│   ├── config.py           # Implementação do config.py
+│   ├── config.py           # Centralização das configurações do bot
 │   ├── handlers.py         # Implementação do handlers
 │   ├── logging_config.py   # Configuração de logs
-│   ├── padroes_candles.py  # Implementação do padroes_candles
+│   ├── padroes_talib.py    # Implementação do padroes_candles
+│   ├── plugins_dependencias.json # Complemento do sistema de auto identificar dependencias
 │   └── sinais_logging.py   # Implementação do sinais_logging
 │
 └── logs/                   # Diretório de logs

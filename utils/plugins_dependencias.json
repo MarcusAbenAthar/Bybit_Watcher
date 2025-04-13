@@ -1,6 +1,26 @@
 {
-    "conexao": [],
+    "analisador_mercado": [],
+    "analise_candles": [],
     "banco_dados": [
         "gerenciador_banco"
-    ]
+    ],
+    "calculo_alavancagem": [],
+    "calculo_risco": [],
+    "conexao": [],
+    "execucao_ordens": [
+        "conexao"
+    ],
+    "indicadores_osciladores": [],
+    "indicadores_tendencia": [],
+    "indicadores_volatilidade": [],
+    "indicadores_volume": [],
+    "outros_indicadores": [],
+    "medias_moveis": [],
+    "price_action": [],
+    "sinais_plugin": [
+        "calculo_alavancagem",
+        "calculo_risco"
+    ],
+    "sltp": [],
+    "validador_dados": []
 }

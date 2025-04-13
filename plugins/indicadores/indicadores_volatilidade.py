@@ -26,6 +26,9 @@ class IndicadoresVolatilidade(Plugin):
         }
 
     def _ajustar_periodos(self, timeframe: str, volatilidade: float = 0.0) -> dict:
+        """
+        Ajusta dinamicamente os períodos dos indicadores com base no timeframe e volatilidade.
+        """
         ajuste = int(volatilidade * 10)
         if timeframe == "1m":
             fator = 0.5
@@ -43,18 +46,35 @@ class IndicadoresVolatilidade(Plugin):
         }
 
     def _calcular_volatilidade_base(self, close) -> float:
+        """
+        Calcula uma estimativa de volatilidade com base no desvio padrão relativo ao preço.
+        """
         try:
             std = talib.STDDEV(close, timeperiod=10)
-            return (
-                min(max(float(std[-1]) / float(close[-1]), 0.0), 1.0)
-                if std.size
-                else 0.0
-            )
+            close_final = float(close[-1])
+            if close_final == 0:
+                return 0.0
+            return min(max(float(std[-1]) / close_final, 0.0), 1.0) if std.size else 0.0
         except Exception as e:
             logger.error(f"Erro na volatilidade base: {e}")
             return 0.0
 
+    def _extrair_dados(self, dados: list, indices: list) -> dict:
+        """
+        Extrai arrays NumPy das colunas OHLCV com base nos índices informados.
+        """
+        try:
+            return {
+                i: np.array([float(d[i]) for d in dados if len(d) > i]) for i in indices
+            }
+        except Exception as e:
+            logger.error(f"Erro ao extrair dados de índices {indices}: {e}")
+            return {i: np.array([]) for i in indices}
+
     def executar(self, *args, **kwargs) -> bool:
+        """
+        Executa o cálculo dos indicadores de volatilidade e insere o resultado em 'dados_completos["volatilidade"]'.
+        """
         resultado_padrao = {
             "bandas_bollinger": {"superior": None, "media": None, "inferior": None},
             "atr": None,
@@ -79,6 +99,10 @@ class IndicadoresVolatilidade(Plugin):
                 return True
 
             close = self._extrair_dados(klines, [4])[4]
+            if close.size == 0:
+                dados_completos["volatilidade"] = resultado_padrao
+                return True
+
             volatilidade_base = self._calcular_volatilidade_base(close)
             periodos = self._ajustar_periodos(timeframe, volatilidade_base)
 

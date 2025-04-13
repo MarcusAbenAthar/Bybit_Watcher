@@ -26,6 +26,14 @@ class IndicadoresVolume(Plugin):
         }
         logger.debug(f"{self.nome} inicializado")
 
+    def _extrair_dados(self, klines, colunas: list) -> list:
+        try:
+            dados = list(zip(*klines))
+            return [np.array(dados[i], dtype=np.float64) for i in colunas]
+        except Exception as e:
+            logger.error(f"Erro ao extrair dados: {e}")
+            return [np.array([]) for _ in colunas]
+
     def _ajustar_periodo(self, timeframe: str, volatilidade: float) -> int:
         base = self.config["periodo_base"]
         if timeframe == "1m":
@@ -68,7 +76,11 @@ class IndicadoresVolume(Plugin):
     def calcular_volatilidade(self, close, periodo=14) -> float:
         try:
             std = talib.STDDEV(close, timeperiod=periodo)
-            return float(std[-1]) / float(close[-1]) if std.size else 0.0
+            return (
+                float(std[-1]) / float(close[-1])
+                if std.size > 0 and close[-1] != 0
+                else 0.0
+            )
         except Exception as e:
             logger.error(f"Erro ao calcular volatilidade: {e}")
             return 0.0
@@ -92,13 +104,8 @@ class IndicadoresVolume(Plugin):
                 dados_completos["volume"] = resultado_padrao
                 return True
 
-            extraidos = self._extrair_dados(klines, [2, 3, 4, 5])
-            high, low, close, volume = (
-                extraidos[2],
-                extraidos[3],
-                extraidos[4],
-                extraidos[5],
-            )
+            # Corrigido: [2,3,4,5] retorna [high, low, close, volume]
+            high, low, close, volume = self._extrair_dados(klines, [2, 3, 4, 5])
 
             volatilidade = self.calcular_volatilidade(close)
             periodo = self._ajustar_periodo(timeframe, volatilidade)
@@ -120,7 +127,7 @@ class IndicadoresVolume(Plugin):
             return True
 
         except Exception as e:
-            logger.error(f"Erro na execução de {self.nome}: {e}")
+            logger.error(f"Erro na execução de {self.nome}: {e}", exc_info=True)
             if isinstance(dados_completos, dict):
                 dados_completos["volume"] = resultado_padrao
             return True

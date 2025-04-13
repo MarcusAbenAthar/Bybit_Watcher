@@ -41,16 +41,18 @@ class AnaliseCandles(Plugin):
             timeframe = kwargs.get("timeframe")
 
             if not all([dados_completos, symbol, timeframe]):
-                logger.error("Parâmetros obrigatórios ausentes")
+                logger.error(
+                    f"Parâmetros obrigatórios ausentes: symbol={symbol}, timeframe={timeframe}"
+                )
                 if isinstance(dados_completos, dict):
                     dados_completos.update(resultado_padrao)
-                return True
+                return False
 
             crus = dados_completos.get("crus", [])
             if not isinstance(crus, list) or len(crus) < 20:
                 logger.warning(f"Dados crus insuficientes para {symbol} - {timeframe}")
                 dados_completos["candles"] = resultado_padrao["candles"]
-                return True
+                return False
 
             resultado = self._analisar(crus, symbol, timeframe)
             dados_completos["candles"] = resultado
@@ -60,16 +62,19 @@ class AnaliseCandles(Plugin):
             logger.error(f"Erro no plugin AnaliseCandles: {e}", exc_info=True)
             if isinstance(dados_completos, dict):
                 dados_completos.update(resultado_padrao)
-            return True
+            return False
 
     def _carregar_padroes(self) -> set:
         try:
             caminho = os.path.join("utils", "padroes_talib.json")
             with open(caminho, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return set(data.get("padroes_talib", []))
+            padroes = set(data.get("padroes_talib", []))
+            if not padroes:
+                logger.critical("Nenhum padrão TA-Lib carregado do JSON.")
+            return padroes
         except Exception as e:
-            logger.error(f"Erro ao carregar padrões TA-Lib: {e}")
+            logger.error(f"Erro ao carregar padrões TA-Lib: {e}", exc_info=True)
             return set()
 
     def _analisar(self, candles: list, symbol: str, timeframe: str) -> dict:
@@ -84,6 +89,9 @@ class AnaliseCandles(Plugin):
                 ohlcv["volume"],
             )
 
+            if any(len(arr) < 2 for arr in [open_, high, low, close]):
+                raise ValueError("OHLCV incompleto para análise")
+
             padroes = {}
             for func in talib.get_function_groups().get("Pattern Recognition", []):
                 nome_padrao = func.lower().replace("cdl", "")
@@ -97,21 +105,31 @@ class AnaliseCandles(Plugin):
                 for i in [-2, -1]:
                     if resultado[i] == 0:
                         continue
+
                     direcao = "alta" if resultado[i] > 0 else "baixa"
                     sinal = "compra" if direcao == "alta" else "venda"
                     timestamp = candles[i][0]
 
+                    sl = self._calcular_sl(low, high, direcao)
+                    tp = self._calcular_tp(close, direcao)
+                    if sl is None or tp is None:
+                        logger.warning(
+                            f"Padrão {nome_padrao} ignorado por SL/TP inválido"
+                        )
+                        continue
+
                     padroes[nome_padrao] = {
                         "estado": "formado" if i == -2 else "em formação",
                         "sinal": sinal,
-                        "stop_loss": self._calcular_sl(low, high, direcao),
-                        "take_profit": self._calcular_tp(close, direcao),
+                        "stop_loss": sl,
+                        "take_profit": tp,
                         "timestamp": timestamp,
                     }
+
                     logger.info(
                         f"Padrão {nome_padrao} ({sinal}) detectado em {symbol}-{timeframe}"
                     )
-                    break
+                    break  # só pega o mais recente
 
             forca = self._calcular_forca(close, volume)
             confianca = self._calcular_confianca(close, volume, len(padroes))
@@ -140,11 +158,13 @@ class AnaliseCandles(Plugin):
                 "volume": np.array([float(c[5]) for c in candles]),
             }
         except Exception as e:
-            logger.error(f"Erro ao extrair OHLCV: {e}")
+            logger.error(f"Erro ao extrair OHLCV: {e}", exc_info=True)
             return {k: np.array([]) for k in ["open", "high", "low", "close", "volume"]}
 
     def _calcular_sl(self, low, high, direcao):
         try:
+            if len(low) < 10 or len(high) < 10:
+                return None
             volatilidade = np.std(high[-10:] - low[-10:])
             return (
                 round(low[-2] - volatilidade * 1.5, 2)
@@ -157,6 +177,8 @@ class AnaliseCandles(Plugin):
 
     def _calcular_tp(self, close, direcao):
         try:
+            if len(close) < 10:
+                return None
             volatilidade = np.std(close[-10:])
             return (
                 round(close[-2] + volatilidade * 2, 2)
@@ -169,8 +191,10 @@ class AnaliseCandles(Plugin):
 
     def _calcular_forca(self, close, volume):
         try:
+            if len(close) < 2 or len(volume) < 10:
+                return "LATERAL"
             variacao = abs(close[-1] - close[-2]) / close[-2]
-            vol_rel = volume[-1] / np.mean(volume[-10:]) if len(volume) >= 10 else 1
+            vol_rel = volume[-1] / np.mean(volume[-10:])
             score = variacao * vol_rel
             if score > 0.6:
                 return "FORTE"

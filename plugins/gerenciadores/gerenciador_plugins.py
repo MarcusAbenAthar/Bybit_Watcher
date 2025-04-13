@@ -120,10 +120,6 @@ class GerenciadorPlugins:
         faltantes = set(todos) - set(a for a, _ in ordenados)
         for faltante in faltantes:
             ordenados.append((faltante, todos[faltante]))
-            logger.warning(
-                f"Ordem forçada para plugin com dependência não resolvida: {faltante}"
-            )
-
         return ordenados
 
     def inicializar(self, config: dict) -> bool:
@@ -161,7 +157,6 @@ class GerenciadorPlugins:
                     f"Erro ao instanciar plugin {nome_plugin}: {e}", exc_info=True
                 )
                 sucesso = False
-
         return sucesso
 
     def obter_plugin(self, nome: str) -> Plugin | None:
@@ -219,3 +214,7 @@ class GerenciadorPlugins:
             except Exception as e:
                 logger.error(f"Erro ao finalizar plugin {nome}: {e}")
         self.plugins.clear()
+
+    def listar_plugins_registrados(self):
+        for nome in self.plugins:
+            logger.info(f"Plugin disponível: {nome}")

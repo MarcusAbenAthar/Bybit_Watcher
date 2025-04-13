@@ -16,11 +16,12 @@ class GerenciadorBot(BaseGerenciador):
     PLUGIN_CATEGORIA = "gerenciador"
     PLUGIN_TAGS = ["core", "controle"]
 
-    def __init__(self, **kwargs):
+    def __init__(self, gerente=None, **kwargs):
         super().__init__(**kwargs)
+        self._gerente = gerente  #  Essencial para acessar plugins
         self._status = "parado"
-        self._executor = ThreadPoolExecutor(max_workers=4)  # Ajustável
-        self._estado_ativo = defaultdict(dict)  # Guarda status por par-timeframe
+        self._executor = ThreadPoolExecutor(max_workers=4)  # Paralelismo ajustável
+        self._estado_ativo = defaultdict(dict)  # Guarda o status por par e timeframe
 
     def inicializar(self, config: dict) -> bool:
         try:
@@ -50,18 +51,13 @@ class GerenciadorBot(BaseGerenciador):
 
             logger.execution(f"Iniciando ciclo para {len(pares)} pares")
 
-            tarefas = []
-            for symbol in pares:
-                for tf in timeframes:
-                    tarefas.append(
-                        self._executor.submit(
-                            self._processar_par,
-                            symbol,
-                            tf,
-                            plugins_analise,
-                            sinais_plugin,
-                        )
-                    )
+            tarefas = [
+                self._executor.submit(
+                    self._processar_par, symbol, tf, plugins_analise, sinais_plugin
+                )
+                for symbol in pares
+                for tf in timeframes
+            ]
 
             resultados = [t.result() for t in as_completed(tarefas)]
             logger.execution(f"Ciclo finalizado para todos os pares")
@@ -79,22 +75,16 @@ class GerenciadorBot(BaseGerenciador):
             for plugin in plugins_analise:
                 try:
                     success = plugin.executar(
-                        dados_completos=dados,
-                        symbol=symbol,
-                        timeframe=timeframe,
+                        dados_completos=dados, symbol=symbol, timeframe=timeframe
                     )
                     if not success:
                         logger.warning(f"{plugin.nome} falhou: {symbol} - {timeframe}")
                 except Exception as e:
                     logger.error(f"Erro no {plugin.nome}: {e}", exc_info=True)
 
-            success = sinais_plugin.executar(
-                dados_completos=dados,
-                symbol=symbol,
-                timeframe=timeframe,
-            )
-
-            if not success:
+            if not sinais_plugin.executar(
+                dados_completos=dados, symbol=symbol, timeframe=timeframe
+            ):
                 logger.warning(f"sinais_plugin falhou para {symbol} - {timeframe}")
                 return False
 

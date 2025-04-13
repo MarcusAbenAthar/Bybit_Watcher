@@ -18,11 +18,11 @@ class ExecucaoOrdens(Plugin):
     PLUGIN_TAGS = ["execucao", "ordens", "trading"]
     PLUGIN_PRIORIDADE = 100
 
-    def __init__(self, gerente=None):
-        super().__init__(gerente=gerente)
-        self._gerente = gerente
+    def __init__(self, conexao=None, **kwargs):
+        super().__init__(**kwargs)
+        self._conexao = conexao
         self._exchange = None
-        self._ordens_ativas = {}  # symbol -> ordem
+        self._ordens_ativas = {}
         self._config = carregar_config()
 
     def inicializar(self, config_dict: dict = None) -> bool:
@@ -31,12 +31,11 @@ class ExecucaoOrdens(Plugin):
             if not super().inicializar(self._config):
                 return False
 
-            conexao = self._gerente.obter_plugin("plugins.conexao")
-            if not conexao or not conexao.exchange:
+            if not self._conexao or not self._conexao.exchange:
                 logger.error("Plugin de conexão não encontrado ou não inicializado")
                 return False
 
-            self._exchange = conexao.exchange
+            self._exchange = self._conexao.exchange
             self._exchange.set_sandbox_mode(True)
             logger.info("ExecucaoOrdens pronto (modo sandbox ativo)")
             return True

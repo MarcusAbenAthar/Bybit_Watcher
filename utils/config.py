@@ -45,8 +45,8 @@ def carregar_config() -> dict:
         sltp_estilo_padrao = next(iter(sltp_estilos), "moderado")
 
     config = {
-        "pares": ["XRPUSDT"],
-        "timeframes": ["1d"],
+        "pares": ["BTCUSDT"],
+        "timeframes": ["4h", "1d"],
         "trading": {
             "auto_trade": False,
             "risco_por_operacao": 0.05,
@@ -69,10 +69,6 @@ def carregar_config() -> dict:
         "telegram": {
             "bot_token": os.getenv("TELEGRAM_BOT_TOKEN"),
             "chat_id": os.getenv("TELEGRAM_CHAT_ID"),
-        },
-        "logging": {
-            "level": "INFO",
-            "debug_enabled": True,
         },
         "sltp_estilos": sltp_estilos,
         "sltp_estilo_padrao": sltp_estilo_padrao,
