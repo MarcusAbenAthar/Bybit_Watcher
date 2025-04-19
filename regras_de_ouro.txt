@@ -38,8 +38,8 @@ Estrutura do projeto:
 
 Bybit_Watcher/
 ├── main.py                  # Arquivo principal
-├── .env                     # Configurações sensíveis
-├── regras_de_ouro.txt      # Regras do projeto
+├── .env                     # Configurações sensíveis (Não será enviado)
+├── regras_de_ouro.txt      # Regras do projeto (Não será enviado)
 │
 ├── plugins/                 # Diretório de plugins
 │   ├── __init__.py         # Inicializador do pacote
@@ -66,21 +66,20 @@ Bybit_Watcher/
 │   │    └── outros_indicadores.py
 │   │
 │   └── gerenciadores/      # Subpacote dos gerenciadores
-│         ├── __init__.py
+│         ├── __init__.py   # Inicializador do pacote
+│         ├── gerenciador.py  # Base do Gerenciador
 │         ├── gerenciador_banco.py # Gerenciador de banco de dados
 │         ├── gerenciador_bot.py  # Gerenciador do bot
-│         ├── gerenciador.py  # Base do Gerenciador
 │         └── gerenciador_plugins.py # Gerenciador dos plugins
 │
 │
 ├── utils/                  # Utilitários
-│   ├── __init__.py
+│   ├── __init__.py         # Inicializador do pacote
 │   ├── config.py           # Centralização das configurações do bot
 │   ├── handlers.py         # Implementação do handlers
 │   ├── logging_config.py   # Configuração de logs
 │   ├── padroes_talib.py    # Implementação do padroes_candles
-│   ├── plugins_dependencias.json # Complemento do sistema de auto identificar dependencias
-│   └── sinais_logging.py   # Implementação do sinais_logging
+│   └── plugins_dependencias.json # Complemento do sistema de auto identificar dependencias
 │
 └── logs/                   # Diretório de logs
     ├── bot/

@@ -22,5 +22,7 @@
         "calculo_risco"
     ],
     "sltp": [],
-    "validador_dados": []
+    "validador_dados": [
+        "conexao"
+    ]
 }

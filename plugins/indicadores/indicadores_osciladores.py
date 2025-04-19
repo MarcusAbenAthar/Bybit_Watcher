@@ -19,7 +19,61 @@ class IndicadoresOsciladores(Plugin):
         super().__init__(gerente=gerente)
         self._gerente = gerente
 
-    def calcular_rsi(self, klines, symbol, timeframe, base_periodo=14) -> np.ndarray:
+    def _validar_dados_completos(
+        self, dados_completos, symbol: str, timeframe: str
+    ) -> bool:
+        """
+        Valida o formato de dados_completos e crus.
+
+        Args:
+            dados_completos: Dicionário com dados a serem validados.
+            symbol (str): Símbolo do par.
+            timeframe (str): Timeframe.
+
+        Returns:
+            bool: True se válido, False caso contrário.
+        """
+        if not isinstance(dados_completos, dict):
+            logger.error(
+                f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
+            )
+            return False
+
+        crus = dados_completos.get("crus")
+        if not isinstance(crus, list):
+            logger.error(f"[{self.nome}] crus não é uma lista: {type(crus)}")
+            return False
+
+        if len(crus) < 20:
+            logger.warning(
+                f"[{self.nome}] Dados crus insuficientes para {symbol} - {timeframe}"
+            )
+            return False
+
+        for item in crus:
+            if not isinstance(item, (list, tuple)) or len(item) < 6:
+                logger.error(
+                    f"[{self.nome}] Item inválido em crus para {symbol} - {timeframe}: {item}"
+                )
+                return False
+
+        return True
+
+    def calcular_rsi(
+        self, klines, symbol: str, timeframe: str, base_periodo=14
+    ) -> np.ndarray:
+        """
+        Calcula o RSI com ajuste dinâmico baseado na volatilidade.
+
+        Args:
+            klines: Lista de k-lines.
+            symbol (str): Símbolo do par.
+            timeframe (str): Timeframe.
+            base_periodo (int): Período base para RSI.
+
+        Returns:
+            np.ndarray: Valores do RSI ou array vazio em caso de erro.
+        """
         try:
             close = self._extrair_dados(klines, [4])[4]
             if close.size < 10:
@@ -37,10 +91,22 @@ class IndicadoresOsciladores(Plugin):
             rsi = talib.RSI(close, timeperiod=periodo_final)
             return rsi
         except Exception as e:
-            logger.error(f"[{self.nome}] Erro ao calcular RSI: {e}")
+            logger.error(
+                f"[{self.nome}] Erro ao calcular RSI para {symbol} - {timeframe}: {e}"
+            )
             return np.array([])
 
-    def calcular_estocastico(self, klines, timeframe) -> tuple:
+    def calcular_estocastico(self, klines, timeframe: str) -> tuple:
+        """
+        Calcula o Estocástico com ajuste dinâmico.
+
+        Args:
+            klines: Lista de k-lines.
+            timeframe (str): Timeframe.
+
+        Returns:
+            tuple: (slowk, slowd) ou (array vazio, array vazio) em caso de erro.
+        """
         try:
             extr = self._extrair_dados(klines, [2, 3, 4])
             high, low, close = extr[2], extr[3], extr[4]
@@ -77,6 +143,16 @@ class IndicadoresOsciladores(Plugin):
             return np.array([]), np.array([])
 
     def calcular_mfi(self, klines, periodo=14) -> np.ndarray:
+        """
+        Calcula o MFI (Money Flow Index).
+
+        Args:
+            klines: Lista de k-lines.
+            periodo (int): Período para MFI.
+
+        Returns:
+            np.ndarray: Valores do MFI ou array vazio em caso de erro.
+        """
         try:
             extr = self._extrair_dados(klines, [2, 3, 4, 5])
             high, low, close, volume = extr[2], extr[3], extr[4], extr[5]
@@ -88,6 +164,16 @@ class IndicadoresOsciladores(Plugin):
             return np.array([])
 
     def _calcular_volatilidade(self, close, periodo=14) -> float:
+        """
+        Calcula a volatilidade com base no desvio padrão.
+
+        Args:
+            close: Array de preços de fechamento.
+            periodo (int): Período para cálculo.
+
+        Returns:
+            float: Valor da volatilidade ou 0.0 em caso de erro.
+        """
         try:
             if len(close) < periodo:
                 return 0.0
@@ -102,6 +188,17 @@ class IndicadoresOsciladores(Plugin):
             return 0.0
 
     def executar(self, *args, **kwargs) -> bool:
+        """
+        Executa o cálculo dos indicadores osciladores e armazena resultados.
+
+        Args:
+            dados_completos (dict): Dicionário com dados crus e processados.
+            symbol (str): Símbolo do par.
+            timeframe (str): Timeframe.
+
+        Returns:
+            bool: True (mesmo em caso de erro, para não interromper o pipeline).
+        """
         resultado_padrao = {
             "rsi": None,
             "estocastico": {"slowk": None, "slowd": None},
@@ -115,17 +212,18 @@ class IndicadoresOsciladores(Plugin):
             timeframe = kwargs.get("timeframe")
 
             if not all([dados_completos, symbol, timeframe]):
-                logger.error(f"Parâmetros ausentes em {self.nome}")
+                logger.error(
+                    f"[{self.nome}] Parâmetros ausentes: dados_completos, symbol ou timeframe"
+                )
                 if isinstance(dados_completos, dict):
                     dados_completos["osciladores"] = resultado_padrao
                 return True
 
-            crus = dados_completos.get("crus", [])
-            if not isinstance(crus, list) or len(crus) < 20:
-                logger.warning(f"[{self.nome}] Dados crus insuficientes")
+            if not self._validar_dados_completos(dados_completos, symbol, timeframe):
                 dados_completos["osciladores"] = resultado_padrao
                 return True
 
+            crus = dados_completos.get("crus", [])
             rsi = self.calcular_rsi(crus, symbol, timeframe)
             slowk, slowd = self.calcular_estocastico(crus, timeframe)
             mfi = self.calcular_mfi(crus)

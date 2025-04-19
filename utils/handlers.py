@@ -1,17 +1,21 @@
 import signal
 import sys
+from typing import Callable, Optional
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
-def signal_handler(signum: int, frame=None) -> None:
+def signal_handler(
+    signum: int, frame=None, finalizar_callback: Optional[Callable[[], None]] = None
+) -> None:
     """
     Handler para sinais de interrupção do sistema operacional.
 
     Args:
         signum (int): Código do sinal recebido (ex: SIGINT, SIGTERM).
         frame: Quadro atual da pilha de execução (não utilizado).
+        finalizar_callback: Função opcional para finalizar recursos antes de encerrar.
     """
     sinais = {
         signal.SIGINT: "SIGINT (Ctrl+C)",
@@ -22,19 +26,27 @@ def signal_handler(signum: int, frame=None) -> None:
         f"[SignalHandler] Recebido sinal: {descricao} (código {signum}). Encerrando com segurança..."
     )
 
-    # 🔧 No futuro: encerrar_bot() ou outro shutdown elegante
+    if finalizar_callback:
+        try:
+            finalizar_callback()
+        except Exception as e:
+            logger.error(f"Erro ao executar callback de finalização: {e}")
+
     sys.exit(0)
 
 
-def registrar_sinais():
+def registrar_sinais(finalizar_callback: Optional[Callable[[], None]] = None) -> None:
     """
     Registra os handlers para os sinais de encerramento.
+
+    Args:
+        finalizar_callback: Função opcional para finalizar recursos antes de encerrar.
     """
-    signal.signal(signal.SIGINT, signal_handler)
+
+    def handler_wrapper(signum: int, frame=None) -> None:
+        signal_handler(signum, frame, finalizar_callback)
+
+    signal.signal(signal.SIGINT, handler_wrapper)
     if hasattr(signal, "SIGTERM"):
-        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGTERM, handler_wrapper)
     logger.debug("[SignalHandler] Registrado para SIGINT e SIGTERM")
-
-
-# Registro automático ao importar
-registrar_sinais()

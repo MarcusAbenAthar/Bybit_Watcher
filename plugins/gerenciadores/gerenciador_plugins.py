@@ -2,8 +2,9 @@ import json
 import os
 import inspect
 from collections import defaultdict, deque
+from typing import Optional, List
 from plugins.plugin import Plugin, PluginRegistry
-from plugins.gerenciadores.gerenciadores import BaseGerenciador
+from plugins.gerenciadores.gerenciador import BaseGerenciador
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -11,12 +12,16 @@ logger = get_logger(__name__)
 ARQUIVO_DEPENDENCIAS = os.path.join("utils", "plugins_dependencias.json")
 
 
-class GerenciadorPlugins:
+class GerenciadorPlugins(BaseGerenciador):
+    """Gerenciador responsável por carregar, inicializar e coordenar plugins do sistema."""
+
     PLUGIN_NAME = "gerenciador_plugins"
     PLUGIN_CATEGORIA = "gerenciador"
     PLUGIN_TAGS = ["core"]
 
-    def __init__(self):
+    def __init__(self, **kwargs):
+        """Inicializa o gerenciador de plugins com suporte à classe base."""
+        super().__init__(**kwargs)
         self.plugins: dict[str, Plugin] = {}
         self._config: dict = {}
         self._dependencias: dict[str, list[str]] = {}
@@ -63,6 +68,7 @@ class GerenciadorPlugins:
         return dependencias
 
     def _carregar_dependencias_json(self) -> dict[str, list[str]]:
+        """Carrega dependências de plugins a partir de um arquivo JSON."""
         if os.path.exists(ARQUIVO_DEPENDENCIAS):
             try:
                 with open(ARQUIVO_DEPENDENCIAS, "r") as f:
@@ -72,6 +78,7 @@ class GerenciadorPlugins:
         return {}
 
     def _salvar_dependencias_json(self, dependencias: dict[str, list[str]]) -> None:
+        """Salva as dependências dos plugins em um arquivo JSON."""
         try:
             with open(ARQUIVO_DEPENDENCIAS, "w") as f:
                 json.dump(dependencias, f, indent=4)
@@ -80,6 +87,7 @@ class GerenciadorPlugins:
             logger.error(f"Erro ao salvar {ARQUIVO_DEPENDENCIAS}: {e}")
 
     def _verificar_ou_atualizar_dependencias(self) -> None:
+        """Compara dependências reais com as salvas e atualiza o JSON se necessário."""
         declaradas = self._coletar_dependencias_reais()
         salvas = self._carregar_dependencias_json()
 
@@ -123,6 +131,7 @@ class GerenciadorPlugins:
         return ordenados
 
     def inicializar(self, config: dict) -> bool:
+        """Inicializa todos os plugins em ordem de dependência."""
         self._config = config
         self._registrar_gerenciadores()
         self._verificar_ou_atualizar_dependencias()
@@ -145,6 +154,13 @@ class GerenciadorPlugins:
                     dependencias[dep_nome] = dependencia
 
                 plugin = classe(gerente=self, **dependencias)
+                if not isinstance(plugin, (Plugin, BaseGerenciador)):
+                    logger.error(
+                        f"Plugin '{nome_plugin}' não é uma instância válida de Plugin ou BaseGerenciador"
+                    )
+                    sucesso = False
+                    continue
+
                 if plugin.inicializar(config):
                     self.plugins[nome_plugin] = plugin
                     logger.info(f"Plugin carregado: {nome_plugin}")
@@ -157,15 +173,59 @@ class GerenciadorPlugins:
                     f"Erro ao instanciar plugin {nome_plugin}: {e}", exc_info=True
                 )
                 sucesso = False
+        self.inicializado = sucesso
         return sucesso
 
-    def obter_plugin(self, nome: str) -> Plugin | None:
+    def executar(self, *args, **kwargs) -> bool:
+        """
+        Executa plugins com a tag 'analise' em sequência.
+
+        Args:
+            *args: Argumentos posicionais para os plugins
+            **kwargs: Argumentos nomeados para os plugins (ex.: symbol, timeframe)
+
+        Returns:
+            bool: True se todos os plugins forem executados com sucesso, False caso contrário
+        """
+        if not self.inicializado:
+            logger.error("GerenciadorPlugins não inicializado")
+            return False
+
+        try:
+            plugins_analise = self.filtrar_por_tag("analise")
+            if not plugins_analise:
+                logger.warning("Nenhum plugin com tag 'analise' encontrado")
+                return True  # Considera sucesso se não há plugins para executar
+
+            sucesso = True
+            for plugin in plugins_analise:
+                try:
+                    resultado = plugin.executar(*args, **kwargs)
+                    if not isinstance(resultado, bool) or not resultado:
+                        logger.warning(
+                            f"Falha na execução do plugin {plugin.PLUGIN_NAME}"
+                        )
+                        sucesso = False
+                except Exception as e:
+                    logger.error(
+                        f"Erro ao executar plugin {plugin.PLUGIN_NAME}: {e}",
+                        exc_info=True,
+                    )
+                    sucesso = False
+            return sucesso
+        except Exception as e:
+            logger.error(f"Erro geral na execução dos plugins: {e}", exc_info=True)
+            return False
+
+    def obter_plugin(self, nome: str) -> Optional[Plugin]:
+        """Recupera um plugin pelo nome."""
         plugin = self.plugins.get(nome)
         if not plugin:
             logger.warning(f"Plugin '{nome}' não encontrado.")
         return plugin
 
-    def filtrar_por_tag(self, tag: str) -> list[Plugin]:
+    def filtrar_por_tag(self, tag: str) -> List[Plugin]:
+        """Filtra plugins por uma tag específica."""
         return [
             plugin
             for plugin in self.plugins.values()
@@ -173,6 +233,7 @@ class GerenciadorPlugins:
         ]
 
     def listar_tags(self) -> dict[str, list[str]]:
+        """Lista todas as tags e seus plugins associados."""
         mapa = {}
         for nome, plugin in self.plugins.items():
             for tag in getattr(plugin, "PLUGIN_TAGS", []):
@@ -180,6 +241,7 @@ class GerenciadorPlugins:
         return mapa
 
     def validar_arquitetura(self) -> bool:
+        """Valida a arquitetura dos plugins registrados."""
         valido = True
         nomes_usados = set()
 
@@ -207,6 +269,7 @@ class GerenciadorPlugins:
         return valido
 
     def finalizar(self) -> None:
+        """Finaliza todos os plugins carregados."""
         for nome, plugin in self.plugins.items():
             try:
                 plugin.finalizar()
@@ -214,7 +277,9 @@ class GerenciadorPlugins:
             except Exception as e:
                 logger.error(f"Erro ao finalizar plugin {nome}: {e}")
         self.plugins.clear()
+        self.inicializado = False
 
-    def listar_plugins_registrados(self):
+    def listar_plugins_registrados(self) -> None:
+        """Lista todos os plugins registrados."""
         for nome in self.plugins:
             logger.info(f"Plugin disponível: {nome}")

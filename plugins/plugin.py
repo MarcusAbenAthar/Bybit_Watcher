@@ -21,6 +21,8 @@ class PluginRegistry:
         plugin_name = getattr(plugin_cls, "PLUGIN_NAME", None)
         if not plugin_name:
             raise ValueError(f"{plugin_cls.__name__} precisa definir PLUGIN_NAME.")
+        if not issubclass(plugin_cls, Plugin) or plugin_cls is Plugin:
+            raise ValueError(f"{plugin_cls.__name__} deve herdar de Plugin.")
         if plugin_name in cls._registry:
             logger.warning(f"Plugin '{plugin_name}' já registrado. Substituindo...")
         cls._registry[plugin_name] = plugin_cls
@@ -39,7 +41,8 @@ class PluginRegistry:
         """
         Coleta dinamicamente as dependências do construtor (__init__) do plugin.
 
-        Ignora parâmetros padrão como 'gerente', '*args', '**kwargs'.
+        Ignora parâmetros padrão como 'gerente', '*args', '**kwargs' e considera apenas
+        parâmetros anotados como subclasses de Plugin.
         """
         plugin_cls = cls.obter_plugin(nome)
         if not plugin_cls:
@@ -48,12 +51,16 @@ class PluginRegistry:
         try:
             sig = inspect.signature(plugin_cls.__init__)
             params = list(sig.parameters.values())[1:]  # Ignora 'self'
-            deps = [
-                p.name
-                for p in params
-                if p.name not in ("gerente", "args", "kwargs")
-                and not p.name.startswith("_")
-            ]
+            deps = []
+            for p in params:
+                if p.name in ("gerente", "args", "kwargs") or p.name.startswith("_"):
+                    continue
+                # Verifica se o parâmetro é anotado como Plugin ou subclasse
+                if p.annotation and p.annotation is not inspect.Parameter.empty:
+                    if isinstance(p.annotation, type) and issubclass(
+                        p.annotation, Plugin
+                    ):
+                        deps.append(p.name)
             return deps
         except Exception as e:
             logger.error(f"Erro ao inspecionar dependências de {nome}: {e}")
@@ -106,10 +113,32 @@ class Plugin:
         if not self.PLUGIN_NAME:
             self.PLUGIN_NAME = valor
 
+    def configuracoes_requeridas(self) -> List[str]:
+        """
+        Retorna lista de chaves obrigatórias no config.
+        Subclasses devem sobrescrever este método se houver configurações específicas.
+        """
+        return []
+
     def inicializar(self, config: Dict[str, Any]) -> bool:
+        """
+        Inicializa o plugin com a configuração fornecida.
+
+        Args:
+            config: Dicionário com configurações necessárias.
+
+        Returns:
+            bool: True se inicializado com sucesso, False caso contrário.
+        """
         try:
             if self.inicializado:
                 return True
+            requeridas = self.configuracoes_requeridas()
+            if not all(k in config for k in requeridas):
+                logger.error(
+                    f"Configuração incompleta para {self.nome}: faltam {requeridas}"
+                )
+                return False
             self._config = config
             for dependencia in self._dependencias:
                 if not dependencia.inicializado:
@@ -119,34 +148,56 @@ class Plugin:
                     return False
             self.inicializado = True
             return True
+        except KeyError as e:
+            logger.error(f"Chave de configuração ausente para {self.nome}: {e}")
+            return False
+        except TypeError as e:
+            logger.error(f"Erro de tipo na configuração de {self.nome}: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Erro ao inicializar plugin {self.nome}: {e}")
+            logger.error(f"Erro inesperado ao inicializar {self.nome}: {e}")
             return False
 
     def executar(self, *args, **kwargs) -> bool:
+        """
+        Executa a lógica principal do plugin.
+
+        Args:
+            dados_completos: Dicionário com dados de mercado.
+            symbol: Símbolo do ativo (ex.: BTCUSDT).
+            timeframe: Timeframe dos dados (ex.: 1m, 1h).
+
+        Returns:
+            bool: True se executado com sucesso, False caso contrário.
+        """
         try:
             if not self.inicializado:
                 logger.error(f"Plugin {self.nome} não inicializado")
                 return False
-
             dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
-
             if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"Parâmetros obrigatórios ausentes em {self.nome}")
                 return False
-
             if not isinstance(dados_completos, dict):
                 logger.warning(f"dados_completos inválido em {self.nome}")
                 return False
-
             return True
+        except KeyError as e:
+            logger.error(f"Chave ausente em kwargs para {self.nome}: {e}")
+            return False
+        except TypeError as e:
+            logger.error(f"Erro de tipo em {self.nome}: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Erro ao executar plugin {self.nome}: {e}")
+            logger.error(f"Erro inesperado ao executar {self.nome}: {e}")
             return False
 
     def finalizar(self):
+        """
+        Finaliza o plugin, limpando configurações e dependências.
+        """
         try:
             if not self.inicializado:
                 return
@@ -155,11 +206,21 @@ class Plugin:
             self.inicializado = False
             logger.info(f"Plugin {self.nome} finalizado com sucesso")
         except Exception as e:
-            logger.error(f"Erro ao finalizar plugin {self.nome}: {e}")
+            logger.error(f"Erro inesperado ao finalizar {self.nome}: {e}")
 
     def _extrair_dados(
         self, dados_completos: List[Any], indices: List[int]
     ) -> Dict[int, np.ndarray]:
+        """
+        Extrai dados numéricos de uma lista de candles.
+
+        Args:
+            dados_completos: Lista de candles.
+            indices: Lista de índices para extrair.
+
+        Returns:
+            Dict[int, np.ndarray]: Dicionário com arrays numéricos para cada índice.
+        """
         try:
             valores = {idx: [] for idx in indices}
             for candle in dados_completos:
@@ -179,6 +240,12 @@ class Plugin:
                 logger.warning(f"Dados incompletos em {self.nome}")
                 return {idx: np.array([]) for idx in indices}
             return {idx: np.array(valores[idx], dtype=np.float64) for idx in indices}
+        except IndexError as e:
+            logger.error(f"Índice inválido em dados_completos para {self.nome}: {e}")
+            return {idx: np.array([]) for idx in indices}
+        except TypeError as e:
+            logger.error(f"Erro de tipo nos dados para {self.nome}: {e}")
+            return {idx: np.array([]) for idx in indices}
         except Exception as e:
-            logger.error(f"Erro ao extrair dados em {self.nome}: {e}")
+            logger.error(f"Erro inesperado ao extrair dados em {self.nome}: {e}")
             return {idx: np.array([]) for idx in indices}

@@ -1,74 +1,125 @@
-"""Bot de análise de mercado cripto seguindo as Regras de Ouro."""
+"""
+Bot de análise de mercado cripto seguindo as Regras de Ouro.
+"""
 
-import signal
 import sys
 import time
 from utils.logging_config import get_logger
 from utils.config import carregar_config
-from utils.handlers import signal_handler
-from utils.logging_config import configurar_logging
-from dotenv import load_dotenv
-from plugins.gerenciadores.gerenciadores import BaseGerenciador
+from utils.handlers import registrar_sinais
+from plugins.gerenciadores.gerenciador import BaseGerenciador
 from plugins.gerenciadores.gerenciador_plugins import GerenciadorPlugins
 
-
-load_dotenv()
-
-# Passando a flag de debug_enabled diretamente aqui
-logger = get_logger(__name__, debug_enabled=False)  # Ou False se não quiser debug
+logger = get_logger(__name__)
 
 
-def iniciar_bot():
-    """Configura e inicia todos os gerenciadores do sistema."""
-    config = carregar_config()
-    configurar_logging(config)
-    logger.info("Inicializando bot de mercado...")
+def iniciar_bot(config: dict) -> tuple:
+    """
+    Configura e inicia os gerenciadores do sistema.
 
-    # Tratamento de sinais do SO
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    Args:
+        config: Dicionário de configurações carregado por config.py.
 
-    gerente = GerenciadorPlugins()
-    if not gerente.inicializar(config):
-        raise RuntimeError("Falha ao inicializar o GerenciadorPlugins")
+    Returns:
+        tuple: (gerenciador_bot, gerente) inicializados.
 
-    gerenciador_cls = BaseGerenciador.obter_gerenciador("gerenciador_bot")
-    if not gerenciador_cls:
-        raise RuntimeError("GerenciadorBot não registrado")
+    Raises:
+        ValueError: Se config for inválido.
+        RuntimeError: Se a inicialização de gerenciadores falhar.
+    """
+    try:
+        if not isinstance(config, dict):
+            raise ValueError("Configuração inválida: deve ser um dicionário")
 
-    gerenciador_bot = gerenciador_cls(gerente=gerente)
-    if not gerenciador_bot.inicializar(config):
-        raise RuntimeError("Falha ao inicializar GerenciadorBot")
+        logger.info("Inicializando bot de mercado...")
 
-    if not gerenciador_bot.iniciar():
-        raise RuntimeError("Falha ao iniciar GerenciadorBot")
+        gerente = GerenciadorPlugins()
+        if not gerente.inicializar(config):
+            raise RuntimeError("Falha ao inicializar GerenciadorPlugins")
 
-    return gerenciador_bot
+        gerenciador_cls = BaseGerenciador.obter_gerenciador("gerenciador_bot")
+        if not gerenciador_cls:
+            raise RuntimeError("GerenciadorBot não registrado")
+
+        gerenciador_bot = gerenciador_cls(gerente=gerente)
+        if not gerenciador_bot.inicializar(config):
+            raise RuntimeError("Falha ao inicializar GerenciadorBot")
+
+        if not gerenciador_bot.iniciar():
+            raise RuntimeError("Falha ao iniciar GerenciadorBot")
+
+        def finalizar():
+            """Callback para finalizar gerenciadores."""
+            try:
+                gerenciador_bot.finalizar()
+                gerente.finalizar()
+                logger.info("Bot finalizado com sucesso")
+            except Exception as e:
+                logger.error(f"Erro ao finalizar bot: {e}", exc_info=True)
+
+        registrar_sinais(finalizar)
+        return gerenciador_bot, gerente
+
+    except Exception as e:
+        logger.error(f"Erro ao iniciar bot: {e}", exc_info=True)
+        raise
 
 
-def loop_principal(gerenciador_bot):
-    """Executa o loop principal do bot."""
+def loop_principal(gerenciador_bot, gerente, cycle_interval: float):
+    """
+    Executa o loop principal do bot.
+
+    Args:
+        gerenciador_bot: Instância de GerenciadorBot.
+        gerente: Instância de GerenciadorPlugins.
+        cycle_interval: Intervalo entre ciclos (segundos).
+    """
     while True:
         try:
-            logger.execution("Iniciando ciclo de execução")
+            logger.info("Iniciando ciclo de execução")
             if not gerenciador_bot.executar():
-                logger.warning("Ciclo com falha parcial no gerenciador do bot")
-            logger.execution("Ciclo concluído com sucesso")
-            time.sleep(15)
+                logger.warning("Ciclo com falha parcial. Continuando...")
+            else:
+                logger.info("Ciclo concluído com sucesso")
+            time.sleep(cycle_interval)
         except KeyboardInterrupt:
             logger.info("Encerramento solicitado pelo usuário (Ctrl+C)")
+            gerenciador_bot.finalizar()
+            gerente.finalizar()
             break
+        except ConnectionError as e:
+            logger.warning(f"Erro de conexão temporário: {e}. Tentando novamente...")
+            time.sleep(cycle_interval * 2)
+            continue
         except Exception as e:
             logger.error(f"Erro no ciclo principal: {e}", exc_info=True)
-            break
+            time.sleep(cycle_interval * 2)
+            continue  # Resiliência para erros genéricos
 
 
 def main():
+    """
+    Ponto de entrada principal do bot.
+    """
     try:
-        gerenciador_bot = iniciar_bot()
-        loop_principal(gerenciador_bot)
+        config = carregar_config()
+        if not config:
+            logger.critical("Falha ao carregar configurações")
+            sys.exit(1)
+
+        # Obter intervalo de ciclo configurável
+        cycle_interval = config.get("bot", {}).get("cycle_interval", 15.0)
+        if not isinstance(cycle_interval, (int, float)) or cycle_interval <= 0:
+            logger.warning(
+                f"cycle_interval inválido: {cycle_interval}. Usando padrão: 15s"
+            )
+            cycle_interval = 15.0
+
+        gerenciador_bot, gerente = iniciar_bot(config)
+        loop_principal(gerenciador_bot, gerente, cycle_interval)
+
     except Exception as e:
-        logger.critical(f"Erro fatal ao iniciar o bot: {e}", exc_info=True)
+        logger.critical(f"Erro fatal ao executar o bot: {e}", exc_info=True)
         sys.exit(1)
 
 

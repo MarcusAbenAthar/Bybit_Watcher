@@ -25,9 +25,56 @@ class IndicadoresVolatilidade(Plugin):
             "volatilidade_periodo_base": 14,
         }
 
+    def _validar_klines(self, klines, symbol: str, timeframe: str) -> bool:
+        """
+        Valida o formato da lista de klines.
+
+        Args:
+            klines: Lista de k-lines.
+            symbol (str): Símbolo do par.
+            timeframe (str): Timeframe.
+
+        Returns:
+            bool: True se válido, False caso contrário.
+        """
+        if not isinstance(klines, list):
+            logger.error(f"[{self.nome}] klines não é uma lista: {type(klines)}")
+            return False
+
+        if len(klines) < 20:
+            logger.warning(
+                f"[{self.nome}] Dados insuficientes para {symbol} - {timeframe}"
+            )
+            return False
+
+        for item in klines:
+            if not isinstance(item, (list, tuple)) or len(item) < 5:
+                logger.error(
+                    f"[{self.nome}] Item inválido em klines para {symbol} - {timeframe}: {item}"
+                )
+                return False
+            for idx in [2, 3, 4]:  # high, low, close
+                if not isinstance(item[idx], (int, float)):
+                    try:
+                        float(item[idx])
+                    except (TypeError, ValueError):
+                        logger.error(
+                            f"[{self.nome}] Valor não numérico em klines[{idx}]: {item[idx]}"
+                        )
+                        return False
+
+        return True
+
     def _ajustar_periodos(self, timeframe: str, volatilidade: float = 0.0) -> dict:
         """
         Ajusta dinamicamente os períodos dos indicadores com base no timeframe e volatilidade.
+
+        Args:
+            timeframe (str): Timeframe (ex.: '1m', '1d').
+            volatilidade (float): Volatilidade calculada.
+
+        Returns:
+            dict: Períodos ajustados para indicadores.
         """
         ajuste = int(volatilidade * 10)
         if timeframe == "1m":
@@ -48,6 +95,12 @@ class IndicadoresVolatilidade(Plugin):
     def _calcular_volatilidade_base(self, close) -> float:
         """
         Calcula uma estimativa de volatilidade com base no desvio padrão relativo ao preço.
+
+        Args:
+            close: Array de preços de fechamento.
+
+        Returns:
+            float: Valor da volatilidade ou 0.0 em caso de erro.
         """
         try:
             std = talib.STDDEV(close, timeperiod=10)
@@ -56,24 +109,41 @@ class IndicadoresVolatilidade(Plugin):
                 return 0.0
             return min(max(float(std[-1]) / close_final, 0.0), 1.0) if std.size else 0.0
         except Exception as e:
-            logger.error(f"Erro na volatilidade base: {e}")
+            logger.error(f"[{self.nome}] Erro na volatilidade base: {e}")
             return 0.0
 
     def _extrair_dados(self, dados: list, indices: list) -> dict:
         """
         Extrai arrays NumPy das colunas OHLCV com base nos índices informados.
+
+        Args:
+            dados: Lista de k-lines.
+            indices: Lista de índices para extração (ex.: [2, 3, 4] para high, low, close).
+
+        Returns:
+            dict: Dicionário com arrays NumPy para cada índice.
         """
         try:
             return {
                 i: np.array([float(d[i]) for d in dados if len(d) > i]) for i in indices
             }
         except Exception as e:
-            logger.error(f"Erro ao extrair dados de índices {indices}: {e}")
+            logger.error(
+                f"[{self.nome}] Erro ao extrair dados de índices {indices}: {e}"
+            )
             return {i: np.array([]) for i in indices}
 
     def executar(self, *args, **kwargs) -> bool:
         """
         Executa o cálculo dos indicadores de volatilidade e insere o resultado em 'dados_completos["volatilidade"]'.
+
+        Args:
+            dados_completos (dict): Dicionário com dados crus e processados.
+            symbol (str): Símbolo do par.
+            timeframe (str): Timeframe.
+
+        Returns:
+            bool: True (mesmo em caso de erro, para não interromper o pipeline).
         """
         resultado_padrao = {
             "bandas_bollinger": {"superior": None, "media": None, "inferior": None},
@@ -87,14 +157,20 @@ class IndicadoresVolatilidade(Plugin):
             timeframe = kwargs.get("timeframe")
 
             if not all([dados_completos, symbol, timeframe]):
-                logger.error(f"Parâmetros obrigatórios ausentes em {self.nome}")
+                logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes")
                 if isinstance(dados_completos, dict):
                     dados_completos["volatilidade"] = resultado_padrao
                 return True
 
+            if not isinstance(dados_completos, dict):
+                logger.error(
+                    f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
+                )
+                dados_completos["volatilidade"] = resultado_padrao
+                return True
+
             klines = dados_completos.get("crus", [])
-            if not isinstance(klines, list) or len(klines) < 20:
-                logger.warning(f"Dados insuficientes para {symbol} - {timeframe}")
+            if not self._validar_klines(klines, symbol, timeframe):
                 dados_completos["volatilidade"] = resultado_padrao
                 return True
 
@@ -108,7 +184,9 @@ class IndicadoresVolatilidade(Plugin):
 
             # Bollinger Bands
             if len(close) < periodos["bb"]:
-                logger.warning(f"Menos de {periodos['bb']} candles para Bollinger")
+                logger.warning(
+                    f"[{self.nome}] Menos de {periodos['bb']} candles para Bollinger"
+                )
                 upper, middle, lower = np.array([]), np.array([]), np.array([])
             else:
                 upper, middle, lower = talib.BBANDS(
@@ -136,10 +214,12 @@ class IndicadoresVolatilidade(Plugin):
             }
 
             dados_completos["volatilidade"] = resultado
-            logger.debug(f"Volatilidade calculada para {symbol} - {timeframe}")
+            logger.debug(
+                f"[{self.nome}] Volatilidade calculada para {symbol} - {timeframe}"
+            )
             return True
         except Exception as e:
-            logger.error(f"Erro ao executar {self.nome}: {e}", exc_info=True)
+            logger.error(f"[{self.nome}] Erro geral ao executar: {e}", exc_info=True)
             if isinstance(dados_completos, dict):
                 dados_completos["volatilidade"] = resultado_padrao
             return True

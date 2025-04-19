@@ -14,7 +14,7 @@ import pkgutil
 import pathlib
 
 from plugins.plugin import Plugin, PluginRegistry
-from plugins.gerenciadores.gerenciadores import BaseGerenciador
+from plugins.gerenciadores.gerenciador import BaseGerenciador
 
 __all__ = ["Plugin", "PluginRegistry", "BaseGerenciador"]
 
@@ -23,7 +23,7 @@ base_path = pathlib.Path(__file__).parent
 package_root = __name__  # Geralmente 'plugins'
 
 # Módulos a serem ignorados durante a importação
-IGNORAR = {"__init__.py", "__pycache__", "plugin.py", "gerenciadores.py"}
+IGNORAR = {"__init__.py", "__pycache__", "plugin.py", "gerenciador.py"}
 
 
 def _importar_modulos_recursivamente():

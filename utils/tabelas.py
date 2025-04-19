@@ -1,5 +1,31 @@
 # tabelas.py
+# Ainda não está pronto, mas já tem uma estrutura básica para criar tabelas no banco de dados PostgreSQL.
+# Este arquivo contém a definição de tabelas para armazenar dados de criptomoedas, sinais e indicadores técnicos.
 
+import re
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
+def validar_schema(schema: str) -> str:
+    """
+    Valida que o schema é um identificador seguro para uso em comandos SQL.
+
+    Args:
+        schema (str): Nome do schema a ser validado.
+
+    Returns:
+        str: Schema validado ou 'public' se inválido.
+    """
+    if not schema or not re.match(r"^[a-zA-Z0-9_]+$", schema):
+        logger.error(f"Schema inválido: {schema}. Usando 'public' como padrão.")
+        return "public"
+    return schema
+
+
+# NOTA: O placeholder {schema} deve ser substituído por um valor validado via validar_schema()
+# para evitar injeção de SQL. Exemplo: TABELAS["klines"].format(schema=validar_schema("meu_schema"))
 TABELAS = {
     "klines": """
             CREATE TABLE {schema}.klines (
