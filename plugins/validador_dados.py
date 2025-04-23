@@ -9,7 +9,36 @@ from plugins.plugin import Plugin
 logger = get_logger(__name__)
 
 
+class ValidadorDados(...):
+    def finalizar(self):
+        """
+        Finaliza o plugin ValidadorDados, limpando estado e garantindo shutdown seguro.
+        """
+        try:
+            super().finalizar()
+            logger.info("ValidadorDados finalizado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao finalizar ValidadorDados: {e}")
+
 class ValidadorDados(Plugin):
+    """
+    Plugin para validação de dados de entrada e saída do pipeline.
+    - Responsabilidade única: validação de dados.
+    - Modular, testável, documentado e sem hardcode.
+    - Autoidentificação de dependências/plugins.
+    """
+    PLUGIN_NAME = "validador_dados"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["validador", "dados", "analise"]
+    PLUGIN_PRIORIDADE = 100
+
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do plugin ValidadorDados.
+        """
+        return []
+
     PLUGIN_NAME = "validador_dados"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["validação", "dados"]

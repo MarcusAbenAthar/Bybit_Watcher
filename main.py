@@ -100,8 +100,13 @@ def loop_principal(gerenciador_bot, gerente, cycle_interval: float):
 def main():
     """
     Ponto de entrada principal do bot.
+    Integra monitoramento contínuo institucional e monitoramento prioritário de ordens abertas.
     """
     try:
+        import threading
+        from plugins.gerenciadores.gerenciador_monitoramento import GerenciadorMonitoramento
+        from plugins.monitoramento.monitor_ordens import MonitorOrdens
+
         config = carregar_config()
         if not config:
             logger.critical("Falha ao carregar configurações")
@@ -116,6 +121,36 @@ def main():
             cycle_interval = 15.0
 
         gerenciador_bot, gerente = iniciar_bot(config)
+
+        # Integrar monitoramento contínuo institucional
+        monitoramento = GerenciadorMonitoramento(config)
+        monitoramento.inicializar(config)
+        intervalo_monitoramento = config.get("monitoramento", {}).get("intervalo", 60)
+        monitor_thread = threading.Thread(
+            target=monitoramento.monitorar_continuamente,
+            kwargs={"intervalo_segundos": intervalo_monitoramento},
+            daemon=True
+        )
+        monitor_thread.start()
+        logger.info("Thread de monitoramento contínuo institucional iniciada.")
+
+        # Integrar monitoramento prioritário de ordens abertas (auto_trade)
+        auto_trade = config.get("trading", {}).get("auto_trade", False)
+        if auto_trade:
+            monitor_ordens = MonitorOrdens(
+                execucao_ordens=gerente.obter_plugin("execucao_ordens"),
+                conexao=gerente.obter_plugin("conexao"),
+                config=config,
+            )
+            def loop_monitor_ordens():
+                while True:
+                    monitor_ordens.diagnostico()
+                    time.sleep(2)
+            threading.Thread(target=loop_monitor_ordens, daemon=True).start()
+            logger.info("Monitoramento prioritário de ordens iniciado (auto_trade=True)")
+        else:
+            logger.info("Monitoramento de ordens não iniciado (auto_trade=False)")
+
         loop_principal(gerenciador_bot, gerente, cycle_interval)
 
     except Exception as e:

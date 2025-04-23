@@ -10,6 +10,34 @@ logger = get_logger(__name__)
 
 
 class IndicadoresVolume(Plugin):
+    def finalizar(self):
+        """
+        Finaliza o plugin IndicadoresVolume, limpando estado e garantindo shutdown seguro.
+        """
+        try:
+            super().finalizar()
+            logger.info("IndicadoresVolume finalizado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao finalizar IndicadoresVolume: {e}")
+
+    """
+    Plugin de indicadores de volume (ex: OBV, Volume Médio).
+    - Responsabilidade única: cálculo de indicadores de volume.
+    - Modular, testável, documentado e sem hardcode.
+    - Autoidentificação de dependências/plugins.
+    """
+    PLUGIN_NAME = "indicadores_volume"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["indicadores", "volume", "analise"]
+    PLUGIN_PRIORIDADE = 100
+
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do plugin IndicadoresVolume.
+        """
+        return []
+
     PLUGIN_NAME = "indicadores_volume"
     PLUGIN_TYPE = "indicador"
     PLUGIN_CATEGORIA = "plugin"
@@ -78,8 +106,8 @@ class IndicadoresVolume(Plugin):
             list: Lista de arrays NumPy para cada coluna.
         """
         try:
-            dados = list(zip(*dados))
-            return [np.array(dados[i], dtype=np.float64) for i in colunas]
+            dados_completos = list(zip(*dados))
+            return [np.array(dados_completos[i], dtype=np.float64) for i in colunas]
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao extrair dados: {e}")
             return [np.array([]) for _ in colunas]
@@ -185,7 +213,7 @@ class IndicadoresVolume(Plugin):
             logger.error(f"[{self.nome}] Erro ao calcular volatilidade: {e}")
             return 0.0
 
-    def executar(self, *args, **kwargs) -> bool:
+    def executar(self, dados_completos, symbol, timeframe): 
         """
         Executa o cálculo dos indicadores de volume e armazena resultados.
 

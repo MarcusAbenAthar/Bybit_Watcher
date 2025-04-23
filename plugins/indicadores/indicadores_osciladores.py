@@ -10,6 +10,34 @@ logger = get_logger(__name__)
 
 
 class IndicadoresOsciladores(Plugin):
+    def finalizar(self):
+        """
+        Finaliza o plugin IndicadoresOsciladores, limpando estado e garantindo shutdown seguro.
+        """
+        try:
+            super().finalizar()
+            logger.info("IndicadoresOsciladores finalizado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao finalizar IndicadoresOsciladores: {e}")
+
+    """
+    Plugin de indicadores osciladores (ex: RSI, Estocástico).
+    - Responsabilidade única: cálculo de indicadores osciladores.
+    - Modular, testável, documentado e sem hardcode.
+    - Autoidentificação de dependências/plugins.
+    """
+    PLUGIN_NAME = "indicadores_osciladores"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["indicadores", "osciladores", "analise"]
+    PLUGIN_PRIORIDADE = 100
+
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do plugin IndicadoresOsciladores.
+        """
+        return []
+
     PLUGIN_NAME = "indicadores_osciladores"
     PLUGIN_TYPE = "indicador"
     PLUGIN_CATEGORIA = "plugin"
@@ -20,7 +48,7 @@ class IndicadoresOsciladores(Plugin):
         self._gerente = gerente
 
     def _validar_dados_completos(
-        self, dados_completos, symbol: str, timeframe: str
+        self, dados_completos: dict, symbol: str, timeframe: str
     ) -> bool:
         """
         Valida o formato de dados_completos e crus.
@@ -187,12 +215,12 @@ class IndicadoresOsciladores(Plugin):
             logger.error(f"[{self.nome}] Erro ao calcular volatilidade: {e}")
             return 0.0
 
-    def executar(self, *args, **kwargs) -> bool:
+    def executar(self, dados_completos: dict, symbol: str, timeframe: str) -> bool:
         """
         Executa o cálculo dos indicadores osciladores e armazena resultados.
 
         Args:
-            dados_completos (dict): Dicionário com dados crus e processados.
+            dados_completos: Dicionário com dados a serem processados.
             symbol (str): Símbolo do par.
             timeframe (str): Timeframe.
 
@@ -207,18 +235,6 @@ class IndicadoresOsciladores(Plugin):
         }
 
         try:
-            dados_completos = kwargs.get("dados_completos")
-            symbol = kwargs.get("symbol")
-            timeframe = kwargs.get("timeframe")
-
-            if not all([dados_completos, symbol, timeframe]):
-                logger.error(
-                    f"[{self.nome}] Parâmetros ausentes: dados_completos, symbol ou timeframe"
-                )
-                if isinstance(dados_completos, dict):
-                    dados_completos["osciladores"] = resultado_padrao
-                return True
-
             if not self._validar_dados_completos(dados_completos, symbol, timeframe):
                 dados_completos["osciladores"] = resultado_padrao
                 return True

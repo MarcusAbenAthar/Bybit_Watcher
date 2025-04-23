@@ -1,9 +1,11 @@
 # config.py
 # Configurações fixas do bot, com dados sensíveis carregados do .env
-
-import os
-from dotenv import load_dotenv
+# Configuração global para confiança mínima dos sinais
 from utils.logging_config import get_logger
+from dotenv import load_dotenv
+import os
+MIN_CONFIDENCE = 0.6  # Sinal só é válido se confiança >= este valor
+
 
 logger = get_logger(__name__)
 load_dotenv()  # Carrega variáveis sensíveis do .env
@@ -30,7 +32,9 @@ def _validar_estilos_sltp(estilos: dict) -> dict:
 
 
 def carregar_config() -> dict:
-    """Carrega todas as configurações fixas e sensíveis do sistema."""
+    """Carrega todas as configurações fixas e sensíveis do sistema.
+    Inclui exemplo institucional para monitoramento contínuo e ativos monitorados.
+    """
     testnet = os.getenv("BYBIT_TESTNET", "True").lower() == "true"
 
     # Chaves obrigatórias mínimas
@@ -56,6 +60,11 @@ def carregar_config() -> dict:
                 f"Variável de ambiente obrigatória ausente ou vazia: {chave}"
             )
 
+    # Configuração institucional pronta para uso
+    ativos = ["BTCUSDT", "FARTCOIN"]  # Edite aqui os pares que deseja monitorar
+    monitoramento_intervalo = 300  # Intervalo em segundos entre execuções dos diagnósticos
+    bot_cycle_interval = 5     # Intervalo do loop principal
+
     # Coleta de credenciais da Bybit conforme ambiente
     if testnet:
         api_key = os.getenv("TESTNET_BYBIT_API_KEY")
@@ -78,14 +87,47 @@ def carregar_config() -> dict:
     )
 
     sltp_estilo_padrao = (
-        "moderado" if "moderado" in sltp_estilos else next(iter(sltp_estilos), None)
+        "moderado" if "moderado" in sltp_estilos else next(
+            iter(sltp_estilos), None)
     )
     if not sltp_estilo_padrao:
         raise ValueError("Nenhum estilo SLTP válido encontrado.")
 
+    # Pesos para consolidação multi-timeframe e multi-plugin
+    PESOS_TIMEFRAME = {
+        "1d": 0.5,
+        "4h": 0.25,
+        "1h": 0.15,
+        "15m": 0.1
+    }
+    # Plugins principais podem ser ajustados conforme arquitetura
+    PESOS_PLUGIN = {
+        "analise_mercado": 0.5,
+        "calculo_risco": 0.3,
+        "outros": 0.2
+    }
+
     config = {
-        "pares": ["BTCUSDT"],
+        # Configuração institucional principal
+        "monitoramento": {
+            "intervalo": monitoramento_intervalo
+        },
+        "bot": {
+            "cycle_interval": bot_cycle_interval
+        },
+        "ativos": ativos,
+
+        # Configuração operacional
+        "pares": ativos,
+        # Tipos de mercado a serem analisados. Ative/desative conforme desejado:
+        "spot": False,     # True para analisar pares spot
+        "futuros": False,   # True para analisar futuros ("future")
+        "swap": True,     # True para analisar swaps perpétuos
+        "option": False,   # True para analisar opções
         "timeframes": ["1m", "5m", "15m", "1h", "4h", "1d"],
+        # Quantidade de symbols processados em lote (ajuste conforme desejado)
+        "batch_size": 3,
+
         "trading": {
             "auto_trade": False,
             "risco_por_operacao": 0.05,
@@ -131,6 +173,9 @@ def carregar_config() -> dict:
     if config["trading"]["dca_percentual"] <= 0:
         raise ValueError("O dca_percentual deve ser maior que 0.")
 
+    # Inclui os pesos globais na configuração retornada
+    config["PESOS_TIMEFRAME"] = PESOS_TIMEFRAME
+    config["PESOS_PLUGIN"] = PESOS_PLUGIN
     return config
 
 

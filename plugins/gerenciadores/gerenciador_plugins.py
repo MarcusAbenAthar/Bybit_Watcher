@@ -35,6 +35,7 @@ class GerenciadorPlugins(BaseGerenciador):
                 logger.debug(f"Gerenciador registrado: {nome}")
             except Exception as e:
                 logger.error(f"Erro ao registrar gerenciador '{nome}': {e}")
+        logger.debug(f"Gerenciadores disponíveis após registro: {list(self.plugins.keys())}")
 
     def _coletar_dependencias_reais(self) -> dict[str, list[str]]:
         """Inspeciona os __init__ dos plugins para descobrir dependências, incluindo gerenciadores."""
@@ -131,47 +132,67 @@ class GerenciadorPlugins(BaseGerenciador):
         return ordenados
 
     def inicializar(self, config: dict) -> bool:
-        """Inicializa todos os plugins em ordem de dependência."""
+        """
+        Inicializa todos os plugins do sistema usando auto plug-in, auto injeção e detecção de dependências.
+        - Descobre plugins dinamicamente.
+        - Resolve dependências recursivamente via dependencias().
+        - Injeta instâncias já criadas ou inicializa sob demanda.
+        - Detecta ciclos e gera logs claros.
+        """
         self._config = config
         self._registrar_gerenciadores()
         self._verificar_ou_atualizar_dependencias()
-
         sucesso = True
+        registry = {}  # Plugins já instanciados
         plugins_ordenados = self._ordenar_por_dependencias()
+        grafo_dependencias = {nome: self._dependencias.get(nome, []) for nome, _ in plugins_ordenados}
 
-        for nome_plugin, classe in plugins_ordenados:
+        def resolver_plugin(nome, pilha=None):
+            if nome in registry:
+                return registry[nome]
+            pilha = pilha or []
+            if nome in pilha:
+                logger.error(f"[GerenciadorPlugins] Ciclo de dependências detectado: {' -> '.join(pilha + [nome])}")
+                raise RuntimeError(f"Ciclo de dependências: {' -> '.join(pilha + [nome])}")
+            pilha.append(nome)
+            classe = PluginRegistry.obter_plugin(nome)
+            if not classe:
+                # Tenta buscar como gerenciador se não for plugin
+                classe = BaseGerenciador.obter_gerenciador(nome)
+                if not classe:
+                    logger.error(f"[GerenciadorPlugins] Plugin ou Gerenciador '{nome}' não encontrado no registro.")
+                    raise RuntimeError(f"Plugin ou Gerenciador '{nome}' não encontrado.")
+            deps = grafo_dependencias.get(nome, [])
+            kwargs = {"gerente": self}
+            for dep in deps:
+                try:
+                    kwargs[dep] = resolver_plugin(dep, pilha=list(pilha))
+                except Exception as e:
+                    logger.error(f"[GerenciadorPlugins] Falha ao resolver dependência '{dep}' para '{nome}': {e}")
+                    raise
             try:
-                logger.debug(f"Instanciando plugin: {nome_plugin}")
-                dependencias = {}
-                for dep_nome in self._dependencias.get(nome_plugin, []):
-                    dependencia = self.plugins.get(dep_nome)
-                    if not dependencia:
-                        logger.error(
-                            f"Dependência '{dep_nome}' não encontrada para '{nome_plugin}'"
-                        )
-                        sucesso = False
-                        break
-                    dependencias[dep_nome] = dependencia
-
-                plugin = classe(gerente=self, **dependencias)
+                plugin = classe(**kwargs)
                 if not isinstance(plugin, (Plugin, BaseGerenciador)):
-                    logger.error(
-                        f"Plugin '{nome_plugin}' não é uma instância válida de Plugin ou BaseGerenciador"
-                    )
-                    sucesso = False
-                    continue
-
+                    logger.error(f"Plugin '{nome}' não é uma instância válida de Plugin ou BaseGerenciador")
+                    raise TypeError(f"Plugin '{nome}' inválido.")
                 if plugin.inicializar(config):
-                    self.plugins[nome_plugin] = plugin
-                    logger.info(f"Plugin carregado: {nome_plugin}")
+                    registry[nome] = plugin
+                    self.plugins[nome] = plugin
+                    logger.info(f"Plugin carregado: {nome}")
+                    return plugin
                 else:
-                    logger.error(f"Falha ao inicializar plugin: {nome_plugin}")
-                    sucesso = False
-
+                    logger.error(f"Falha ao inicializar plugin: {nome}")
+                    raise RuntimeError(f"Falha ao inicializar plugin: {nome}")
             except Exception as e:
-                logger.error(
-                    f"Erro ao instanciar plugin {nome_plugin}: {e}", exc_info=True
-                )
+                logger.error(f"Erro ao instanciar plugin {nome}: {e}", exc_info=True)
+                raise
+
+        # Instancia todos os plugins em ordem topológica, resolvendo dependências recursivamente
+        for nome_plugin, _ in plugins_ordenados:
+            try:
+                resolver_plugin(nome_plugin)
+            except Exception as e:
+                logger.error(f"[GerenciadorPlugins] Plugin {nome_plugin} não carregado: {e}")
                 sucesso = False
         self.inicializado = sucesso
         return sucesso

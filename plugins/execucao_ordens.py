@@ -10,7 +10,36 @@ import ccxt
 logger = get_logger(__name__)
 
 
+class ExecucaoOrdens(...):
+    def finalizar(self):
+        """
+        Finaliza o plugin ExecucaoOrdens, limpando estado e garantindo shutdown seguro.
+        """
+        try:
+            super().finalizar()
+            logger.info("ExecucaoOrdens finalizado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao finalizar ExecucaoOrdens: {e}")
+
 class ExecucaoOrdens(Plugin):
+    """
+    Plugin para executar ordens de compra/venda com SL/TP, incluindo reentradas (DCA) e controle de posição ativa.
+    - Responsabilidade única: execução de ordens e gerenciamento de posições.
+    - Modular, testável, documentado e sem hardcode.
+    - Autoidentificação de dependências/plugins.
+    """
+    PLUGIN_NAME = "execucao_ordens"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["execucao", "ordens", "trading"]
+    PLUGIN_PRIORIDADE = 100
+
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do plugin ExecucaoOrdens.
+        """
+        return ["conexao", "sinais_plugin", "gerenciador_banco"]
+
     PLUGIN_NAME = "execucao_ordens"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["execucao", "ordens", "trading"]
@@ -90,15 +119,19 @@ class ExecucaoOrdens(Plugin):
 
         Args:
             dados_completos (dict): Dados de análise com sinais.
-            symbol (str): Símbolo do par.
+            symbol (str): Símbolo do par (ex: BTC/USDT) - preferencialmente o market_id para swaps/futuros/options.
+            market_id (str): ID do mercado (ex: BTCUSDT, FARTCOINUSDT). Prioritário para swaps/futuros/options.
             timeframe (str): Timeframe.
 
         Returns:
             bool: True (mesmo em erro, para não interromper o pipeline).
         """
         symbol = kwargs.get("symbol")
+        market_id = kwargs.get("market_id")
         timeframe = kwargs.get("timeframe")
         dados_completos = kwargs.get("dados_completos")
+        # Se market_id for fornecido, ele tem prioridade
+        symbol_or_id = market_id or symbol
 
         resultado_padrao = {
             "execucao_ordens": {
@@ -115,8 +148,8 @@ class ExecucaoOrdens(Plugin):
             dados_completos["execucao_ordens"] = resultado_padrao["execucao_ordens"]
             return True
 
-        if not all([symbol, timeframe]):
-            logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes")
+        if not all([symbol_or_id, timeframe]):
+            logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes (symbol_or_id={symbol_or_id}, timeframe={timeframe})")
             dados_completos["execucao_ordens"] = resultado_padrao["execucao_ordens"]
             return True
 
@@ -126,9 +159,11 @@ class ExecucaoOrdens(Plugin):
             return True
 
         sinal = self._extrair_sinal(dados_completos)
-        if not sinal or sinal.get("direcao") in ["LATERAL", "NEUTRO"]:
+        # Padronização: aceitar apenas 'LONG' ou 'SHORT' como direção válida
+        direcao = sinal.get("direcao")
+        if direcao not in ["LONG", "SHORT"]:
             logger.info(
-                f"[{self.nome}] Nenhum sinal válido para {symbol} ({sinal.get('direcao', 'N/A')})"
+                f"[{self.nome}] Nenhum sinal válido para {symbol} ({direcao})"
             )
             dados_completos["execucao_ordens"] = resultado_padrao["execucao_ordens"]
             return True
@@ -144,14 +179,15 @@ class ExecucaoOrdens(Plugin):
             return True
 
         try:
-            if symbol in self._ordens_ativas and self._verificar_ordem_ativa(symbol):
-                logger.info(f"[{self.nome}] Reentrada DCA para {symbol}")
+            # Usa sempre o id para swaps/futuros/options, e symbol para spot
+            if symbol_or_id in self._ordens_ativas and self._verificar_ordem_ativa(symbol_or_id):
+                logger.info(f"[{self.nome}] Reentrada DCA para {symbol_or_id}")
                 resultado = self._executar_ordem(
-                    dados_completos, symbol, sinal, dca=True
+                    dados_completos, symbol_or_id, sinal, dca=True
                 )
             else:
-                logger.info(f"[{self.nome}] Ordem principal para {symbol}")
-                resultado = self._executar_ordem(dados_completos, symbol, sinal)
+                logger.info(f"[{self.nome}] Ordem principal para {symbol_or_id}")
+                resultado = self._executar_ordem(dados_completos, symbol_or_id, sinal)
             dados_completos["execucao_ordens"] = resultado
             return True
         except Exception as e:
@@ -179,41 +215,41 @@ class ExecucaoOrdens(Plugin):
             logger.error(f"[{self.nome}] Erro ao extrair sinal: {e}")
             return {}
 
-    def _verificar_ordem_ativa(self, symbol: str) -> bool:
+    def _verificar_ordem_ativa(self, symbol_or_id: str) -> bool:
         """
         Verifica se a ordem ativa ainda está aberta.
 
         Args:
-            symbol: Símbolo do par.
+            symbol_or_id: ID do mercado ou symbol.
 
         Returns:
             bool: True se ordem ativa, False caso contrário.
         """
         try:
-            ordem_id = self._ordens_ativas.get(symbol)
+            ordem_id = self._ordens_ativas.get(symbol_or_id)
             if not ordem_id:
                 return False
-            ordem = self._exchange.fetch_order(ordem_id, symbol)
+            ordem = self._exchange.fetch_order(ordem_id, symbol_or_id)
             if ordem["status"] in ["open", "pending"]:
                 return True
-            del self._ordens_ativas[symbol]
+            del self._ordens_ativas[symbol_or_id]
             return False
         except Exception as e:
             logger.error(
-                f"[{self.nome}] Erro ao verificar ordem ativa para {symbol}: {e}"
+                f"[{self.nome}] Erro ao verificar ordem ativa para {symbol_or_id}: {e}"
             )
-            del self._ordens_ativas[symbol]
+            del self._ordens_ativas[symbol_or_id]
             return False
 
     def _executar_ordem(
-        self, dados_completos: dict, symbol: str, sinal: dict, dca: bool = False
+        self, dados_completos: dict, symbol_or_id: str, sinal: dict, dca: bool = False
     ) -> dict:
         """
         Executa uma ordem de mercado.
 
         Args:
             dados_completos: Dicionário com dados de análise.
-            symbol: Símbolo do par.
+            symbol_or_id: ID do mercado ou symbol.
             sinal: Dicionário com sinal.
             dca: Se True, aplica percentual DCA.
 
@@ -230,10 +266,15 @@ class ExecucaoOrdens(Plugin):
                 }
 
             direcao = sinal["direcao"]
-            side = "buy" if direcao == "ALTA" else "sell"
+            side = "buy" if direcao == "LONG" else "sell"
             alavancagem = sinal.get("alavancagem", 3.0)
-            stop_loss = sinal.get("stop_loss")
-            take_profit = sinal.get("take_profit")
+            sl = sinal.get("stop_loss")
+            tp = sinal.get("take_profit")
+            # Corrigir: nunca permitir None em SL/TP
+            if sl is None:
+                sl = 0.0
+            if tp is None:
+                tp = 0.0
 
             crus = dados_completos.get("crus", [])
             if not crus or not isinstance(crus[-1], (list, tuple)) or len(crus[-1]) < 5:
@@ -246,14 +287,15 @@ class ExecucaoOrdens(Plugin):
             preco_atual = float(crus[-1][4])
 
             # Validar limites da exchange
-            market = self._exchange.markets.get(symbol, {})
+            # Busca o market pelo id ou symbol (prioriza id)
+            market = self._exchange.markets.get(symbol_or_id, {})
             min_amount = market.get("limits", {}).get("amount", {}).get("min", 0.01)
             precision = market.get("precision", {}).get("amount", 3)
 
             quantidade = self._calcular_quantidade(preco_atual, alavancagem, dca)
             if quantidade < min_amount:
                 logger.error(
-                    f"[{self.nome}] Quantidade {quantidade} abaixo do mínimo {min_amount} para {symbol}"
+                    f"[{self.nome}] Quantidade {quantidade} abaixo do mínimo {min_amount} para {symbol_or_id}"
                 )
                 return {
                     "status": "ERRO",
@@ -263,7 +305,7 @@ class ExecucaoOrdens(Plugin):
             quantidade = round(quantidade, precision)
 
             ordem = {
-                "symbol": symbol,
+                "symbol": symbol_or_id,
                 "type": "market",
                 "side": side,
                 "amount": quantidade,
@@ -277,10 +319,10 @@ class ExecucaoOrdens(Plugin):
                 params["takeProfitPrice"] = take_profit
 
             logger.info(
-                f"[{self.nome}] Enviando ordem para {symbol}: {ordem}, params={params}"
+                f"[{self.nome}] Enviando ordem para {symbol_or_id}: {ordem}, params={params}"
             )
             resposta = self._exchange.create_order(
-                symbol=symbol,
+                symbol=symbol_or_id,
                 type="market",
                 side=side,
                 amount=quantidade,
@@ -289,7 +331,7 @@ class ExecucaoOrdens(Plugin):
 
             ordem_id = resposta.get("id")
             if not dca:
-                self._ordens_ativas[symbol] = ordem_id
+                self._ordens_ativas[symbol_or_id] = ordem_id
 
             return {
                 "status": "EXECUTADO",
@@ -298,7 +340,7 @@ class ExecucaoOrdens(Plugin):
             }
         except Exception as e:
             logger.error(
-                f"[{self.nome}] Erro ao executar ordem para {symbol}: {e}",
+                f"[{self.nome}] Erro ao executar ordem para {symbol_or_id}: {e}",
                 exc_info=True,
             )
             return {
@@ -347,19 +389,20 @@ class ExecucaoOrdens(Plugin):
         Finaliza o plugin, cancelando ordens ativas e limpando estado.
         """
         try:
-            for symbol, ordem_id in list(self._ordens_ativas.items()):
+            for symbol_or_id, ordem_id in list(self._ordens_ativas.items()):
                 try:
-                    ordem = self._exchange.fetch_order(ordem_id, symbol)
+                    ordem = self._exchange.fetch_order(ordem_id, symbol_or_id)
                     if ordem["status"] in ["open", "pending"]:
-                        self._exchange.cancel_order(ordem_id, symbol)
+                        self._exchange.cancel_order(ordem_id, symbol_or_id)
                         logger.info(
-                            f"[{self.nome}] Ordem {ordem_id} cancelada para {symbol}"
+                            f"[{self.nome}] Ordem {ordem_id} cancelada para {symbol_or_id}"
                         )
                 except Exception as e:
                     logger.error(
-                        f"[{self.nome}] Erro ao cancelar ordem {ordem_id} para {symbol}: {e}"
+                        f"[{self.nome}] Erro ao cancelar ordem {ordem_id} para {symbol_or_id}: {e}"
                     )
             self._ordens_ativas.clear()
             logger.info(f"[{self.nome}] Finalizado e ordens limpas")
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao finalizar: {e}", exc_info=True)
+

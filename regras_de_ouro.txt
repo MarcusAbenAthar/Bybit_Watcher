@@ -17,12 +17,16 @@ Boas práticas ao programar o bot:
 2 - Respeitar a responsabilidade de cada plugin;
 3 - Evitar importação circular;
 
+
 Cada plugin segue:
 
 * Herança da classe base Plugin
 * Responsabilidade única
 * Interface padronizada
 * Documentação completa
+* Finalização segura
+* Responsável por sua própria finalização
+
 
 Esta estrutura:
 
@@ -39,54 +43,73 @@ Estrutura do projeto:
 Bybit_Watcher/
 ├── main.py                  # Arquivo principal
 ├── .env                     # Configurações sensíveis (Não será enviado)
-├── regras_de_ouro.txt      # Regras do projeto (Não será enviado)
+├── regras_de_ouro.txt       # Regras do projeto (Não será enviado)
 │
 ├── plugins/                 # Diretório de plugins
-│   ├── __init__.py         # Inicializador do pacote
-│   ├── plugin.py           # Classe base para plugins
-│   ├── conexao.py          # Plugin de conexão com Bybit
-│   ├── banco_dados.py      # Plugin de operações básicas do banco
-│   ├── calculo_alavancagem.py # Cálculos de alavancagem
-│   ├── calculo_risco.py    # Cálculos de risco
-│   ├── analise_candles.py  # Análise de candles
-│   ├── medias_moveis.py    # Análise de médias móveis
-│   ├── price_action.py     # Análise de price action
-│   ├── validador_dados.py  # Validação de dados
-│   ├── sinais_plugin.py    # Geração de sinais
-│   ├── analisador_mercado.py # Análise do mercado
-│   ├── sltp.py               # Calculo de SL e TP com cérebro
-│   ├── execucao_ordens.py    # Execução de ordens
+│   ├── __init__.py                  # Inicializador do pacote plugins
+│   ├── plugin.py                    # Classe base para todos os plugins
+│   ├── conexao.py                   # Plugin de conexão com Bybit
+│   ├── banco_dados.py               # Operações básicas do banco de dados
+│   ├── calculo_alavancagem.py       # Cálculos de alavancagem
+│   ├── calculo_risco.py             # Cálculos de risco
+│   ├── analise_candles.py           # Análise de padrões de candles
+│   ├── medias_moveis.py             # Análise de médias móveis
+│   ├── price_action.py              # Análise de price action
+│   ├── validador_dados.py           # Validação de dados de entrada
+│   ├── sinais_plugin.py             # Geração de sinais de trade
+│   ├── analisador_mercado.py        # Análise global do mercado
+│   ├── sltp.py                      # Cálculo inteligente de SL e TP
+│   ├── execucao_ordens.py           # Execução de ordens na corretora
 │   │
-│   ├── indicadores/        # Subpacote de indicadores
-│   │    ├── __init__.py
-│   │    ├── indicadores_tendencia.py
-│   │    ├── indicadores_osciladores.py
-│   │    ├── indicadores_volatilidade.py
-│   │    ├── indicadores_volume.py
-│   │    └── outros_indicadores.py
+│   ├── indicadores/                 # Subpacote de indicadores técnicos
+│   │    ├── __init__.py                  # Inicializador do pacote
+│   │    ├── indicadores_osciladores.py   # Indicadores osciladores (RSI, MACD...)
+│   │    ├── indicadores_tendencia.py     # Indicadores de tendência (MA, EMA...)
+│   │    ├── indicadores_volatilidade.py  # Indicadores de volatilidade (ATR, etc)
+│   │    ├── indicadores_volume.py        # Indicadores de volume
+│   │    └── outros_indicadores.py        # Outros indicadores técnicos
 │   │
-│   └── gerenciadores/      # Subpacote dos gerenciadores
-│         ├── __init__.py   # Inicializador do pacote
-│         ├── gerenciador.py  # Base do Gerenciador
-│         ├── gerenciador_banco.py # Gerenciador de banco de dados
-│         ├── gerenciador_bot.py  # Gerenciador do bot
-│         └── gerenciador_plugins.py # Gerenciador dos plugins
+│   ├── monitoramento/
+│   │    ├── __init__.py                  # Inicializador do pacote
+│   │    ├── anomalias.py                  # Diagnóstico de anomalias em candles
+│   │    ├── correlatos.py                 # Correlação com ativos tradicionais
+│   │    ├── custom_rules.py               # Regras customizadas de monitoramento
+│   │    ├── eventos_blockchain.py         # Eventos críticos do universo cripto
+│   │    ├── funding_rate.py               # Consulta e diagnóstico do funding rate
+│   │    ├── heatmap_liquidez.py           # Sinaliza zonas de liquidez
+│   │    ├── ml_preditor.py                # Previsão de curto prazo com ML
+│   │    ├── monitor_ordens.py             # Monitoramento criterioso de ordens
+│   │    ├── onchain.py                    # Diagnóstico de métricas on-chain
+│   │    ├── open_interest.py              # Consulta e diagnóstico do open interest
+│   │    ├── orderbook.py                  # Diagnóstico de clusters de ordens
+│   │    └── sentimento_social.py          # Diagnóstico de sentimento em redes sociais
+│   │
+│   └── gerenciadores/                # Subpacote dos gerenciadores do bot
+│         ├── __init__.py                 # Inicializador do pacote
+│         ├── gerenciador.py              # Classe base dos gerenciadores
+│         ├── gerenciador_banco.py        # Gerenciador centralizado do banco
+│         ├── gerenciador_bot.py          # Gerenciador principal do bot
+│         ├── gerenciador_monitoramento.py# Gerenciador do subsistema de monitoramento
+│         └── gerenciador_plugins.py      # Gerenciador de plugins dinâmicos
 │
+├── utils/                      # Utilitários e suporte
+│   ├── __init__.py                  # Inicializador do pacote utils
+│   ├── config.py                    # Centralização das configurações do bot
+│   ├── handlers.py                  # Handlers e middlewares auxiliares
+│   ├── logging_config.py            # Configuração avançada de logs
+│   ├── padroes_talib.json           # Padrões de candles para análise
+│   ├── plugin_utils.py              # Funções utilitárias para plugins
+│   ├── plugins_dependencias.json    # Mapeamento de dependências de plugins
+│   └── tabelas.py                   # Estruturas auxiliares de tabelas
 │
-├── utils/                  # Utilitários
-│   ├── __init__.py         # Inicializador do pacote
-│   ├── config.py           # Centralização das configurações do bot
-│   ├── handlers.py         # Implementação do handlers
-│   ├── logging_config.py   # Configuração de logs
-│   ├── padroes_talib.py    # Implementação do padroes_candles
-│   └── plugins_dependencias.json # Complemento do sistema de auto identificar dependencias
-│
-└── logs/                   # Diretório de logs
-    ├── bot/
+└── logs/                       # Diretório de logs gerais
+    ├── bot/                   # Logs do bot principal
     │   └── bot_DD-MM-YYYY.log
-    ├── sinais/
+    ├── sinais/                # Logs de sinais
     │   └── sinais_DD-MM-YYYY.log
-    ├── erros/
+    ├── erros/                 # Logs de erros
     │    └── erros_DD-MM-YYYY.log
+    ├── monitoramento/         # Logs exclusivos do subsistema de monitoramento
+    │    └── monitoramento_DD-MM-YYYY.log
 
 https://github.com/MarcusAbenAthar/Bybit_Watcher

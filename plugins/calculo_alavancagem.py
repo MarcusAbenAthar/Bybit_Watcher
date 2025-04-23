@@ -12,7 +12,36 @@ from utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 
+class CalculoAlavancagem(...):
+    def finalizar(self):
+        """
+        Finaliza o plugin CalculoAlavancagem, limpando estado e garantindo shutdown seguro.
+        """
+        try:
+            super().finalizar()
+            logger.info("CalculoAlavancagem finalizado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao finalizar CalculoAlavancagem: {e}")
+
 class CalculoAlavancagem(Plugin):
+    """
+    Plugin para cálculo de alavancagem segura e eficiente.
+    - Responsabilidade única: cálculo de alavancagem.
+    - Modular, testável, documentado e sem hardcode.
+    - Autoidentificação de dependências/plugins.
+    """
+    PLUGIN_NAME = "calculo_alavancagem"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["alavancagem", "gerenciamento", "risco"]
+    PLUGIN_PRIORIDADE = 100
+
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do plugin CalculoAlavancagem.
+        """
+        return []
+
     PLUGIN_NAME = "calculo_alavancagem"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["analise", "volatilidade", "alavancagem"]
@@ -141,7 +170,8 @@ class CalculoAlavancagem(Plugin):
             direcao = kwargs.get("direcao", None)
             confianca = kwargs.get("confianca", 0.0)
 
-            alavancagem = self._calcular_alavancagem(
+            # Corrigido: chamada correta para calcular_alavancagem (sem underline)
+            alavancagem = self.calcular_alavancagem(
                 crus, direcao=direcao, confianca=confianca
             )
 

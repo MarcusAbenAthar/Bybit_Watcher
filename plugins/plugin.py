@@ -69,6 +69,35 @@ class PluginRegistry:
 
 class Plugin:
     """
+    Classe base para todos os plugins do sistema Bybit_Watcher.
+
+    Regras:
+    - PLUGIN_NAME obrigatório e único.
+    - Implementar o método dependencias(), retornando lista de nomes de dependências (strings).
+    - Documentação clara via docstring e comentários.
+    - Suporte à autoidentificação, auto plug-in e injeção dinâmica de dependências.
+    """
+    PLUGIN_NAME: Optional[str] = None
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        PluginRegistry.registrar(cls)
+        if not getattr(cls, "PLUGIN_NAME", None):
+            raise ValueError(f"{cls.__name__} precisa definir PLUGIN_NAME.")
+        if not hasattr(cls, "dependencias"):
+            logger.warning(f"{cls.__name__} deveria implementar o método dependencias().")
+
+    @classmethod
+    def dependencias(cls) -> List[str]:
+        """
+        Retorna lista de nomes (strings) das dependências obrigatórias do plugin.
+        Deve ser sobrescrito nas subclasses.
+        """
+        return []
+
+    # Os demais métodos e atributos permanecem conforme já implementados, mantendo compatibilidade e clareza.
+
+    """
     Classe base para plugins.
 
     Atributos esperados:
@@ -196,7 +225,7 @@ class Plugin:
 
     def finalizar(self):
         """
-        Finaliza o plugin, limpando configurações e dependências.
+        Finaliza o plugin, limpando configurações, dependências e garantindo shutdown seguro.
         """
         try:
             if not self.inicializado:
@@ -205,6 +234,9 @@ class Plugin:
             self._dependencias.clear()
             self.inicializado = False
             logger.info(f"Plugin {self.nome} finalizado com sucesso")
+            # Se houver super().finalizar(), chamar para garantir padronização
+            if hasattr(super(), 'finalizar'):
+                super().finalizar()
         except Exception as e:
             logger.error(f"Erro inesperado ao finalizar {self.nome}: {e}")
 

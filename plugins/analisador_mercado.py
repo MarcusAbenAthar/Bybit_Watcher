@@ -6,6 +6,17 @@ from copy import deepcopy
 logger = get_logger(__name__)
 
 
+class AnalisadorMercado(...):
+    def finalizar(self):
+        """
+        Finaliza o plugin AnalisadorMercado, limpando estado e garantindo shutdown seguro.
+        """
+        try:
+            super().finalizar()
+            logger.info("AnalisadorMercado finalizado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao finalizar AnalisadorMercado: {e}")
+
 class AnalisadorMercado(Plugin):
     """
     Plugin que consolida os sinais dos demais módulos para gerar
@@ -14,7 +25,8 @@ class AnalisadorMercado(Plugin):
 
     PLUGIN_NAME = "analisador_mercado"
     PLUGIN_CATEGORIA = "plugin"
-    PLUGIN_TAGS = ["analise", "consolidacao", "direcional"]
+    # Removida a tag 'analise' para garantir execução separada após plugins de análise
+    PLUGIN_TAGS = ["consolidacao", "direcional"]
     PLUGIN_PRIORIDADE = 80
 
     _RESULTADO_PADRAO = {
@@ -25,7 +37,15 @@ class AnalisadorMercado(Plugin):
         }
     }
 
-    FONTES_PADRAO = ["price_action", "medias_moveis", "tendencia", "candles"]
+    # FONTES_PADRAO define as chaves esperadas em dados_completos. 'tendencia' corresponde ao plugin 'indicadores_tendencia'.
+    # FONTES_PADRAO define as chaves esperadas em dados_completos.
+    # Atenção: apenas fontes que retornam dict devem ser listadas!
+    # 'candles' removido para evitar erro de formato (espera dict, recebe list)
+    FONTES_PADRAO = [
+        "price_action",           # Plugin de price action
+        "medias_moveis",         # Plugin de médias móveis
+        "tendencia"              # Plugin indicadores_tendencia (consolida SMA, EMA, MACD, ADX, ATR)
+    ]
     MINIMO_FONTES = 2  # Mínimo de fontes válidas para consolidação
 
     def inicializar(self, config: Dict[str, Any]) -> bool:

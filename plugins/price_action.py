@@ -10,10 +10,39 @@ from plugins.plugin import Plugin
 logger = get_logger(__name__)
 
 
+class PriceAction(...):
+    def finalizar(self):
+        """
+        Finaliza o plugin PriceAction, limpando estado e garantindo shutdown seguro.
+        """
+        try:
+            super().finalizar()
+            logger.info("PriceAction finalizado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao finalizar PriceAction: {e}")
+
 class PriceAction(Plugin):
+    """
+    Plugin de análise de Price Action (PA) para identificar padrões de reversão e continuidade.
+    - Responsabilidade única: análise de price action.
+    - Modular, testável, documentado e sem hardcode.
+    - Autoidentificação de dependências/plugins.
+    """
     PLUGIN_NAME = "price_action"
     PLUGIN_CATEGORIA = "plugin"
-    PLUGIN_TAGS = ["price_action", "candles", "direcional"]
+    PLUGIN_TAGS = ["analise", "price_action", "pa"]
+    PLUGIN_PRIORIDADE = 100
+
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do plugin PriceAction.
+        """
+        return []
+
+    PLUGIN_NAME = "price_action"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["price_action", "candles", "direcional", "analise"]
     PLUGIN_PRIORIDADE = 40
 
     def __init__(self, **kwargs):

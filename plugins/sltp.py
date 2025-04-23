@@ -9,7 +9,36 @@ from utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 
+class SLTP(...):
+    def finalizar(self):
+        """
+        Finaliza o plugin SLTP, limpando estado e garantindo shutdown seguro.
+        """
+        try:
+            super().finalizar()
+            logger.info("SLTP finalizado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao finalizar SLTP: {e}")
+
 class SLTP(Plugin):
+    """
+    Plugin para cálculo inteligente de Stop Loss (SL) e Take Profit (TP), com lógica adaptativa.
+    - Responsabilidade única: cálculo de SL/TP.
+    - Modular, testável, documentado e sem hardcode.
+    - Autoidentificação de dependências/plugins.
+    """
+    PLUGIN_NAME = "sltp"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["sltp", "gerenciamento", "risco"]
+    PLUGIN_PRIORIDADE = 100
+
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do plugin SLTP.
+        """
+        return ["calculo_risco", "calculo_alavancagem"]
+
     PLUGIN_NAME = "sltp"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["gerador", "sinal", "sltp"]

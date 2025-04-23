@@ -10,6 +10,34 @@ logger = get_logger(__name__)
 
 
 class IndicadoresVolatilidade(Plugin):
+    def finalizar(self):
+        """
+        Finaliza o plugin IndicadoresVolatilidade, limpando estado e garantindo shutdown seguro.
+        """
+        try:
+            super().finalizar()
+            logger.info("IndicadoresVolatilidade finalizado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao finalizar IndicadoresVolatilidade: {e}")
+
+    """
+    Plugin de indicadores de volatilidade (ex: ATR, Bandas de Bollinger).
+    - Responsabilidade única: cálculo de indicadores de volatilidade.
+    - Modular, testável, documentado e sem hardcode.
+    - Autoidentificação de dependências/plugins.
+    """
+    PLUGIN_NAME = "indicadores_volatilidade"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["indicadores", "volatilidade", "analise"]
+    PLUGIN_PRIORIDADE = 100
+
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do plugin IndicadoresVolatilidade.
+        """
+        return []
+
     PLUGIN_NAME = "indicadores_volatilidade"
     PLUGIN_TYPE = "indicador"
     PLUGIN_CATEGORIA = "plugin"
@@ -112,12 +140,12 @@ class IndicadoresVolatilidade(Plugin):
             logger.error(f"[{self.nome}] Erro na volatilidade base: {e}")
             return 0.0
 
-    def _extrair_dados(self, dados: list, indices: list) -> dict:
+    def _extrair_dados(self, dados_completos: list, indices: list) -> dict:
         """
         Extrai arrays NumPy das colunas OHLCV com base nos índices informados.
 
         Args:
-            dados: Lista de k-lines.
+            dados_completos: Lista de k-lines.
             indices: Lista de índices para extração (ex.: [2, 3, 4] para high, low, close).
 
         Returns:
@@ -125,7 +153,8 @@ class IndicadoresVolatilidade(Plugin):
         """
         try:
             return {
-                i: np.array([float(d[i]) for d in dados if len(d) > i]) for i in indices
+                i: np.array([float(d[i]) for d in dados_completos if len(d) > i])
+                for i in indices
             }
         except Exception as e:
             logger.error(
@@ -133,7 +162,7 @@ class IndicadoresVolatilidade(Plugin):
             )
             return {i: np.array([]) for i in indices}
 
-    def executar(self, *args, **kwargs) -> bool:
+    def executar(self, dados_completos, symbol, timeframe) -> bool:
         """
         Executa o cálculo dos indicadores de volatilidade e insere o resultado em 'dados_completos["volatilidade"]'.
 

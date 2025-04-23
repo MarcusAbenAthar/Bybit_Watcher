@@ -10,6 +10,41 @@ logger = get_logger(__name__)
 
 
 class GerenciadorBanco(BaseGerenciador):
+    def finalizar(self):
+        """
+        Finaliza o GerenciadorBanco, limpando estado e garantindo shutdown seguro.
+        """
+        try:
+            super().finalizar()
+            logger.info("GerenciadorBanco finalizado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao finalizar GerenciadorBanco: {e}")
+
+    """
+    Gerenciador de conexões e estruturação do banco de dados PostgreSQL.
+    - Responsabilidade única: persistência e estrutura do banco.
+    - Modular, testável, documentado e sem hardcode.
+    - Autoidentificação de dependências/gerenciadores.
+    """
+    PLUGIN_NAME = "gerenciador_banco"
+    PLUGIN_CATEGORIA = "gerenciador"
+    PLUGIN_TAGS = ["banco", "persistencia"]
+    PLUGIN_PRIORIDADE = 10
+
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do GerenciadorBanco.
+        """
+        return []
+
+    @classmethod
+    def identificar_plugins(cls):
+        """
+        Retorna o nome do gerenciador para autoidentificação.
+        """
+        return cls.PLUGIN_NAME
+
     """Gerenciador de conexões e estruturação do banco."""
 
     PLUGIN_NAME = "gerenciador_banco"

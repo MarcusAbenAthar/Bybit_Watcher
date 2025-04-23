@@ -10,7 +10,36 @@ from plugins.plugin import Plugin
 logger = get_logger(__name__)
 
 
+class CalculoRisco(...):
+    def finalizar(self):
+        """
+        Finaliza o plugin CalculoRisco, limpando estado e garantindo shutdown seguro.
+        """
+        try:
+            super().finalizar()
+            logger.info("CalculoRisco finalizado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao finalizar CalculoRisco: {e}")
+
 class CalculoRisco(Plugin):
+    """
+    Plugin para cálculo de risco por operação e gerenciamento de exposição.
+    - Responsabilidade única: cálculo de risco.
+    - Modular, testável, documentado e sem hardcode.
+    - Autoidentificação de dependências/plugins.
+    """
+    PLUGIN_NAME = "calculo_risco"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["risco", "gerenciamento", "exposicao"]
+    PLUGIN_PRIORIDADE = 100
+
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do plugin CalculoRisco.
+        """
+        return []
+
     PLUGIN_NAME = "calculo_risco"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["risco", "volatilidade", "analise"]

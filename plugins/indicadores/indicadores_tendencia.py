@@ -11,10 +11,39 @@ logger = get_logger(__name__)
 
 
 class IndicadoresTendencia(Plugin):
+    def finalizar(self):
+        """
+        Finaliza o plugin IndicadoresTendencia, limpando estado e garantindo shutdown seguro.
+        """
+        try:
+            super().finalizar()
+            logger.info("IndicadoresTendencia finalizado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao finalizar IndicadoresTendencia: {e}")
+
+    """
+    Plugin de indicadores de tendência (ex: EMA, ADX, MACD).
+    - Responsabilidade única: cálculo de indicadores de tendência.
+    - Modular, testável, documentado e sem hardcode.
+    - Autoidentificação de dependências/plugins.
+    """
+    PLUGIN_NAME = "indicadores_tendencia"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["indicadores", "tendencia", "analise"]
+    PLUGIN_PRIORIDADE = 100
+
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do plugin IndicadoresTendencia.
+        """
+        return []
+
     PLUGIN_NAME = "indicadores_tendencia"
     PLUGIN_TYPE = "indicador"
     PLUGIN_CATEGORIA = "plugin"
-    PLUGIN_TAGS = ["indicador", "tendencia"]
+    # Adicionada a tag 'analise' para garantir execução no pipeline de análise do bot.
+    PLUGIN_TAGS = ["indicador", "tendencia", "analise"]
 
     def __init__(self, gerente: GerenciadorPlugins):
         super().__init__(gerente=gerente)
@@ -89,12 +118,12 @@ class IndicadoresTendencia(Plugin):
             "atr_periodo": int(max(5, 14 * multiplicador)),
         }
 
-    def _extrair_ohlcv(self, dados) -> dict:
+    def _extrair_ohlcv(self, dados_completos) -> dict:
         """
         Extrai OHLC de candles com validação de tipos.
 
         Args:
-            dados: Lista de k-lines.
+            dados_completos: Lista de k-lines.
 
         Returns:
             dict: Arrays com high, low, close.
@@ -103,7 +132,7 @@ class IndicadoresTendencia(Plugin):
             high = []
             low = []
             close = []
-            for d in dados:
+            for d in dados_completos:
                 # Validar tipos antes da conversão
                 for idx, field in [(2, "high"), (3, "low"), (4, "close")]:
                     if not isinstance(d[idx], (int, float)):
@@ -130,7 +159,7 @@ class IndicadoresTendencia(Plugin):
             logger.error(f"[{self.nome}] Erro ao extrair OHLC: {e}")
             return {"high": np.array([]), "low": np.array([]), "close": np.array([])}
 
-    def executar(self, *args, **kwargs) -> bool:
+    def executar(self, dados_completos, symbol, timeframe) -> bool:
         """
         Executa o cálculo dos indicadores de tendência e armazena resultados.
 
@@ -150,10 +179,6 @@ class IndicadoresTendencia(Plugin):
         }
 
         try:
-            dados_completos = kwargs.get("dados_completos")
-            symbol = kwargs.get("symbol")
-            timeframe = kwargs.get("timeframe")
-
             if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes")
                 if isinstance(dados_completos, dict):

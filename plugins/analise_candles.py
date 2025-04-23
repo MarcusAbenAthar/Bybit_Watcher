@@ -13,6 +13,52 @@ logger = get_logger(__name__)
 
 
 class AnaliseCandles(Plugin):
+    """
+    Plugin de análise de padrões de candles (ex: martelo, engolfo, etc).
+    - Responsabilidade única: análise de padrões de candles.
+    - Modular, testável, documentado e sem hardcode.
+    - Autoidentificação de dependências/plugins.
+    """
+    PLUGIN_NAME = "analise_candles"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["analise", "candles", "padroes"]
+    PLUGIN_PRIORIDADE = 100
+
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do plugin AnaliseCandles.
+        """
+        return []
+
+    def finalizar(self):
+        """
+        Finaliza o plugin AnaliseCandles, limpando estado e garantindo shutdown seguro.
+        """
+        try:
+            super().finalizar()
+            logger.info("AnaliseCandles finalizado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao finalizar AnaliseCandles: {e}")
+
+    """
+    Plugin de análise de padrões de candles (ex: martelo, engolfo, etc).
+    - Responsabilidade única: análise de padrões de candles.
+    - Modular, testável, documentado e sem hardcode.
+    - Autoidentificação de dependências/plugins.
+    """
+    PLUGIN_NAME = "analise_candles"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["analise", "candles", "padroes"]
+    PLUGIN_PRIORIDADE = 100
+
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do plugin AnaliseCandles.
+        """
+        return []
+
     PLUGIN_NAME = "analise_candles"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["candles", "padroes", "price_action"]
@@ -122,9 +168,11 @@ class AnaliseCandles(Plugin):
         try:
             resultado = self._analisar(crus, symbol, timeframe)
             dados_completos["candles"] = resultado
-            logger.debug(
-                f"[{self.nome}] Análise concluída para {symbol}-{timeframe}: {resultado}"
-            )
+            if resultado["padroes"]:
+                logger.info(f"[{self.nome}] Padrões detectados para {symbol}-{timeframe}: {list(resultado['padroes'].keys())}")
+            else:
+                logger.info(f"[{self.nome}] Nenhum padrão de candle detectado para {symbol}-{timeframe}")
+            logger.debug(f"[{self.nome}] Análise concluída para {symbol}-{timeframe}: {resultado}")
             return True
 
         except Exception as e:

@@ -7,12 +7,23 @@ logger = get_logger(__name__)
 
 
 class BancoDados(Plugin):
-    """Plugin responsável por registrar dados de análise no banco de dados."""
-
+    """
+    Plugin para operações básicas de banco de dados.
+    - Responsabilidade única: operações CRUD simples.
+    - Modular, testável, documentado e sem hardcode.
+    - Autoidentificação de dependências/plugins.
+    """
     PLUGIN_NAME = "banco_dados"
-    PLUGIN_CATEGORIA = "infraestrutura"
-    PLUGIN_TAGS = ["persistencia", "infraestrutura"]
-    PLUGIN_PRIORIDADE = 20
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["banco", "dados", "persistencia"]
+    PLUGIN_PRIORIDADE = 100
+
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do plugin BancoDados.
+        """
+        return ["gerenciador_banco"]
 
     def __init__(self, gerenciador_banco=None, **kwargs):
         """
@@ -64,16 +75,18 @@ class BancoDados(Plugin):
         Returns:
             bool: Sempre True
         """
-        logger.warning("Execução de BancoDados ignorada (sem CRUD implementado)")
+        logger.warning(
+            "Execução de BancoDados ignorada (sem CRUD implementado)")
         return True
 
     def finalizar(self):
         """
-        Finaliza o plugin (sem fechar conexões).
-
+        Finaliza o plugin BancoDados, limpando estado e garantindo shutdown seguro.
         O encerramento de conexões é responsabilidade do GerenciadorBanco.
         """
         try:
-            logger.info("Finalizando BancoDados (sem ações de conexão)")
+            super().finalizar()
+            logger.info(
+                "BancoDados finalizado com sucesso (sem ações de conexão)")
         except Exception as e:
             logger.error(f"Erro ao finalizar BancoDados: {e}", exc_info=True)

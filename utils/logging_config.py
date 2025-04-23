@@ -33,7 +33,7 @@ def validar_caminho_log(caminho: Path) -> Path:
 
 # Caminho base dos logs
 LOG_ROOT = validar_caminho_log(Path("logs"))
-SUBDIRS = ["bot", "erros", "sinais"]
+SUBDIRS = ["bot", "erros", "sinais", "monitoramento"]
 
 # Garante os diretórios de log
 for subdir in SUBDIRS:
@@ -45,11 +45,22 @@ ARQUIVOS_LOG = {
     "bot": LOG_ROOT / "bot" / f"bot_{DATA_ATUAL}.log",
     "erros": LOG_ROOT / "erros" / f"erros_{DATA_ATUAL}.log",
     "sinais": LOG_ROOT / "sinais" / f"sinais_{DATA_ATUAL}.log",
+    "monitoramento": LOG_ROOT / "monitoramento" / f"monitoramento_{DATA_ATUAL}.log",
 }
 
 # Nível customizado EXECUÇÃO
 EXECUTION_LEVEL = 15
 logging.addLevelName(EXECUTION_LEVEL, "EXECUÇÃO")
+
+# Nível customizado MONITORAMENTO
+MONITORAMENTO_LEVEL = 21
+logging.addLevelName(MONITORAMENTO_LEVEL, "MONITORAMENTO")
+
+def monitoramento(self, message, *args, **kwargs):
+    if self.isEnabledFor(MONITORAMENTO_LEVEL):
+        self._log(MONITORAMENTO_LEVEL, message, args, **kwargs)
+
+logging.Logger.monitoramento = monitoramento
 
 
 def execution(self, message, *args, **kwargs):
@@ -62,11 +73,15 @@ logging.Logger.execution = execution
 # Formatadores
 FORMATADORES = {
     "detalhado": {
-        "format": "%(asctime)s | %(levelname)-9s | %(name)s | %(filename)s:%(funcName)s:%(lineno)d | %(message)s",
+        "format": "%(asctime)s | %(levelname)-13s | %(name)s | %(filename)s:%(funcName)s:%(lineno)d | %(message)s",
         "datefmt": "%d-%m-%Y %H:%M:%S",
     },
     "sinais": {
         "format": "%(asctime)s | SINAL | %(filename)s | %(message)s",
+        "datefmt": "%d-%m-%Y %H:%M:%S",
+    },
+    "monitoramento": {
+        "format": "%(asctime)s | MONITORAMENTO | %(name)s | %(message)s",
         "datefmt": "%d-%m-%Y %H:%M:%S",
     },
 }
@@ -105,6 +120,15 @@ HANDLERS = {
         "level": "INFO",
         "encoding": "utf-8",
     },
+    "monitoramento": {
+        "class": "logging.handlers.RotatingFileHandler",
+        "filename": str(ARQUIVOS_LOG["monitoramento"]),
+        "formatter": "monitoramento",
+        "maxBytes": 5 * 1024 * 1024,
+        "backupCount": 5,
+        "level": "MONITORAMENTO",
+        "encoding": "utf-8",
+    },
     "null": {
         "class": "logging.NullHandler",
     },
@@ -120,6 +144,11 @@ BASE_CONFIG = {
         "": {
             "handlers": ["console", "arquivo", "erros"],
             "level": "DEBUG",
+            "propagate": False,
+        },
+        "monitoramento": {
+            "handlers": ["monitoramento"],
+            "level": "MONITORAMENTO",
             "propagate": False,
         },
         "sinais": {
@@ -163,18 +192,22 @@ def configurar_logging(config: dict = None, debug_enabled: bool = False) -> None
         raise
 
 
-def get_logger(nome: str, debug_enabled=True) -> logging.Logger:
+def get_logger(nome: str, debug_enabled=True, monitoramento=False) -> logging.Logger:
     """
     Retorna logger customizado e seguro contra duplicação.
 
     Args:
         nome (str): Nome do logger.
         debug_enabled (bool): Força nível DEBUG se True.
+        monitoramento (bool): Se True, retorna logger para monitoramento.
 
     Returns:
         logging.Logger
     """
-    logger = logging.getLogger(nome)
+    if monitoramento:
+        logger = logging.getLogger("monitoramento")
+    else:
+        logger = logging.getLogger(nome)
     if not logger.hasHandlers():
         configurar_logging(debug_enabled=debug_enabled)
     return logger

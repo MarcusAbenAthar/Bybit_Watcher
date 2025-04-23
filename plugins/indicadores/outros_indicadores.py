@@ -8,6 +8,34 @@ logger = get_logger(__name__)
 
 
 class OutrosIndicadores(Plugin):
+    def finalizar(self):
+        """
+        Finaliza o plugin OutrosIndicadores, limpando estado e garantindo shutdown seguro.
+        """
+        try:
+            super().finalizar()
+            logger.info("OutrosIndicadores finalizado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao finalizar OutrosIndicadores: {e}")
+
+    """
+    Plugin para outros indicadores customizados.
+    - Responsabilidade única: cálculo de indicadores customizados.
+    - Modular, testável, documentado e sem hardcode.
+    - Autoidentificação de dependências/plugins.
+    """
+    PLUGIN_NAME = "outros_indicadores"
+    PLUGIN_CATEGORIA = "plugin"
+    PLUGIN_TAGS = ["indicadores", "custom", "analise"]
+    PLUGIN_PRIORIDADE = 100
+
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do plugin OutrosIndicadores.
+        """
+        return []
+
     PLUGIN_NAME = "outros_indicadores"
     PLUGIN_TYPE = "indicador"
     PLUGIN_CATEGORIA = "plugin"
