@@ -153,6 +153,7 @@ class SinaisPlugin(Plugin):
         }
         self._confianca_min = 0.0
         self._confianca_max = 1.0
+        self._ultimos_sinais = {}
 
     def inicializar(self, config: dict) -> bool:
         """
@@ -226,8 +227,8 @@ class SinaisPlugin(Plugin):
 
         resultado_padrao = {
             "sinais": {
-                "direcao": "LATERAL",
-                "forca": "FRACA",
+                "direcao": "NENHUMA",
+                "forca": "NENHUMA",
                 "confianca": 0.0,
                 "alavancagem": 0.0,
                 "timestamp": None,
@@ -255,9 +256,13 @@ class SinaisPlugin(Plugin):
 
         try:
             logger.info(f"[{self.nome}] Processando {symbol} - {timeframe}")
-            sinais = self._gerar_sinal(dados_completos, symbol, timeframe)
-            dados_completos["sinais"] = sinais
-            logger.info(f"[{self.nome}] Sinais consolidados [{symbol}]: {sinais}")
+            novo_sinal = self._gerar_sinal(dados_completos, symbol, timeframe)
+            if novo_sinal is None:
+                dados_completos["sinais"] = resultado_padrao["sinais"]
+            else:
+                dados_completos["sinais"] = novo_sinal
+                self._ultimos_sinais[f"{symbol}-{timeframe}"] = novo_sinal
+            logger.info(f"[{self.nome}] Sinais consolidados [{symbol}]: {dados_completos['sinais']}")
             return True
         except Exception as e:
             logger.error(f"[{self.nome}] Erro na execução: {e}", exc_info=True)
@@ -340,42 +345,18 @@ class SinaisPlugin(Plugin):
             confianca_min = self._confianca_min if hasattr(self, '_confianca_min') else 0.6
             if confianca < confianca_min:
                 logger.info(f"[sinais_plugin] Sinal descartado por confiança baixa: {confianca:.2f}")
-                return {
-                    "direcao": "LATERAL",
-                    "forca": "FRACA",
-                    "confianca": 0.0,
-                    "alavancagem": 0.0,
-                    "timestamp": timestamp,
-                    "stop_loss": 0.0,
-                    "take_profit": 0.0,
-                }
+                return None
 
             # Filtro de volume relativo
             candles = dados.get("crus", [])
             if not self._volume_acima_media(candles, n=20):
                 logger.info(f"[sinais_plugin] Sinal descartado por volume abaixo da média.")
-                return {
-                    "direcao": "LATERAL",
-                    "forca": "FRACA",
-                    "confianca": 0.0,
-                    "alavancagem": 0.0,
-                    "timestamp": timestamp,
-                    "stop_loss": 0.0,
-                    "take_profit": 0.0,
-                }
+                return None
 
             # Validação de contexto: preço acima da média móvel
             if direcao == "LONG" and not self._preco_acima_media(candles, periodo=20):
                 logger.info(f"[sinais_plugin] Sinal LONG descartado: preço não está acima da média móvel.")
-                return {
-                    "direcao": "LATERAL",
-                    "forca": "FRACA",
-                    "confianca": 0.0,
-                    "alavancagem": 0.0,
-                    "timestamp": timestamp,
-                    "stop_loss": 0.0,
-                    "take_profit": 0.0,
-                }
+                return None
 
             # Validação de resistência (exemplo usando candles, pode ser extendido)
             close = float(candles[-1][4]) if candles else 0.0
@@ -384,15 +365,7 @@ class SinaisPlugin(Plugin):
                 resistencias = dados["pivots"].get("resistencias", [])
             if self._proximo_resistencia(close, resistencias, margem=0.0015):
                 logger.info(f"[sinais_plugin] Sinal descartado: preço próximo de resistência relevante.")
-                return {
-                    "direcao": "LATERAL",
-                    "forca": "FRACA",
-                    "confianca": 0.0,
-                    "alavancagem": 0.0,
-                    "timestamp": timestamp,
-                    "stop_loss": 0.0,
-                    "take_profit": 0.0,
-                }
+                return None
 
             # Correção: nunca retornar None para SL/TP
             if stop_loss is None:
@@ -419,15 +392,7 @@ class SinaisPlugin(Plugin):
             return sinal
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao gerar sinal: {e}", exc_info=True)
-            return {
-                "direcao": "LATERAL",
-                "forca": "FRACA",
-                "confianca": 0.0,
-                "alavancagem": 0.0,
-                "timestamp": None,
-                "stop_loss": None,
-                "take_profit": None,
-            }
+            return None
 
     def _calcular_confianca(self, dados: dict, direcao: str, base: float) -> float:
         """

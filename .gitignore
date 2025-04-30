@@ -14,7 +14,6 @@ __pycache__/
 
 #Arquivos de configuração
 schema_teste.json
-schema.json
 
 # Distribution / packaging
 .Python

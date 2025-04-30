@@ -165,19 +165,46 @@ class GerenciadorBanco(BaseGerenciador):
                 return False
 
             schema = json.loads(schema_path.read_text(encoding="utf-8"))
-            columns = schema.get("columns", {})
-            columns.setdefault("timestamp", "FLOAT")
-
-            col_defs = ", ".join(f"{col} {dtype}" for col,
-                                 dtype in columns.items())
+            
+            # Cria tabela padrão 'dados' se não existir no schema
+            if "dados" not in schema:
+                schema["dados"] = {"columns": {"timestamp": "FLOAT"}}
+            
             with self._conn.cursor() as cur:
-                cur.execute(f"CREATE TABLE IF NOT EXISTS dados ({col_defs});")
-                for col, dtype in columns.items():
-                    cur.execute(
-                        f"ALTER TABLE dados ADD COLUMN IF NOT EXISTS {col} {dtype};")
+                # Cria/atualiza todas as tabelas definidas no schema
+                for tabela, config in schema.items():
+                    columns = config.get("columns", {})
+                    if not columns:
+                        continue
+                        
+                    # Cria tabela se não existir
+                    col_defs = ", ".join(f"{col} {dtype}" for col, dtype in columns.items())
+                    cur.execute(f"CREATE TABLE IF NOT EXISTS {tabela} ({col_defs});")
+                    
+                    # Adiciona colunas faltantes
+                    for col, dtype in columns.items():
+                        cur.execute(
+                            f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS {col} {dtype};")
+                    
+                    # Registra tabela no banco de dados
+                    cur.execute("""
+                        INSERT INTO tabelas_registradas (nome_tabela, plugin_owner) 
+                        VALUES (%s, %s)
+                        ON CONFLICT (nome_tabela) DO NOTHING;
+                    """, (tabela, config.get("plugin", "system")))
+                    
+                # Cria tabela de registro de tabelas se não existir
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS tabelas_registradas (
+                        nome_tabela VARCHAR(255) PRIMARY KEY,
+                        plugin_owner VARCHAR(255),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+                
             self._conn.commit()
             logger.info(
-                f"Tabelas criadas/atualizadas com base em {schema_path}")
+                f"{len(schema)} tabelas criadas/atualizadas com base em {schema_path}")
             return True
         except Exception as e:
             logger.error(f"Erro ao criar tabelas: {e}", exc_info=True)
