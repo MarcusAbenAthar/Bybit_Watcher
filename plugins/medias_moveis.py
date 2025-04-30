@@ -10,17 +10,6 @@ from plugins.plugin import Plugin
 logger = get_logger(__name__)
 
 
-class MediasMoveis(...):
-    def finalizar(self):
-        """
-        Finaliza o plugin MediasMoveis, limpando estado e garantindo shutdown seguro.
-        """
-        try:
-            super().finalizar()
-            logger.info("MediasMoveis finalizado com sucesso.")
-        except Exception as e:
-            logger.error(f"Erro ao finalizar MediasMoveis: {e}")
-
 class MediasMoveis(Plugin):
     """
     Plugin de análise de Médias Móveis (MA).

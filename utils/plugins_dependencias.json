@@ -16,26 +16,10 @@
     "indicadores_volume": [],
     "outros_indicadores": [],
     "medias_moveis": [],
-    "anomalias": [],
-    "correlatos": [],
-    "custom_rules": [],
-    "eventos_blockchain": [],
-    "funding_rate": [],
-    "heatmap_liquidez": [],
-    "ml_preditor": [],
-    "monitor_ordens": [
-        "execucao_ordens",
-        "conexao"
-    ],
-    "onchain": [],
-    "open_interest": [],
-    "orderbook": [],
-    "sentimento_social": [],
     "obter_dados": [
         "conexao"
     ],
     "price_action": [],
-    "sentinela": [],
     "sinais_plugin": [
         "calculo_alavancagem",
         "calculo_risco"

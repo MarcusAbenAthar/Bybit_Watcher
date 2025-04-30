@@ -12,6 +12,10 @@ __pycache__/
 #Windsurf
 .windsurfrules
 
+#Arquivos de configuração
+schema_teste.json
+schema.json
+
 # Distribution / packaging
 .Python
 build/

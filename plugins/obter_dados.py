@@ -7,17 +7,6 @@ logger = get_logger(__name__)
 
 import requests
 
-class ObterDados(...):
-    def finalizar(self):
-        """
-        Finaliza o plugin ObterDados, limpando estado e garantindo shutdown seguro.
-        """
-        try:
-            super().finalizar()
-            logger.info("ObterDados finalizado com sucesso.")
-        except Exception as e:
-            logger.error(f"Erro ao finalizar ObterDados: {e}")
-
 class ObterDados(Plugin):
     """
     Plugin para obtenção de dados externos (FGI, LSR, BTC.d, etc).
@@ -81,7 +70,12 @@ class ObterDados(Plugin):
                 dados_completos["candles"] = resultado_padrao  # compatibilidade
                 return True
 
-            candles = cliente.fetch_ohlcv(symbol, timeframe, limit=limit)
+            # Ajusta simbolo para formato CCXT usando Conexao
+            if hasattr(self._conexao, "listar_pares"):
+                self._conexao.listar_pares()
+            info = self._conexao.obter_info_par(symbol)
+            exchange_symbol = info.get("symbol", symbol) if info else symbol
+            candles = cliente.fetch_ohlcv(exchange_symbol, timeframe, limit=limit)
             if not candles or not isinstance(candles, list):
                 logger.warning(f"[{self.nome}] Nenhum candle recebido para {symbol}-{timeframe}.")
                 dados_completos["crus"] = resultado_padrao

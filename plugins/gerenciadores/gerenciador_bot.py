@@ -76,6 +76,17 @@ class GerenciadorBot(BaseGerenciador):
             pares = self._config["pares"]
             timeframes = self._config["timeframes"]
 
+            # Filtrar pares inválidos usando Conexao.listar_pares()
+            conexao = self._gerente.obter_plugin("conexao")
+            if conexao and hasattr(conexao, "listar_pares"):
+                pares_validos = conexao.listar_pares()
+                invalidos = [p for p in pares if p not in pares_validos and p != "all"]
+                if invalidos:
+                    logger.warning(f"Pares inválidos removidos: {invalidos}")
+                pares = [p for p in pares if p in pares_validos or p == "all"]
+            else:
+                logger.warning("Não foi possível filtrar pares: plugin Conexao ausente ou sem listar_pares()")
+
             # NOVO: se 'pares' for ['all'], busca todos os símbolos disponíveis na exchange
             if pares == ["all"]:
                 conexao_plugin = self._gerente.obter_plugin("conexao")
@@ -175,13 +186,11 @@ class GerenciadorBot(BaseGerenciador):
     def _processar_par(self, symbol, timeframe, plugins_analise, sinais_plugin, buffer_sinais=None) -> bool:
         """
         Processa um par/timeframe, executando plugins de análise e sinais.
-        Integração Sentinela: Garante que o plugin Sentinela seja executado somente após todos os plugins de análise padrão,
-        evitando conflitos de dependência e mantendo o diagnóstico estratégico separado e disponível para sinais e logs.
 
         Args:
             symbol: Símbolo do par (ex.: BTCUSDT).
             timeframe: Timeframe (ex.: 1m).
-            plugins_analise: Lista de plugins com tag 'analise' (exceto sentinela).
+            plugins_analise: Lista de plugins com tag 'analise'.
             sinais_plugin: Instância do plugin sinais_plugin.
             buffer_sinais: Buffer temporário para armazenar sinais por símbolo/timeframe.
 
@@ -192,22 +201,18 @@ class GerenciadorBot(BaseGerenciador):
             logger.execution(f"Início do processamento: {symbol} - {timeframe}")
             dados = {}
 
-            # Executa plugins de análise (exceto sentinela)
+            # Popula k-lines via plugin ObterDados antes das análises
+            obter_dados = self._gerente.obter_plugin("obter_dados")
+            if obter_dados:
+                obter_dados.executar(dados_completos=dados, symbol=symbol, timeframe=timeframe)
+            else:
+                logger.warning(f"[{self.PLUGIN_NAME}] Plugin ObterDados não encontrado para {symbol}-{timeframe}")
+
+            # Executa plugins de análise
             for plugin in plugins_analise:
-                if plugin.PLUGIN_NAME == "sentinela":
-                    continue  # Sentinela será executado depois
-                resultado = plugin.executar(dados, symbol, timeframe)
+                resultado = plugin.executar(dados_completos=dados, symbol=symbol, timeframe=timeframe)
                 if not isinstance(resultado, bool) or not resultado:
                     logger.warning(f"Plugin {plugin.PLUGIN_NAME} falhou para {symbol}-{timeframe}")
-
-            # Executa plugin Sentinela após todos os outros de análise
-            sentinela_plugin = self._gerente.obter_plugin("sentinela")
-            if sentinela_plugin:
-                resultado_sentinela = sentinela_plugin.executar(dados, symbol=symbol, timeframe=timeframe)
-                dados["sentinela"] = resultado_sentinela
-                logger.info(f"Diagnóstico Sentinela para {symbol}-{timeframe}: {resultado_sentinela}")
-            else:
-                logger.warning(f"Plugin Sentinela não encontrado para {symbol}-{timeframe}")
 
             # Executa o analisador_mercado separado, após todos os plugins de análise
             analisador_mercado = self._gerente.obter_plugin("analisador_mercado")

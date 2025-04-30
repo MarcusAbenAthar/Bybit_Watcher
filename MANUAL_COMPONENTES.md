@@ -12,14 +12,10 @@ Este manual serve como referência central para todos os plugins, indicadores, m
 
 ## Plugins Principais
 
-### sentinela
-- **Responsabilidade**: Diagnóstico estratégico de sentimento de mercado, consolidando análise fundamental, técnica e monitoramento avançado.
-- **Entradas**: Dados de mercado, indicadores, diagnósticos de monitoramento.
-- **Saída**: Diagnóstico sintético, alertas, recomendações de risco, alavancagem e proteção.
 
 ### sinais_plugin
 - **Responsabilidade**: Consolidação e emissão dos sinais finais de trading, integrando múltiplos timeframes e análises.
-- **Entradas**: Diagnósticos de análise, sentinela e mercado.
+- **Entradas**: Diagnósticos de análise e mercado.
 - **Saída**: Sinal final (compra/venda/neutro) para execução.
 
 ---
@@ -110,8 +106,7 @@ Este manual serve como referência central para todos os plugins, indicadores, m
 ### gerenciador_banco
 - **Responsabilidade**: Gerencia persistência, leitura e escrita no banco de dados.
 
-### gerenciador_monitoramento
-- **Responsabilidade**: Descobre, inicializa e executa todos os plugins de monitoramento, agregando diagnósticos avançados ao Sentinela.
+.
 - **Diferencial**: Possui sistema de auto plug-in, auto injeção e detecção de dependências.
 
 #### Sistema de Auto Plug-in, Auto Injeção e Detecção de Dependências
@@ -128,7 +123,6 @@ Este manual serve como referência central para todos os plugins, indicadores, m
 2. Para cada plugin, consulta suas dependências via `dependencias()`.
 3. Resolve e instancia recursivamente cada dependência, injetando via kwargs.
 4. Detecta ciclos e loga qualquer problema de dependência.
-5. Expõe os plugins prontos para uso pelo Sentinela e demais componentes.
 
 ##### Boas práticas:
 - Cada plugin deve declarar corretamente suas dependências obrigatórias em `dependencias()`.

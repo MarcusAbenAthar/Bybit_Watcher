@@ -10,17 +10,6 @@ from plugins.plugin import Plugin
 logger = get_logger(__name__)
 
 
-class CalculoRisco(...):
-    def finalizar(self):
-        """
-        Finaliza o plugin CalculoRisco, limpando estado e garantindo shutdown seguro.
-        """
-        try:
-            super().finalizar()
-            logger.info("CalculoRisco finalizado com sucesso.")
-        except Exception as e:
-            logger.error(f"Erro ao finalizar CalculoRisco: {e}")
-
 class CalculoRisco(Plugin):
     """
     Plugin para cálculo de risco por operação e gerenciamento de exposição.

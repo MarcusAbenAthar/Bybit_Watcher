@@ -9,17 +9,6 @@ from plugins.plugin import Plugin
 logger = get_logger(__name__)
 
 
-class ValidadorDados(...):
-    def finalizar(self):
-        """
-        Finaliza o plugin ValidadorDados, limpando estado e garantindo shutdown seguro.
-        """
-        try:
-            super().finalizar()
-            logger.info("ValidadorDados finalizado com sucesso.")
-        except Exception as e:
-            logger.error(f"Erro ao finalizar ValidadorDados: {e}")
-
 class ValidadorDados(Plugin):
     """
     Plugin para validação de dados de entrada e saída do pipeline.
@@ -265,3 +254,13 @@ class ValidadorDados(Plugin):
         except Exception as e:
             logger.debug(f"[{self.nome}] Erro ao validar candle: {e}")
             return False
+
+    def finalizar(self):
+        """
+        Finaliza o plugin ValidadorDados, limpando estado e garantindo shutdown seguro.
+        """
+        try:
+            super().finalizar()
+            logger.info("ValidadorDados finalizado com sucesso.")
+        except Exception as e:
+            logger.error(f"Erro ao finalizar ValidadorDados: {e}")

@@ -10,17 +10,6 @@ import ccxt
 logger = get_logger(__name__)
 
 
-class ExecucaoOrdens(...):
-    def finalizar(self):
-        """
-        Finaliza o plugin ExecucaoOrdens, limpando estado e garantindo shutdown seguro.
-        """
-        try:
-            super().finalizar()
-            logger.info("ExecucaoOrdens finalizado com sucesso.")
-        except Exception as e:
-            logger.error(f"Erro ao finalizar ExecucaoOrdens: {e}")
-
 class ExecucaoOrdens(Plugin):
     """
     Plugin para executar ordens de compra/venda com SL/TP, incluindo reentradas (DCA) e controle de posição ativa.
@@ -405,4 +394,3 @@ class ExecucaoOrdens(Plugin):
             logger.info(f"[{self.nome}] Finalizado e ordens limpas")
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao finalizar: {e}", exc_info=True)
-

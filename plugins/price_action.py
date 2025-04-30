@@ -10,17 +10,6 @@ from plugins.plugin import Plugin
 logger = get_logger(__name__)
 
 
-class PriceAction(...):
-    def finalizar(self):
-        """
-        Finaliza o plugin PriceAction, limpando estado e garantindo shutdown seguro.
-        """
-        try:
-            super().finalizar()
-            logger.info("PriceAction finalizado com sucesso.")
-        except Exception as e:
-            logger.error(f"Erro ao finalizar PriceAction: {e}")
-
 class PriceAction(Plugin):
     """
     Plugin de análise de Price Action (PA) para identificar padrões de reversão e continuidade.

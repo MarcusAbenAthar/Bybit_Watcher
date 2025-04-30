@@ -8,7 +8,13 @@ MIN_CONFIDENCE = 0.6  # Sinal só é válido se confiança >= este valor
 
 
 logger = get_logger(__name__)
-load_dotenv()  # Carrega variáveis sensíveis do .env
+try:
+    load_dotenv(encoding='utf-8')
+except UnicodeDecodeError:
+    load_dotenv(encoding='latin-1')  # Carrega variáveis sensíveis do .env
+# Caminho padrão para schema.json e pares.json sempre em utils/
+SCHEMA_JSON_PATH = os.getenv("SCHEMA_JSON_PATH", os.path.join("utils", "schema.json"))
+PAIRS_JSON_PATH = os.getenv("PAIRS_JSON_PATH", os.path.join("utils", "pares.json"))
 
 
 def _validar_estilos_sltp(estilos: dict) -> dict:
@@ -61,8 +67,10 @@ def carregar_config() -> dict:
             )
 
     # Configuração institucional pronta para uso
-    ativos = ["BTCUSDT", "FARTCOIN"]  # Edite aqui os pares que deseja monitorar
-    monitoramento_intervalo = 300  # Intervalo em segundos entre execuções dos diagnósticos
+    # Edite aqui os pares que deseja monitorar
+    ativos = ["BTCUSDT", "FARTCOINUSDT"]
+    # Intervalo em segundos entre execuções dos diagnósticos
+    monitoramento_intervalo = 300
     bot_cycle_interval = 5     # Intervalo do loop principal
 
     # Coleta de credenciais da Bybit conforme ambiente
@@ -124,7 +132,7 @@ def carregar_config() -> dict:
         "futuros": False,   # True para analisar futuros ("future")
         "swap": True,     # True para analisar swaps perpétuos
         "option": False,   # True para analisar opções
-        "timeframes": ["1m", "5m", "15m", "1h", "4h", "1d"],
+        "timeframes": ["5m", "15m", "1h", "4h"],
         # Quantidade de symbols processados em lote (ajuste conforme desejado)
         "batch_size": 3,
 
@@ -142,7 +150,7 @@ def carregar_config() -> dict:
             "testnet": testnet,
             "base_url": base_url,  # usado direto no conexao.py
         },
-        "database": {
+        "db": {
             "host": os.getenv("DB_HOST"),
             "database": os.getenv("DB_NAME"),
             "user": os.getenv("DB_USER"),

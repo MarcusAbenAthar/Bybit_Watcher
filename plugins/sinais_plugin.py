@@ -11,17 +11,6 @@ logger = get_logger(__name__)
 logger_sinais = logging.getLogger("sinais")
 
 
-class SinaisPlugin(...):
-    def finalizar(self):
-        """
-        Finaliza o plugin SinaisPlugin, limpando estado e garantindo shutdown seguro.
-        """
-        try:
-            super().finalizar()
-            logger.info("SinaisPlugin finalizado com sucesso.")
-        except Exception as e:
-            logger.error(f"Erro ao finalizar SinaisPlugin: {e}")
-
 class SinaisPlugin(Plugin):
     """
     Plugin para consolidação de dados de análise e geração do sinal final

@@ -1,5 +1,7 @@
 """Plugin para operações de gravação no banco de dados."""
 
+registry: dict[str, list[str]] = {}
+
 from utils.logging_config import get_logger
 from plugins.plugin import Plugin
 
@@ -10,6 +12,7 @@ class BancoDados(Plugin):
     """
     Plugin para operações básicas de banco de dados.
     - Responsabilidade única: operações CRUD simples.
+    - Registrar tabelas por plugin.
     - Modular, testável, documentado e sem hardcode.
     - Autoidentificação de dependências/plugins.
     """
@@ -38,7 +41,8 @@ class BancoDados(Plugin):
 
     def inicializar(self, config: dict) -> bool:
         """
-        Inicializa o plugin e valida o GerenciadorBanco.
+        Inicializa o plugin BancoDados e valida o GerenciadorBanco.
+        Nunca cria nem altera estrutura de tabelas: responsabilidade 100% do GerenciadorBanco.
 
         Args:
             config: Configurações globais do sistema.
@@ -60,6 +64,10 @@ class BancoDados(Plugin):
                     return False
 
             logger.info("BancoDados inicializado com sucesso")
+            try:
+                self.registrar_tabela(self.PLUGIN_NAME, "dados")  # Apenas registro lógico, não cria tabela física
+            except Exception as e:
+                logger.warning(f"Falha ao registrar tabela no plugin BancoDados: {e}")
             return True
         except Exception as e:
             logger.error(f"Erro ao inicializar BancoDados: {e}", exc_info=True)
@@ -90,3 +98,14 @@ class BancoDados(Plugin):
                 "BancoDados finalizado com sucesso (sem ações de conexão)")
         except Exception as e:
             logger.error(f"Erro ao finalizar BancoDados: {e}", exc_info=True)
+
+    @classmethod
+    def registrar_tabela(cls, plugin_name: str, table_name: str) -> None:
+        """Registra uma tabela associada a um plugin no registry global."""
+        registry.setdefault(plugin_name, []).append(table_name)
+        logger.info(f"Tabela registrada: {plugin_name} -> {table_name}")
+
+    @classmethod
+    def get_tabelas_por_plugin(cls) -> dict[str, list[str]]:
+        """Retorna o dicionário de tabelas registradas por plugin."""
+        return registry

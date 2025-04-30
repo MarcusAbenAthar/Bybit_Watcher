@@ -145,6 +145,7 @@ class GerenciadorPlugins(BaseGerenciador):
         sucesso = True
         registry = {}  # Plugins já instanciados
         plugins_ordenados = self._ordenar_por_dependencias()
+        plugins_ordenados = [(nome, cls) for nome, cls in plugins_ordenados]
         grafo_dependencias = {nome: self._dependencias.get(nome, []) for nome, _ in plugins_ordenados}
 
         def resolver_plugin(nome, pilha=None):

@@ -6,17 +6,6 @@ from copy import deepcopy
 logger = get_logger(__name__)
 
 
-class AnalisadorMercado(...):
-    def finalizar(self):
-        """
-        Finaliza o plugin AnalisadorMercado, limpando estado e garantindo shutdown seguro.
-        """
-        try:
-            super().finalizar()
-            logger.info("AnalisadorMercado finalizado com sucesso.")
-        except Exception as e:
-            logger.error(f"Erro ao finalizar AnalisadorMercado: {e}")
-
 class AnalisadorMercado(Plugin):
     """
     Plugin que consolida os sinais dos demais módulos para gerar

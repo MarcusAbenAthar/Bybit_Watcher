@@ -12,17 +12,6 @@ from utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-class CalculoAlavancagem(...):
-    def finalizar(self):
-        """
-        Finaliza o plugin CalculoAlavancagem, limpando estado e garantindo shutdown seguro.
-        """
-        try:
-            super().finalizar()
-            logger.info("CalculoAlavancagem finalizado com sucesso.")
-        except Exception as e:
-            logger.error(f"Erro ao finalizar CalculoAlavancagem: {e}")
-
 class CalculoAlavancagem(Plugin):
     """
     Plugin para cálculo de alavancagem segura e eficiente.
