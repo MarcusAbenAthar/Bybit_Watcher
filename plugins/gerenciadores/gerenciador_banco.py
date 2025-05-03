@@ -2,15 +2,18 @@
 
 import os
 import json
+import logging
 import psycopg2
 import psycopg2.extensions
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
 from pathlib import Path
 from utils.config import SCHEMA_JSON_PATH
-from utils.logging_config import get_logger
+from utils.logging_config import log_banco
 from plugins.gerenciadores.gerenciador import BaseGerenciador
+from utils.paths import get_schema_path
 
-logger = get_logger(__name__)
+if TYPE_CHECKING:
+    from plugins.plugin import Plugin
 
 
 class GerenciadorBanco(BaseGerenciador):
@@ -18,10 +21,26 @@ class GerenciadorBanco(BaseGerenciador):
     PLUGIN_CATEGORIA = "gerenciador"
     PLUGIN_TAGS = ["banco", "persistencia"]
     PLUGIN_PRIORIDADE = 10
+    PLUGIN_VERSION = "1.0"
+    PLUGIN_SCHEMA_VERSAO = "1.0"
+    PLUGIN_TABELAS = {
+        "tabelas_registradas": {
+            "columns": {
+                "nome_tabela": "VARCHAR(255) PRIMARY KEY",
+                "plugin_owner": "VARCHAR(255) NOT NULL",
+                "schema_versao": "VARCHAR(20) NOT NULL",
+                "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                "updated_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+            }
+        }
+    }
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._conn: Optional[psycopg2.extensions.connection] = None
+        self._plugins: dict = kwargs.get("plugins", {})
+        self.inicializado = False
+        self._config = {}
 
     @classmethod
     def dependencias(cls) -> List[str]:
@@ -48,7 +67,12 @@ class GerenciadorBanco(BaseGerenciador):
             return False
 
         self._registrar_em_banco_dados()
-        logger.info("GerenciadorBanco inicializado com sucesso")
+        log_banco(
+            plugin=self.PLUGIN_NAME,
+            tabela="ALL",
+            operacao="INIT",
+            dados="status: inicializado com sucesso",
+        )
         return True
 
     def _validar_config(self, config: dict) -> bool:
@@ -56,191 +80,490 @@ class GerenciadorBanco(BaseGerenciador):
         campos = ["host", "database", "user", "password"]
         faltando = [k for k in campos if not db_cfg.get(k)]
         if faltando:
-            logger.error(
-                f"Campos de configuração do banco ausentes: {faltando}")
+            log_banco(
+                plugin=self.PLUGIN_NAME,
+                tabela="ALL",
+                operacao="CONFIG_CHECK",
+                dados=f"Campos de configuração do banco ausentes: {faltando}",
+                nivel=logging.ERROR,
+            )
             return False
         return True
 
     def _conectar(self, db_cfg: dict) -> bool:
-        # Configuração de conexão administrativa
         admin_cfg = {
-            'host': db_cfg['host'],
-            'user': db_cfg['user'],
-            'password': db_cfg['password'],
-            'dbname': 'postgres'  # Conecta ao banco template
+            "host": db_cfg["host"],
+            "user": db_cfg["user"],
+            "password": db_cfg["password"],
+            "dbname": "postgres",
         }
-        
-        # String de conexão formatada manualmente
+
         dsn = ""
         for k, v in admin_cfg.items():
             dsn += f"{k}={v} "
-        
-        # Conexão administrativa com autocommit FORÇADO
+
         try:
             conn = psycopg2.connect(dsn.strip())
             conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-            
+
             with conn.cursor() as cur:
-                # Verifica existência do banco
-                cur.execute("SELECT 1 FROM pg_database WHERE datname=%s", (db_cfg['database'],))
+                cur.execute(
+                    "SELECT 1 FROM pg_database WHERE datname=%s", (db_cfg["database"],)
+                )
                 if not cur.fetchone():
-                    logger.info(f"Criando banco {db_cfg['database']}...")
+                    log_banco(
+                        plugin=self.PLUGIN_NAME,
+                        tabela="ALL",
+                        operacao="DB_CREATE",
+                        dados=f"Criando banco {db_cfg['database']}...",
+                    )
                     cur.execute(f"CREATE DATABASE {db_cfg['database']} ENCODING 'UTF8'")
-                    logger.info("Banco criado com sucesso")
-        
+                    log_banco(
+                        plugin=self.PLUGIN_NAME,
+                        tabela="ALL",
+                        operacao="DB_CREATE",
+                        dados="Banco criado com sucesso",
+                    )
+
         except Exception as e:
-            logger.error(f"Falha na criação do banco: {e}", exc_info=True)
+            log_banco(
+                plugin=self.PLUGIN_NAME,
+                tabela="ALL",
+                operacao="DB_CREATE",
+                dados=f"Falha na criação do banco: {e}",
+                nivel=logging.ERROR,
+            )
             return False
         finally:
-            if 'conn' in locals():
+            if "conn" in locals():
                 conn.close()
 
-        # Conexão normal ao banco alvo
         try:
             self._conn = psycopg2.connect(**db_cfg)
             return True
         except Exception as e:
-            logger.error(f"Falha na conexão principal: {e}")
+            log_banco(
+                plugin=self.PLUGIN_NAME,
+                tabela="ALL",
+                operacao="DB_CONNECT",
+                dados=f"Falha na conexão principal: {e}",
+                nivel=logging.ERROR,
+            )
             return False
 
-    def _garantir_existencia_banco(self, db_cfg: dict):
-        dbname = db_cfg["database"]
-        admin_cfg = db_cfg.copy()
-        admin_cfg["database"] = "postgres"
+    def _gerar_schema_inicial(self) -> dict:
+        """Gera a estrutura inicial do schema.json"""
+        return {
+            "schema_versao": "1.0",
+            "gerado_por": self.PLUGIN_NAME,
+            "tabelas": {
+                "dados": {
+                    "columns": {
+                        "timestamp": "FLOAT",
+                        "symbol": "VARCHAR(20)",
+                        "price": "FLOAT",
+                    },
+                    "plugin": "system",
+                }
+            },
+        }
 
-        original_pgpass = os.environ.get("PGPASSFILE")
-        os.environ["PGPASSFILE"] = os.devnull if hasattr(
-            os, "devnull") else "nul"
+    def _carregar_ou_criar_schema(self) -> dict:
+        schema = self._gerar_schema_inicial()
 
-        try:
-            with psycopg2.connect(**admin_cfg) as admin_conn:
-                admin_conn.set_isolation_level(
-                    psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-                with admin_conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT 1 FROM pg_database WHERE datname = %s", (dbname,))
-                    if not cur.fetchone():
-                        logger.info(f"Criando banco {dbname} automaticamente")
-                        cur.execute(
-                            f"""
-                            CREATE DATABASE {dbname}
-                            WITH ENCODING='UTF8'
-                            LC_COLLATE='C'
-                            LC_CTYPE='C'
-                            TEMPLATE=template0;
-                            """
-                        )
+        schema_path = get_schema_path()
 
-                        logger.info(f"Banco {dbname} criado com sucesso")
-        except Exception as e:
-            if "CREATE DATABASE não pode ser executado dentro de um bloco de transação" in str(e):
-                logger.error(
-                    f"Criação automática falhou. Execute manualmente:\n"
-                    f"CREATE DATABASE {dbname} WITH ENCODING='UTF8' "
-                    f"LC_COLLATE='Portuguese_Brazil.1252' LC_CTYPE='Portuguese_Brazil.1252' TEMPLATE=template0;"
+        if os.path.exists(schema_path):
+            try:
+                with open(schema_path, "r", encoding="utf-8") as f:
+                    loaded_schema = json.load(f)
+
+                if isinstance(loaded_schema, dict) and "tabelas" in loaded_schema:
+                    schema.update(loaded_schema)
+                else:
+                    log_banco(
+                        plugin=self.PLUGIN_NAME,
+                        tabela="ALL",
+                        operacao="SCHEMA_LOAD",
+                        dados="Schema inválido - usando estrutura padrão",
+                        nivel=logging.WARNING,
+                    )
+
+            except Exception as e:
+                log_banco(
+                    plugin=self.PLUGIN_NAME,
+                    tabela="ALL",
+                    operacao="SCHEMA_LOAD",
+                    dados=f"Erro ao carregar schema: {e} - usando estrutura padrão",
+                    nivel=logging.ERROR,
                 )
-            else:
-                logger.error(f"Erro ao garantir banco: {e}", exc_info=True)
-        finally:
-            if original_pgpass:
-                os.environ["PGPASSFILE"] = original_pgpass
-            else:
-                del os.environ["PGPASSFILE"]
 
-    def _log_erro_encoding(self, dbname, erro):
-        logger.error(
-            f"[ERRO ENCODING] Conflito de encoding ao acessar o banco {dbname}.\n"
-            f"Tente criar manualmente com:\n"
-            f"CREATE DATABASE {dbname} WITH ENCODING='UTF8' "
-            f"LC_COLLATE='Portuguese_Brazil.1252' LC_CTYPE='Portuguese_Brazil.1252' TEMPLATE=template0;\n"
-            f"Detalhe: {erro}"
-        )
+        schema.setdefault("tabelas", {})
+        return schema
+
+    def _atualizar_schema_com_plugins(self, schema: dict) -> dict:
+        """Atualiza o schema com as tabelas declaradas pelos plugins"""
+        for plugin_name, plugin in self._plugins.items():
+            if hasattr(plugin, "plugin_tabelas"):
+                for tabela, cols in plugin.plugin_tabelas.items():
+                    if tabela not in schema["tabelas"]:
+                        schema["tabelas"][tabela] = {
+                            "columns": cols,
+                            "plugin": plugin_name,
+                            "schema_versao": getattr(
+                                plugin, "plugin_schema_versao", "1.0"
+                            ),
+                        }
+                        log_banco(
+                            plugin=self.PLUGIN_NAME,
+                            tabela=tabela,
+                            operacao="SCHEMA_UPDATE",
+                            dados=f"Tabela '{tabela}' adicionada ao schema pelo plugin '{plugin_name}'",
+                        )
+        return schema
 
     def _criar_tabelas(self) -> bool:
+        """Cria/atualiza tabelas baseadas no schema.json"""
         try:
-            schema_path = Path(SCHEMA_JSON_PATH)
-            if not schema_path.exists():
-                logger.error(
-                    f"Arquivo de schema não encontrado: {schema_path}")
-                return False
+            log_banco(
+                plugin=self.PLUGIN_NAME,
+                tabela="tabelas_registradas",
+                operacao="SCHEMA_CHECK",
+                dados=f"Verificando schema versão {self.PLUGIN_VERSION}",
+            )
 
-            schema = json.loads(schema_path.read_text(encoding="utf-8"))
-            
-            # Cria tabela padrão 'dados' se não existir no schema
-            if "dados" not in schema:
-                schema["dados"] = {"columns": {"timestamp": "FLOAT"}}
-            
+            # Garante que o diretório utils existe
+            utils_dir = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "utils"
+            )
+            os.makedirs(utils_dir, exist_ok=True)
+
+            schema = self._carregar_ou_criar_schema()
+            schema = self._atualizar_schema_com_plugins(schema)
+
+            # Salva o schema atualizado
+            schema_path = os.path.join(utils_dir, "schema.json")
+            with open(schema_path, "w", encoding="utf-8") as f:
+                json.dump(schema, f, indent=2)
+
             with self._conn.cursor() as cur:
-                # Cria/atualiza todas as tabelas definidas no schema
-                for tabela, config in schema.items():
-                    columns = config.get("columns", {})
-                    if not columns:
-                        continue
-                        
-                    # Cria tabela se não existir
-                    col_defs = ", ".join(f"{col} {dtype}" for col, dtype in columns.items())
-                    cur.execute(f"CREATE TABLE IF NOT EXISTS {tabela} ({col_defs});")
-                    
-                    # Adiciona colunas faltantes
-                    for col, dtype in columns.items():
-                        cur.execute(
-                            f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS {col} {dtype};")
-                    
-                    # Registra tabela no banco de dados
-                    cur.execute("""
-                        INSERT INTO tabelas_registradas (nome_tabela, plugin_owner) 
-                        VALUES (%s, %s)
-                        ON CONFLICT (nome_tabela) DO NOTHING;
-                    """, (tabela, config.get("plugin", "system")))
-                    
-                # Cria tabela de registro de tabelas se não existir
-                cur.execute("""
+                # Primeiro cria a tabela de registro se não existir
+                self.executar_sql(
+                    """
                     CREATE TABLE IF NOT EXISTS tabelas_registradas (
                         nome_tabela VARCHAR(255) PRIMARY KEY,
-                        plugin_owner VARCHAR(255),
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        plugin_owner VARCHAR(255) NOT NULL,
+                        schema_versao VARCHAR(20) NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     );
-                """)
-                
-            self._conn.commit()
-            logger.info(
-                f"{len(schema)} tabelas criadas/atualizadas com base em {schema_path}")
-            return True
+                    """
+                )
+
+                # Depois cria/atualiza as outras tabelas
+                for tabela, config in schema["tabelas"].items():
+                    try:
+                        columns = config.get("columns", {})
+                        # Corrigir: se columns contiver 'schema', use apenas columns['schema']
+                        if (
+                            isinstance(columns, dict)
+                            and "schema" in columns
+                            and isinstance(columns["schema"], dict)
+                        ):
+                            columns = columns["schema"]
+                        # Se columns contiver 'columns', desaninha
+                        if (
+                            isinstance(columns, dict)
+                            and "columns" in columns
+                            and isinstance(columns["columns"], dict)
+                        ):
+                            columns = columns["columns"]
+                        # Remover chaves inválidas
+                        for meta in ["schema", "modo_acesso", "plugin"]:
+                            if meta in columns:
+                                log_banco(
+                                    plugin=self.PLUGIN_NAME,
+                                    tabela=tabela,
+                                    operacao="SCHEMA_CHECK",
+                                    dados=f"Removendo chave inválida '{meta}' de columns da tabela '{tabela}'",
+                                    nivel=logging.WARNING,
+                                )
+                                columns.pop(meta)
+                        if not columns or not isinstance(columns, dict):
+                            log_banco(
+                                plugin=self.PLUGIN_NAME,
+                                tabela=tabela,
+                                operacao="SCHEMA_CHECK",
+                                dados=f"Tabela '{tabela}' ignorada: columns inválido ou vazio.",
+                                nivel=logging.WARNING,
+                            )
+                            continue
+                        existe = self.executar_sql(
+                            """
+                            SELECT EXISTS (
+                                SELECT FROM information_schema.tables 
+                                WHERE table_schema = 'public' AND table_name = %s
+                            );
+                            """,
+                            (tabela,),
+                            fetchone=True,
+                        )
+                        tabela_existe = existe[0] if existe else False
+                        if not tabela_existe:
+                            col_defs = ", ".join(
+                                f"{col} {dtype}" for col, dtype in columns.items()
+                            )
+                            self.executar_sql(
+                                f"CREATE TABLE IF NOT EXISTS {tabela} ({col_defs});"
+                            )
+                        else:
+                            for col, dtype in columns.items():
+                                try:
+                                    self.executar_sql(
+                                        f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS {col} {dtype};"
+                                    )
+                                except Exception as e:
+                                    log_banco(
+                                        plugin=self.PLUGIN_NAME,
+                                        tabela=tabela,
+                                        operacao="SCHEMA_CHECK",
+                                        dados=f"Erro ao adicionar coluna {col} na tabela {tabela}: {e}",
+                                        nivel=logging.WARNING,
+                                    )
+                                    continue
+                        self.executar_sql(
+                            """
+                            INSERT INTO tabelas_registradas 
+                            (nome_tabela, plugin_owner, schema_versao, updated_at)
+                            VALUES (%s, %s, %s, NOW())
+                            ON CONFLICT (nome_tabela) DO UPDATE SET
+                                plugin_owner = EXCLUDED.plugin_owner,
+                                schema_versao = EXCLUDED.schema_versao,
+                                updated_at = NOW();
+                            """,
+                            (
+                                tabela,
+                                config.get("plugin", "system"),
+                                config.get("schema_versao", "1.0"),
+                            ),
+                        )
+                    except Exception as e:
+                        log_banco(
+                            plugin=self.PLUGIN_NAME,
+                            tabela=tabela,
+                            operacao="SCHEMA_CHECK",
+                            dados=f"Erro ao processar tabela {tabela}: {e}",
+                            nivel=logging.ERROR,
+                        )
+                        continue
+
+                log_banco(
+                    plugin=self.PLUGIN_NAME,
+                    tabela="ALL",
+                    operacao="SCHEMA_CHECK",
+                    dados=f"{len(schema['tabelas'])} tabelas criadas/atualizadas",
+                )
+                return True
+
         except Exception as e:
-            logger.error(f"Erro ao criar tabelas: {e}", exc_info=True)
+            log_banco(
+                plugin=self.PLUGIN_NAME,
+                tabela="ALL",
+                operacao="SCHEMA_CHECK",
+                dados=f"Erro ao criar tabelas: {e}",
+                nivel=logging.ERROR,
+            )
+            if self._conn:
+                self._conn.rollback()
+            return False
+
+    def registrar_tabela(self, plugin_name: str, table_name: str, schema: dict) -> bool:
+        """
+        Registra uma nova tabela no banco de dados.
+
+        Args:
+            plugin_name (str): Nome do plugin que está registrando a tabela
+            table_name (str): Nome da tabela a ser registrada
+            schema (dict): Schema da tabela com colunas e tipos
+
+        Returns:
+            bool: True se registrado com sucesso, False caso contrário
+        """
+        try:
+            banco_dados = self._gerente.obter_plugin("banco_dados")
+            if not banco_dados:
+                log_banco(
+                    plugin=self.PLUGIN_NAME,
+                    tabela="ALL",
+                    operacao="REGISTER_TABLE",
+                    dados="Plugin banco_dados não encontrado",
+                    nivel=logging.ERROR,
+                )
+                return False
+
+            sucesso = banco_dados.registrar_tabela(table_name, schema)
+            if sucesso:
+                log_banco(
+                    plugin=self.PLUGIN_NAME,
+                    tabela="ALL",
+                    operacao="REGISTER_TABLE",
+                    dados=f"Tabela {table_name} registrada com sucesso",
+                )
+            else:
+                log_banco(
+                    plugin=self.PLUGIN_NAME,
+                    tabela="ALL",
+                    operacao="REGISTER_TABLE",
+                    dados=f"Falha ao registrar tabela {table_name}",
+                    nivel=logging.ERROR,
+                )
+            return sucesso
+
+        except Exception as e:
+            log_banco(
+                plugin=self.PLUGIN_NAME,
+                tabela="ALL",
+                operacao="REGISTER_TABLE",
+                dados=f"Erro ao registrar tabela {table_name}: {e}",
+                nivel=logging.ERROR,
+            )
             return False
 
     def _registrar_em_banco_dados(self):
         try:
             from plugins.banco_dados import BancoDados
-            BancoDados.registrar_tabela(BancoDados.PLUGIN_NAME, "dados")
-        except Exception as e:
-            logger.warning(f"Falha ao registrar tabela em BancoDados: {e}")
 
-    def executar(self, *args, **kwargs) -> tuple[bool, Optional[list]]:
-        logger.warning("Função CRUD não implementada no GerenciadorBanco")
-        return False, None
+            banco_dados = BancoDados(gerenciador_banco=self)
+            banco_dados.registrar_tabela(BancoDados.PLUGIN_NAME, "dados")
+        except Exception as e:
+            log_banco(
+                plugin=self.PLUGIN_NAME,
+                tabela="ALL",
+                operacao="REGISTER_TABLE",
+                dados=f"Falha ao registrar tabela em BancoDados: {e}",
+                nivel=logging.WARNING,
+            )
+
+    def validar_schema_plugin(self, plugin: "Plugin") -> bool:
+        from utils.schema_generator import validar_plugin_tabelas
+
+        if not validar_plugin_tabelas(plugin):
+            log_banco(
+                plugin=self.PLUGIN_NAME,
+                tabela="ALL",
+                operacao="SCHEMA_CHECK",
+                dados=f"Schema inválido para o plugin {plugin.nome}",
+                nivel=logging.ERROR,
+            )
+            return False
+        return True
+
+    def executar(self, *args, **kwargs) -> bool:
+        """
+        Executa operações no banco de dados.
+
+        Returns:
+            bool: True se a operação foi bem sucedida, False caso contrário.
+        """
+        try:
+            if not self.inicializado:
+                log_banco(
+                    plugin=self.PLUGIN_NAME,
+                    tabela="ALL",
+                    operacao="EXECUTE",
+                    dados="GerenciadorBanco não inicializado",
+                    nivel=logging.ERROR,
+                )
+                return False
+
+            if not self._conn or self._conn.closed:
+                log_banco(
+                    plugin=self.PLUGIN_NAME,
+                    tabela="ALL",
+                    operacao="EXECUTE",
+                    dados="Conexão com banco não está ativa",
+                    nivel=logging.ERROR,
+                )
+                return False
+
+            return True
+        except Exception as e:
+            log_banco(
+                plugin=self.PLUGIN_NAME,
+                tabela="ALL",
+                operacao="EXECUTE",
+                dados=f"Erro na execução: {e}",
+                nivel=logging.ERROR,
+            )
+            return False
 
     def fechar(self) -> bool:
         try:
             if self._conn and not self._conn.closed:
                 self._conn.close()
-                logger.info("Conexão com o banco fechada")
+                log_banco(
+                    plugin=self.PLUGIN_NAME,
+                    tabela="ALL",
+                    operacao="DB_CLOSE",
+                    dados="Conexão com o banco fechada",
+                )
             return True
         except Exception as e:
-            logger.error(f"Erro ao fechar conexão: {e}")
+            log_banco(
+                plugin=self.PLUGIN_NAME,
+                tabela="ALL",
+                operacao="DB_CLOSE",
+                dados=f"Erro ao fechar conexão: {e}",
+                nivel=logging.ERROR,
+            )
             return False
 
     def finalizar(self) -> bool:
         try:
             self.fechar()
             super().finalizar()
-            logger.info("GerenciadorBanco finalizado com sucesso")
+            log_banco(
+                plugin=self.PLUGIN_NAME,
+                tabela="ALL",
+                operacao="FINALIZE",
+                dados="GerenciadorBanco finalizado com sucesso",
+            )
+
             return True
         except Exception as e:
-            logger.error(f"Erro ao finalizar GerenciadorBanco: {e}")
+            log_banco(
+                plugin=self.PLUGIN_NAME,
+                tabela="ALL",
+                operacao="FINALIZE",
+                dados=f"Erro ao finalizar GerenciadorBanco: {e}",
+                nivel=logging.ERROR,
+            )
             return False
 
     @property
     def conn(self):
         return self._conn
+
+    def executar_sql(self, query, params=None, fetchone=False, fetchall=False):
+        try:
+            with self._conn.cursor() as cur:
+                cur.execute(query, params)
+                if fetchone:
+                    result = cur.fetchone()
+                elif fetchall:
+                    result = cur.fetchall()
+                else:
+                    result = None
+                self._conn.commit()
+                return result
+        except Exception as e:
+            if self._conn:
+                self._conn.rollback()
+            log_banco(
+                plugin=self.PLUGIN_NAME,
+                tabela="ALL",
+                operacao="SQL_EXEC",
+                dados=f"Erro ao executar SQL: {e} | Query: {query}",
+                nivel=logging.ERROR,
+            )
+            raise

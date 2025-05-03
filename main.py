@@ -49,6 +49,11 @@ def iniciar_bot(config: dict) -> tuple:
         if not gerenciador_bot.iniciar():
             raise RuntimeError("Falha ao iniciar GerenciadorBot")
 
+        # Verificar inicialização dos gerenciadores críticos
+        if not hasattr(gerente, 'plugins') or 'gerenciador_banco' not in gerente.plugins:
+            raise RuntimeError("GerenciadorBanco não inicializado corretamente")
+        logger.info(f"Gerenciadores carregados: {list(gerente.plugins.keys())}")
+
         def finalizar():
             """Callback para finalizar gerenciadores."""
             try:

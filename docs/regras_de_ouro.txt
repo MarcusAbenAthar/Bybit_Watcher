@@ -1,0 +1,137 @@
+Regras de OURO para programar o bot:
+
+1 - Autônomo nas decisões (TP, SL e alavancagem);
+2 - Criterioso;
+3 - Seguro;
+4 - Certeiro;
+5 - Eficiente;
+6 - Clareza;
+7 - Modular;
+8 - Composto por plugins;
+9 - Testável;
+10 - Documentado com Docstrings e comentários;
+11 - Evitar hardcoded;
+
+
+Regras para Banco de Dados:
+1 - Cada plugin declara suas tabelas via `plugin_tabelas`
+2 - Versionamento obrigatório (plugin_schema_versao)
+3 - Modos de acesso claros (own/write/read)
+4 - Validação automática na inicialização
+5 - Migração controlada entre versões
+6 - O schema.json é gerado automaticamente
+
+
+Boas práticas ao programar o bot:
+
+1 - Evitar redundâncias;
+2 - Respeitar a responsabilidade de cada plugin;
+3 - Evitar importação circular;
+4 - Manter histórico de alterações no banco;
+5 - Sempre testar migrações em ambiente controlado;
+6 - Quanto mais inteligente e menos hardcoded, melhor será;
+
+Cada plugin segue:
+
+* Herança da classe base Plugin
+* Responsabilidade única
+* Interface padronizada
+* Documentação completa
+* Finalização segura
+* Responsável por sua própria finalização
+
+
+Padrão mínimo esperado pelo schema_generator - cada plugin deve conter as suas próprias nuances:
+
+* O campo schema define as colunas da tabela conforme sintaxe SQL padrão PostgreSQL.
+* O campo modo_acesso informa se a tabela é exclusiva do plugin (own) ou compartilhada (shared).
+* O campo plugin serve para rastrear qual plugin é o responsável por criar/gerenciar essa tabela.
+* O campo descricao é opcional, mas ajuda na documentação e visualização futura.
+
+Como usar:
+
+* nome_da_tabela: nome identificador da tabela no banco.
+* descricao (opcional, mas recomendado): explica o que essa tabela armazena.
+* modo_acesso: "own" se for só do plugin, "shared" se for comum entre vários.
+* plugin: use self.PLUGIN_NAME para manter rastreabilidade automática.
+* schema: dicionário onde a chave é o nome da coluna e o valor é o tipo SQL (pode conter constraints, ex: NOT NULL, DEFAULT, PRIMARY KEY).
+
+@property
+def plugin_tabelas(self) -> dict:
+    return {
+        "nome_da_tabela": {
+            "descricao": "Breve descrição do propósito da tabela.",
+            "modo_acesso": "own",  # ou 'shared'
+            "plugin": self.PLUGIN_NAME,
+            "schema": {
+                "coluna1": "TIPO_SQL [CONSTRAINTS]",
+                "coluna2": "TIPO_SQL [CONSTRAINTS]",
+                "coluna3": "TIPO_SQL [CONSTRAINTS]",
+                # ... adicione mais colunas conforme necessário
+            }
+        }
+    }
+
+
+Esta estrutura:
+
+* É modular
+* Evita dependências circulares
+* Facilita testes
+* Mantém organização clara
+* Separa responsabilidades
+
+
+
+Estrutura do Projeto (Atualizada):
+
+Bybit_Watcher/
+├── main.py
+├── .env
+├── regras_de_ouro.txt
+│
+├── plugins/
+│   ├── __init__.py
+│   ├── plugin.py
+│   ├── conexao.py
+│   ├── banco_dados.py
+│   ├── calculo_alavancagem.py
+│   ├── calculo_risco.py
+│   ├── analise_candles.py
+│   ├── medias_moveis.py
+│   ├── price_action.py
+│   ├── validador_dados.py
+│   ├── sinais_plugin.py
+│   ├── analisador_mercado.py
+│   ├── sltp.py
+│   ├── execucao_ordens.py
+│   │
+│   ├── indicadores/
+│   │    ├── __init__.py
+│   │    ├── indicadores_osciladores.py
+│   │    ├── indicadores_tendencia.py
+│   │    └── indicadores_volatilidade.py
+│   │
+│   └── gerenciadores/
+│         ├── __init__.py
+│         ├── gerenciador.py
+│         ├── gerenciador_banco.py
+│         ├── gerenciador_bot.py
+│         └── gerenciador_plugins.py
+│
+├── utils/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── logging_config.py
+│   └── plugin_utils.py
+│
+└── logs/
+    ├── bot/
+    │   └── bot_DD-MM-YYYY.log
+    ├── sinais/
+    │   └── sinais_DD-MM-YYYY.log
+    └── erros/
+        └── erros_DD-MM-YYYY.log
+
+
+https://github.com/MarcusAbenAthar/Bybit_Watcher

@@ -1,12 +1,15 @@
 {
     "analisador_mercado": [],
-    "analise_candles": [],
+    "analise_candles": [
+        "gerenciador_banco"
+    ],
     "banco_dados": [
         "gerenciador_banco"
     ],
     "calculo_alavancagem": [],
     "calculo_risco": [],
     "conexao": [],
+    "consolidador_sinais": [],
     "execucao_ordens": [
         "conexao"
     ],
@@ -17,6 +20,7 @@
     "outros_indicadores": [],
     "medias_moveis": [],
     "obter_dados": [
+        "conexao",
         "conexao"
     ],
     "price_action": [],

@@ -4,7 +4,8 @@ import os
 import json
 import numpy as np
 import talib
-from typing import Dict, Any
+from typing import Dict, Any, List
+import datetime
 
 from utils.logging_config import get_logger
 from plugins.plugin import Plugin
@@ -19,169 +20,73 @@ class AnaliseCandles(Plugin):
     - Modular, testável, documentado e sem hardcode.
     - Autoidentificação de dependências/plugins.
     """
+
     PLUGIN_NAME = "analise_candles"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["analise", "candles", "padroes"]
     PLUGIN_PRIORIDADE = 100
 
-    @classmethod
-    def dependencias(cls):
-        """
-        Retorna lista de nomes das dependências obrigatórias do plugin AnaliseCandles.
-        """
-        return []
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"
 
-    def finalizar(self):
-        """
-        Finaliza o plugin AnaliseCandles, limpando estado e garantindo shutdown seguro.
-        """
-        try:
-            super().finalizar()
-            logger.info("AnaliseCandles finalizado com sucesso.")
-        except Exception as e:
-            logger.error(f"Erro ao finalizar AnaliseCandles: {e}")
-
-    """
-    Plugin de análise de padrões de candles (ex: martelo, engolfo, etc).
-    - Responsabilidade única: análise de padrões de candles.
-    - Modular, testável, documentado e sem hardcode.
-    - Autoidentificação de dependências/plugins.
-    """
-    PLUGIN_NAME = "analise_candles"
-    PLUGIN_CATEGORIA = "plugin"
-    PLUGIN_TAGS = ["analise", "candles", "padroes"]
-    PLUGIN_PRIORIDADE = 100
-
-    @classmethod
-    def dependencias(cls):
-        """
-        Retorna lista de nomes das dependências obrigatórias do plugin AnaliseCandles.
-        """
-        return []
-
-    PLUGIN_NAME = "analise_candles"
-    PLUGIN_CATEGORIA = "plugin"
-    PLUGIN_TAGS = ["candles", "padroes", "price_action"]
-    PLUGIN_PRIORIDADE = 40
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._padroes_talib = self._carregar_padroes()
-
-    def inicializar(self, config: Dict[str, Any]) -> bool:
-        """
-        Inicializa o plugin com a configuração fornecida.
-
-        Args:
-            config: Dicionário com configurações.
-
-        Returns:
-            bool: True se inicializado com sucesso, False caso contrário.
-        """
-        if not super().inicializar(config):
-            return False
-        logger.info(
-            f"[{self.nome}] inicializado com {len(self._padroes_talib)} padrões TA-Lib"
-        )
-        return True
-
-    def _validar_klines(self, klines: list, symbol: str, timeframe: str) -> bool:
-        """
-        Valida o formato da lista de klines.
-
-        Args:
-            klines: Lista de k-lines.
-            symbol: Símbolo do par.
-            timeframe: Timeframe.
-
-        Returns:
-            bool: True se válido, False caso contrário.
-        """
-        if not isinstance(klines, list):
-            logger.error(f"[{self.nome}] klines não é uma lista: {type(klines)}")
-            return False
-
-        if len(klines) < 20:
-            logger.error(
-                f"[{self.nome}] Dados insuficientes para {symbol} - {timeframe}: {len(klines)} klines"
-            )
-            return False
-
-        for kline in klines:
-            if not isinstance(kline, (list, tuple)) or len(kline) < 6:
-                logger.error(
-                    f"[{self.nome}] K-line malformada para {symbol} - {timeframe}: {kline}"
-                )
-                return False
-            try:
-                # Verificar se open, high, low, close, volume são numéricos
-                for i in range(1, 6):  # Índices 1 a 5
-                    float(kline[i])
-            except (TypeError, ValueError):
-                logger.error(
-                    f"[{self.nome}] Valor não numérico em k-line para {symbol} - {timeframe}: {kline}"
-                )
-                return False
-
-        return True
-
-    def executar(self, *args, **kwargs) -> bool:
-        """
-        Executa a análise de padrões de candlestick e armazena resultados.
-
-        Args:
-            dados_completos (dict): Dados crus e processados.
-            symbol (str): Símbolo do par.
-            timeframe (str): Timeframe.
-
-        Returns:
-            bool: True (mesmo em erro, para não interromper o pipeline).
-        """
-        resultado_padrao = {
-            "candles": {"padroes": {}, "forca": "LATERAL", "confianca": 0.0}
+    @property
+    def plugin_tabelas(self) -> dict:
+        tabelas = {
+            "padroes_candles": {
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "padrao": "VARCHAR(50) NOT NULL",
+                    "direcao": "VARCHAR(10) NOT NULL",
+                    "forca": "DECIMAL(5,2)",
+                    "confianca": "DECIMAL(5,2)",
+                    "preco_entrada": "DECIMAL(18,8)",
+                    "stop_loss": "DECIMAL(18,8)",
+                    "take_profit": "DECIMAL(18,8)",
+                    "volume": "DECIMAL(18,8)",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+            }
         }
+        return tabelas
 
-        dados_completos = kwargs.get("dados_completos")
-        symbol = kwargs.get("symbol")
-        timeframe = kwargs.get("timeframe")
+    @classmethod
+    def dependencias(cls):
+        """
+        Retorna lista de nomes das dependências obrigatórias do plugin AnaliseCandles.
+        """
+        return ["gerenciador_banco"]
 
-        if not all([dados_completos, symbol, timeframe]):
-            logger.error(
-                f"[{self.nome}] Parâmetros obrigatórios ausentes: symbol={symbol}, timeframe={timeframe}"
-            )
-            if isinstance(dados_completos, dict):
-                dados_completos.update(resultado_padrao)
-            return True
+    def __init__(self, gerente=None, gerenciador_banco=None, **kwargs):
+        """
+        Inicializa o plugin AnaliseCandles.
 
-        if not isinstance(dados_completos, dict):
-            logger.error(
-                f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
-            )
-            dados_completos["candles"] = resultado_padrao["candles"]
-            return True
+        Args:
+            gerente: Instância do GerenciadorPlugins
+            gerenciador_banco: Instância do GerenciadorBanco
+            **kwargs: Outras dependências
+        """
+        super().__init__(**kwargs)
+        self._gerente = gerente
+        self._gerenciador_banco = gerenciador_banco
+        self._padroes_talib = self._carregar_padroes()
+        self._funcoes_talib = self._mapear_funcoes_talib()
 
-        crus = dados_completos.get("crus", [])
-        if not self._validar_klines(crus, symbol, timeframe):
-            dados_completos["candles"] = resultado_padrao["candles"]
-            return True
-
-        try:
-            resultado = self._analisar(crus, symbol, timeframe)
-            dados_completos["candles"] = resultado
-            if resultado["padroes"]:
-                logger.info(f"[{self.nome}] Padrões detectados para {symbol}-{timeframe}: {list(resultado['padroes'].keys())}")
-            else:
-                logger.info(f"[{self.nome}] Nenhum padrão de candle detectado para {symbol}-{timeframe}")
-            logger.debug(f"[{self.nome}] Análise concluída para {symbol}-{timeframe}: {resultado}")
-            return True
-
-        except Exception as e:
-            logger.error(
-                f"[{self.nome}] Erro ao executar análise de candles: {e}", exc_info=True
-            )
-            if isinstance(dados_completos, dict):
-                dados_completos.update(resultado_padrao)
-            return True
+    def _mapear_funcoes_talib(self) -> Dict[str, callable]:
+        """
+        Mapeia os nomes dos padrões para as funções do TA-Lib.
+        """
+        funcoes = {}
+        for padrao in self._padroes_talib:
+            nome_funcao = f"CDL{padrao.upper()}"
+            if hasattr(talib, nome_funcao):
+                funcoes[padrao] = getattr(talib, nome_funcao)
+        return funcoes
 
     def _carregar_padroes(self) -> set:
         """
@@ -189,9 +94,6 @@ class AnaliseCandles(Plugin):
 
         Returns:
             set: Conjunto de nomes de padrões TA-Lib.
-
-        Raises:
-            RuntimeError: Se o arquivo não for encontrado ou os padrões estiverem vazios.
         """
         caminho = os.path.join("utils", "padroes_talib.json")
         try:
@@ -208,208 +110,234 @@ class AnaliseCandles(Plugin):
             return padroes
 
         except Exception as e:
-            logger.error(
-                f"[{self.nome}] Erro ao carregar padrões TA-Lib: {e}", exc_info=True
-            )
-            raise RuntimeError("Falha crítica ao carregar os padrões TA-Lib.")
-
-    def _analisar(self, candles: list, symbol: str, timeframe: str) -> dict:
-        """
-        Analisa os padrões de candlestick usando TA-Lib.
-
-        Args:
-            candles: Lista de k-lines.
-            symbol: Símbolo do par.
-            timeframe: Timeframe.
-
-        Returns:
-            dict: Resultados com padrões, força e confiança.
-        """
-        logger.debug(
-            f"[{self.nome}] Analisando padrões TA-Lib para {symbol}-{timeframe}"
-        )
-        ohlcv = self._extrair_ohlcv(candles)
-        open_, high, low, close, volume = (
-            ohlcv["open"],
-            ohlcv["high"],
-            ohlcv["low"],
-            ohlcv["close"],
-            ohlcv["volume"],
-        )
-
-        if any(len(arr) < 10 for arr in [open_, high, low, close, volume]):
-            raise ValueError("OHLCV incompleto ou insuficiente para análise")
-
-        padroes = {}
-        for func in talib.get_function_groups().get("Pattern Recognition", []):
-            nome_padrao = func.lower().replace("cdl", "")
-            if nome_padrao not in self._padroes_talib:
-                continue
-
-            resultado = getattr(talib, func)(open_, high, low, close)
-            if len(resultado) < 2:
-                continue
-
-            for i in [-2, -1]:
-                if resultado[i] == 0:
-                    continue
-
-                direcao = "alta" if resultado[i] > 0 else "baixa"
-                sinal = "compra" if direcao == "alta" else "venda"
-
-                try:
-                    timestamp = candles[i][0]
-                except IndexError:
-                    logger.warning(
-                        f"[{self.nome}] Timestamp não encontrado para índice {i}"
-                    )
-                    continue
-
-                sl = self._calcular_sl(low, high, direcao)
-                tp = self._calcular_tp(close, direcao)
-                if sl is None or tp is None:
-                    logger.warning(
-                        f"[{self.nome}] Padrão {nome_padrao} ignorado por SL/TP inválido"
-                    )
-                    continue
-
-                padroes[nome_padrao] = {
-                    "estado": "formado" if i == -2 else "em formação",
-                    "sinal": sinal,
-                    "stop_loss": sl,
-                    "take_profit": tp,
-                    "timestamp": timestamp,
-                }
-
-                logger.info(
-                    f"[{self.nome}] Padrão {nome_padrao} ({sinal}) detectado em {symbol}-{timeframe}"
-                )
-                break  # só pega o mais recente
-
-        forca = self._calcular_forca(close, volume)
-        confianca = self._calcular_confianca(close, volume, len(padroes))
-
-        return {
-            "padroes": padroes,
-            "forca": forca,
-            "confianca": confianca,
-        }
+            logger.error(f"[{self.nome}] Erro ao carregar padrões TA-Lib: {e}")
+            return set()
 
     def _extrair_ohlcv(self, candles: list) -> dict:
+        """Extrai arrays OHLCV dos candles."""
+        try:
+            dados = list(zip(*candles))
+            return {
+                "timestamp": np.array(dados[0], dtype=np.float64),
+                "open": np.array(dados[1], dtype=np.float64),
+                "high": np.array(dados[2], dtype=np.float64),
+                "low": np.array(dados[3], dtype=np.float64),
+                "close": np.array(dados[4], dtype=np.float64),
+                "volume": np.array(dados[5], dtype=np.float64),
+            }
+        except Exception as e:
+            logger.error(f"[{self.nome}] Erro ao extrair OHLCV: {e}")
+            return {
+                "timestamp": np.array([]),
+                "open": np.array([]),
+                "high": np.array([]),
+                "low": np.array([]),
+                "close": np.array([]),
+                "volume": np.array([]),
+            }
+
+    def _identificar_padroes(self, ohlcv: dict) -> List[Dict]:
         """
-        Extrai OHLCV das k-lines.
+        Identifica padrões de candlestick usando TA-Lib.
+        """
+        padroes_encontrados = []
+
+        for nome_padrao, funcao in self._funcoes_talib.items():
+            try:
+                resultado = funcao(
+                    ohlcv["open"], ohlcv["high"], ohlcv["low"], ohlcv["close"]
+                )
+
+                # Verifica o último candle
+                if resultado[-1] != 0:
+                    direcao = "LONG" if resultado[-1] > 0 else "SHORT"
+                    forca = abs(resultado[-1]) / 100.0
+
+                    # Calcula stop loss e take profit
+                    if direcao == "LONG":
+                        stop_loss = float(min(ohlcv["low"][-3:]))
+                        take_profit = float(
+                            ohlcv["close"][-1] + (ohlcv["close"][-1] - stop_loss) * 1.5
+                        )
+                    else:
+                        stop_loss = float(max(ohlcv["high"][-3:]))
+                        take_profit = float(
+                            ohlcv["close"][-1] - (stop_loss - ohlcv["close"][-1]) * 1.5
+                        )
+
+                    padrao = {
+                        "timestamp": datetime.datetime.fromtimestamp(
+                            int(ohlcv["timestamp"][-1] / 1000)
+                        ),
+                        "padrao": nome_padrao,
+                        "direcao": direcao,
+                        "forca": round(forca, 2),
+                        "confianca": round(min(forca * 1.5, 1.0), 2),
+                        "preco_entrada": float(ohlcv["close"][-1]),
+                        "stop_loss": stop_loss,
+                        "take_profit": take_profit,
+                        "volume": float(ohlcv["volume"][-1]),
+                    }
+                    padroes_encontrados.append(padrao)
+
+            except Exception as e:
+                logger.error(
+                    f"[{self.nome}] Erro ao processar padrão {nome_padrao}: {e}"
+                )
+                continue
+
+        return padroes_encontrados
+
+    def _detectar_padroes(self, candles: list) -> list:
+        """
+        Detecta padrões de candles usando os dados fornecidos e TA-Lib.
+
+        Args:
+            candles (list): Lista de candles no formato OHLCV.
+
+        Returns:
+            list: Lista de padrões detectados com informações detalhadas.
+        """
+        from talib import abstract
+
+        padroes_detectados = []
+
+        try:
+            # Extrair OHLCV
+            ohlcv = self._extrair_ohlcv(candles)
+
+            # Iterar sobre os padrões disponíveis no padroes_talib.json
+            for padrao in self._padroes_talib:
+                nome_funcao = f"CDL{padrao.upper()}"
+                if hasattr(abstract, nome_funcao):
+                    funcao = getattr(abstract, nome_funcao)
+                    resultado = funcao(ohlcv)
+
+                    # Verificar o último candle para o padrão detectado
+                    if resultado[-1] != 0:
+                        direcao = "Alta" if resultado[-1] > 0 else "Baixa"
+                        padroes_detectados.append(
+                            {
+                                "padrao": padrao,
+                                "direcao": direcao,
+                                "candle": candles[-1],
+                                "forca": abs(resultado[-1]),
+                            }
+                        )
+
+        except Exception as e:
+            logger.error(f"[{self.nome}] Erro ao detectar padrões: {e}", exc_info=True)
+
+        return padroes_detectados
+
+    def _processar_dados(self, dados_completos: dict) -> dict:
+        """
+        Processa os dados de candles para análise.
+        Requer: symbol e timeframe presentes em dados_completos.
+        """
+        symbol = dados_completos.get("symbol")
+        timeframe = dados_completos.get("timeframe")
+
+        # Fallback defensivo: tentar extrair de outros campos
+        if not symbol:
+            # Exemplo: tentar extrair de candles se houver padrão
+            # symbol = ... (adicione lógica se possível)
+            pass
+        if not timeframe:
+            # Exemplo: tentar extrair de candles se houver padrão
+            # timeframe = ... (adicione lógica se possível)
+            pass
+
+        if not all([symbol, timeframe]):
+            logger.error(f"[{self.nome}] Symbol ou timeframe não fornecidos.")
+            return {}
+
+        try:
+            dados_crus = dados_completos.get("crus", [])
+            if not dados_crus:
+                logger.error(f"[{self.nome}] Dados crus não encontrados")
+                return {}
+
+            # Extrair dados OHLCV
+            ohlcv = self._extrair_ohlcv(dados_crus)
+            if not all(len(v) > 0 for v in ohlcv.values()):
+                logger.error(f"[{self.nome}] Falha ao extrair dados OHLCV")
+                return {}
+
+            # Identificar padrões
+            padroes = self._identificar_padroes(ohlcv)
+            if not padroes:
+                return {}
+
+            # Adicionar symbol e timeframe aos padrões
+            for padrao in padroes:
+                padrao["symbol"] = symbol
+                padrao["timeframe"] = timeframe
+
+            return padroes[0]  # Retorna o padrão mais recente
+
+        except Exception as e:
+            logger.error(f"[{self.nome}] Erro ao processar dados: {e}", exc_info=True)
+            return {}
+
+    def executar(self, *args, **kwargs):
+        resultado_padrao = {"padroes_candles": []}
+        try:
+            dados_completos = kwargs.get("dados_completos")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+            if not all([dados_completos, symbol, timeframe]):
+                logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes")
+                return resultado_padrao
+            if not isinstance(dados_completos, dict):
+                logger.error(
+                    f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
+                )
+                return resultado_padrao
+            candles = dados_completos.get("crus", [])
+            if not self._validar_candles(candles, symbol, timeframe):
+                return resultado_padrao
+            padroes = self._detectar_padroes(candles)
+            logger.debug(
+                f"[{self.nome}] Padrões detectados para {symbol}-{timeframe}: {padroes}"
+            )
+            return {"padroes_candles": padroes}
+        except Exception as e:
+            logger.error(f"[{self.nome}] Erro ao executar: {e}", exc_info=True)
+            return resultado_padrao
+
+    def _validar_candles(self, candles, symbol: str, timeframe: str) -> bool:
+        """
+        Valida o formato da lista de candles.
 
         Args:
             candles: Lista de k-lines.
+            symbol (str): Símbolo do par.
+            timeframe (str): Timeframe.
 
         Returns:
-            dict: Arrays de open, high, low, close, volume.
+            bool: True se válido, False caso contrário.
         """
-        try:
-            return {
-                "open": np.array([float(c[1]) for c in candles]),
-                "high": np.array([float(c[2]) for c in candles]),
-                "low": np.array([float(c[3]) for c in candles]),
-                "close": np.array([float(c[4]) for c in candles]),
-                "volume": np.array([float(c[5]) for c in candles]),
-            }
-        except Exception as e:
-            logger.error(f"[{self.nome}] Erro ao extrair OHLCV: {e}", exc_info=True)
-            return {k: np.array([]) for k in ["open", "high", "low", "close", "volume"]}
-
-    def _calcular_sl(self, low, high, direcao):
-        """
-        Calcula o stop-loss com base na volatilidade.
-
-        Args:
-            low, high: Arrays de preços low e high.
-            direcao: Direção do padrão (alta ou baixa).
-
-        Returns:
-            float: Valor do stop-loss ou None se erro.
-        """
-        try:
-            if len(low) < 10 or len(high) < 10:
-                return None
-            volatilidade = np.std(high[-10:] - low[-10:])
-            return (
-                round(low[-2] - volatilidade * 1.5, 2)
-                if direcao == "alta"
-                else round(high[-2] + volatilidade * 1.5, 2)
+        if not isinstance(candles, list):
+            logger.error(f"[{self.nome}] candles não é uma lista: {type(candles)}")
+            return False
+        if len(candles) < 10:
+            logger.warning(
+                f"[{self.nome}] Candles insuficientes para {symbol} - {timeframe}"
             )
-        except Exception as e:
-            logger.error(f"[{self.nome}] Erro no SL: {e}")
-            return None
-
-    def _calcular_tp(self, close, direcao):
-        """
-        Calcula o take-profit com base na volatilidade.
-
-        Args:
-            close: Array de preços close.
-            direcao: Direção do padrão (alta ou baixa).
-
-        Returns:
-            float: Valor do take-profit ou None se erro.
-        """
-        try:
-            if len(close) < 10:
-                return None
-            volatilidade = np.std(close[-10:])
-            return (
-                round(close[-2] + volatilidade * 2, 2)
-                if direcao == "alta"
-                else round(close[-2] - volatilidade * 2, 2)
-            )
-        except Exception as e:
-            logger.error(f"[{self.nome}] Erro no TP: {e}")
-            return None
-
-    def _calcular_forca(self, close, volume):
-        """
-        Calcula a força do padrão com base em variação e volume.
-
-        Args:
-            close, volume: Arrays de preços close e volume.
-
-        Returns:
-            str: Força do padrão (FORTE, MÉDIA, LATERAL).
-        """
-        try:
-            if len(close) < 2 or len(volume) < 10:
-                return "LATERAL"
-            variacao = abs(close[-1] - close[-2]) / close[-2]
-            vol_rel = volume[-1] / np.mean(volume[-10:])
-            score = variacao * vol_rel
-            if score > 0.6:
-                return "FORTE"
-            elif score > 0.25:
-                return "MÉDIA"
-            else:
-                return "LATERAL"
-        except Exception as e:
-            logger.error(f"[{self.nome}] Erro na força: {e}")
-            return "LATERAL"
-
-    def _calcular_confianca(self, close, volume, padroes_detectados):
-        """
-        Calcula a confiança do padrão com base em volatilidade, volume e número de padrões.
-
-        Args:
-            close, volume: Arrays de preços close e volume.
-            padroes_detectados: Número de padrões detectados.
-
-        Returns:
-            float: Confiança normalizada entre 0.0 e 1.0.
-        """
-        try:
-            if len(close) < 10 or len(volume) < 10:
-                return 0.0
-            volatilidade = np.std(close[-10:]) / np.mean(close[-10:])
-            vol_rel = volume[-1] / np.mean(volume[-10:])
-            padrao_bonus = 0.1 * padroes_detectados
-            confianca = min(volatilidade * vol_rel + padrao_bonus, 1.0)
-            return round(max(0.0, confianca), 2)
-        except Exception as e:
-            logger.error(f"[{self.nome}] Erro na confiança: {e}")
-            return 0.0
+            return False
+        for item in candles:
+            if not isinstance(item, (list, tuple)) or len(item) < 5:
+                logger.error(
+                    f"[{self.nome}] Item inválido em candles para {symbol} - {timeframe}: {item}"
+                )
+                return False
+            for idx in [2, 3, 4]:  # high, low, close
+                try:
+                    float(item[idx])
+                except (TypeError, ValueError):
+                    logger.error(
+                        f"[{self.nome}] Valor não numérico em candles[{idx}]: {item[idx]}"
+                    )
+                    return False
+        return True

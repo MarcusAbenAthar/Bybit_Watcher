@@ -16,6 +16,7 @@ class SLTP(Plugin):
     - Modular, testável, documentado e sem hardcode.
     - Autoidentificação de dependências/plugins.
     """
+
     PLUGIN_NAME = "sltp"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["sltp", "gerenciamento", "risco"]
@@ -294,103 +295,31 @@ class SLTP(Plugin):
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao registrar resultado: {e}")
 
-    def executar(self, **kwargs) -> bool:
-        """
-        Executa a geração de SL/TP e atualiza dados_completos.
-
-        Args:
-            **kwargs: Inclui contexto, atr, candle_tamanho, direcao, forca, sinal, dados_completos.
-
-        Returns:
-            bool: True (mesmo em erro, para não interromper o pipeline).
-        """
-        if not self.inicializado:
-            logger.error(f"[{self.nome}] Não inicializado")
-            dados_completos = kwargs.get("dados_completos", {})
-            if isinstance(dados_completos, dict):
-                dados_completos["sltp"] = {"stop_loss": None, "take_profit": None}
-            return True
-
+    def executar(self, *args, **kwargs):
+        resultado_padrao = {
+            "sltp": {"stop_loss": None, "take_profit": None, "confianca": 0.0}
+        }
         try:
-            dados_completos = kwargs.get("dados_completos", {})
+            dados_completos = kwargs.get("dados_completos")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+            if not all([dados_completos, symbol, timeframe]):
+                logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes")
+                return resultado_padrao
             if not isinstance(dados_completos, dict):
                 logger.error(
                     f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
                 )
-                dados_completos["sltp"] = {"stop_loss": None, "take_profit": None}
-                return True
-
-            contexto = kwargs.get("contexto", {})
-            atr = kwargs.get("atr", 0.0)
-            candle_tamanho = kwargs.get("candle_tamanho", 0.0)
-            direcao = kwargs.get("direcao", "LATERAL")
-            forca = kwargs.get("forca", "FRACA")
-            sinal = kwargs.get("sinal", {})
-            preco_atual = (
-                dados_completos.get("crus", [[]])[-1][4]
-                if dados_completos.get("crus")
-                else 0.0
-            )
-
-            if not isinstance(atr, (int, float)) or atr <= 0:
-                logger.error(f"[{self.nome}] ATR inválido: {atr}")
-                dados_completos["sltp"] = {"stop_loss": None, "take_profit": None}
-                return True
-            if not isinstance(candle_tamanho, (int, float)) or candle_tamanho <= 0:
-                logger.warning(
-                    f"[{self.nome}] candle_tamanho inválido: {candle_tamanho}. Ignorando."
-                )
-                candle_tamanho = atr  # Fallback
-            if direcao not in ["ALTA", "BAIXA", "LATERAL", "NEUTRO"]:
-                logger.error(f"[{self.nome}] Direção inválida: {direcao}")
-                dados_completos["sltp"] = {"stop_loss": None, "take_profit": None}
-                return True
-            if preco_atual <= 0:
-                logger.error(f"[{self.nome}] Preço atual inválido: {preco_atual}")
-                dados_completos["sltp"] = {"stop_loss": None, "take_profit": None}
-                return True
-
-            cenarios = self._simular_cenarios(atr, candle_tamanho)
-            if not cenarios:
-                logger.error(f"[{self.nome}] Nenhum cenário SL/TP gerado")
-                dados_completos["sltp"] = {"stop_loss": None, "take_profit": None}
-                return True
-
-            estilo_contexto = self._contexto_multitemporal(contexto, direcao, forca)
-            estilo_performance = self._ajustar_por_performance()
-
-            estilo_final = (
-                "conservador"
-                if "conservador" in self._estilos_sltp
-                else self._get_estilo_padrao()
-            )
-            if estilo_contexto != "conservador" and estilo_performance != "conservador":
-                estilo_final = estilo_performance
-
-            sltp_bruto = cenarios.get(estilo_final) or cenarios.get(
-                self._get_estilo_padrao()
-            )
-            sltp_final = self._consolidar_com_indicadores(
-                sltp_bruto["sl"], sltp_bruto["tp"], contexto, direcao, preco_atual
-            )
-
-            self._registrar_resultado(
-                {
-                    **sinal,
-                    **sltp_final,
-                    "direcao": direcao,
-                    "indicadores_ativos": contexto.get("indicadores_ativos", []),
-                },
-                resultado=sinal.get("resultado", "nenhum"),
-            )
-
-            dados_completos["sltp"] = sltp_final
-            logger.info(f"[{self.nome}] SL/TP gerados ({estilo_final}): {sltp_final}")
-            return True
+                return resultado_padrao
+            candles = dados_completos.get("crus", [])
+            if not self._validar_candles(candles, symbol, timeframe):
+                return resultado_padrao
+            resultado = self._calcular_sltp(candles)
+            logger.debug(f"[{self.nome}] SL/TP para {symbol}-{timeframe}: {resultado}")
+            return {"sltp": resultado}
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao executar: {e}", exc_info=True)
-            dados_completos["sltp"] = {"stop_loss": None, "take_profit": None}
-            return True
+            return resultado_padrao
 
     def finalizar(self):
         """
@@ -398,6 +327,30 @@ class SLTP(Plugin):
         """
         try:
             super().finalizar()
-            logger.info("SLTP finalizado com sucesso.")
+            logger.debug("SLTP finalizado com sucesso.")
         except Exception as e:
             logger.error(f"Erro ao finalizar SLTP: {e}")
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        tabelas = {
+            "sltp": {
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "stop_loss": "DECIMAL(18,8)",
+                    "take_profit": "DECIMAL(18,8)",
+                    "confianca": "DECIMAL(5,2)",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+            },
+        }
+        return tabelas
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"

@@ -1,4 +1,229 @@
 {
-  "generated_at": "2025-04-28T23:07:05.799160Z",
-  "columns": {}
+  "schema_versao": "1.0",
+  "gerado_por": "gerenciador_banco",
+  "tabelas": {
+    "dados": {
+      "columns": {
+        "timestamp": "FLOAT",
+        "symbol": "VARCHAR(20)",
+        "price": "FLOAT"
+      },
+      "plugin": "system"
+    },
+    "outros_indicadores": {
+      "columns": {
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timeframe": "VARCHAR(10) NOT NULL",
+          "indicador": "VARCHAR(50) NOT NULL",
+          "valor": "DECIMAL(18,8)",
+          "descricao": "TEXT",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        },
+        "modo_acesso": "own",
+        "plugin": "calculo_alavancagem"
+      },
+      "plugin": "calculo_alavancagem",
+      "schema_versao": "1.0"
+    },
+    "calculo_risco": {
+      "columns": {
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timeframe": "VARCHAR(10) NOT NULL",
+          "risco": "DECIMAL(5,2)",
+          "confianca": "DECIMAL(5,2)",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        },
+        "modo_acesso": "own",
+        "plugin": "calculo_risco"
+      },
+      "plugin": "calculo_risco",
+      "schema_versao": "1.0"
+    },
+    "indicadores_osciladores": {
+      "columns": {
+        "schema": {},
+        "modo_acesso": "own",
+        "plugin": "indicadores_osciladores",
+        "columns": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timeframe": "VARCHAR(10) NOT NULL",
+          "indicador": "VARCHAR(50) NOT NULL",
+          "valor": "DECIMAL(18,8)",
+          "zona": "VARCHAR(20)",
+          "sinal": "VARCHAR(10)",
+          "forca": "DECIMAL(5,2)",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        }
+      },
+      "plugin": "indicadores_osciladores",
+      "schema_versao": "1.0"
+    },
+    "indicadores_tendencia": {
+      "columns": {
+        "descricao": "Tabela com indicadores de tend\u00eancia calculados.",
+        "modo_acesso": "own",
+        "plugin": "indicadores_tendencia",
+        "columns": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timeframe": "VARCHAR(10) NOT NULL",
+          "indicador": "VARCHAR(50) NOT NULL",
+          "valor": "DECIMAL(18,8)",
+          "direcao": "VARCHAR(10)",
+          "forca": "DECIMAL(5,2)",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        }
+      },
+      "plugin": "indicadores_tendencia",
+      "schema_versao": "1.0"
+    },
+    "medias_moveis": {
+      "columns": {
+        "descricao": "Tabela com m\u00e9dias m\u00f3veis calculadas.",
+        "modo_acesso": "own",
+        "plugin": "indicadores_tendencia",
+        "columns": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timeframe": "VARCHAR(10) NOT NULL",
+          "tipo": "VARCHAR(20) NOT NULL",
+          "periodo": "INTEGER NOT NULL",
+          "valor": "DECIMAL(18,8) NOT NULL",
+          "direcao": "VARCHAR(10)",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        }
+      },
+      "plugin": "indicadores_tendencia",
+      "schema_versao": "1.0"
+    },
+    "indicadores_volatilidade": {
+      "columns": {
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timeframe": "VARCHAR(10) NOT NULL",
+          "indicador": "VARCHAR(50) NOT NULL",
+          "valor": "DECIMAL(18,8)",
+          "volatilidade": "DECIMAL(18,8)",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        },
+        "modo_acesso": "own",
+        "plugin": "indicadores_volatilidade"
+      },
+      "plugin": "indicadores_volatilidade",
+      "schema_versao": "1.0"
+    },
+    "indicadores_volume": {
+      "columns": {
+        "columns": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timeframe": "VARCHAR(10) NOT NULL",
+          "indicador": "VARCHAR(50) NOT NULL",
+          "valor": "DECIMAL(18,8)",
+          "volume_base": "DECIMAL(18,8)",
+          "volume_quote": "DECIMAL(18,8)",
+          "direcao": "VARCHAR(10)",
+          "forca": "DECIMAL(5,2)",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        },
+        "plugin": "indicadores_volume"
+      },
+      "plugin": "indicadores_volume",
+      "schema_versao": "1.0"
+    },
+    "price_action": {
+      "columns": {
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timeframe": "VARCHAR(10) NOT NULL",
+          "direcao": "VARCHAR(10)",
+          "forca": "DECIMAL(5,2)",
+          "confianca": "DECIMAL(5,2)",
+          "preco_entrada": "DECIMAL(18,8)",
+          "stop_loss": "DECIMAL(18,8)",
+          "take_profit": "DECIMAL(18,8)",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        },
+        "modo_acesso": "own",
+        "plugin": "price_action"
+      },
+      "plugin": "price_action",
+      "schema_versao": "1.0"
+    },
+    "sltp": {
+      "columns": {
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timeframe": "VARCHAR(10) NOT NULL",
+          "stop_loss": "DECIMAL(18,8)",
+          "take_profit": "DECIMAL(18,8)",
+          "confianca": "DECIMAL(5,2)",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        },
+        "modo_acesso": "own",
+        "plugin": "sltp"
+      },
+      "plugin": "sltp",
+      "schema_versao": "1.0"
+    },
+    "sinais_gerados": {
+      "columns": {
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timeframe": "VARCHAR(10) NOT NULL",
+          "direcao": "VARCHAR(10) NOT NULL",
+          "preco_entrada": "DECIMAL(18,8) NOT NULL",
+          "stop_loss": "DECIMAL(18,8) NOT NULL",
+          "take_profit": "DECIMAL(18,8) NOT NULL",
+          "confianca": "DECIMAL(5,2) NOT NULL",
+          "alavancagem": "INTEGER NOT NULL",
+          "status": "VARCHAR(20) NOT NULL",
+          "resultado": "DECIMAL(18,8)",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        },
+        "modo_acesso": "own",
+        "plugin": "sinais_plugin"
+      },
+      "plugin": "sinais_plugin",
+      "schema_versao": "1.0"
+    },
+    "analises_consolidadas": {
+      "columns": {
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timeframe": "VARCHAR(10) NOT NULL",
+          "tipo_analise": "VARCHAR(50) NOT NULL",
+          "valor": "DECIMAL(18,8)",
+          "direcao": "VARCHAR(10)",
+          "peso": "DECIMAL(5,2)",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        },
+        "modo_acesso": "own",
+        "plugin": "sinais_plugin"
+      },
+      "plugin": "sinais_plugin",
+      "schema_versao": "1.0"
+    }
+  }
 }

@@ -6,6 +6,8 @@ com SL/TP, confiança e alavancagem.
 from utils.logging_config import get_logger
 from plugins.plugin import Plugin
 import logging
+from copy import deepcopy
+import numpy as np
 
 logger = get_logger(__name__)
 logger_sinais = logging.getLogger("sinais")
@@ -19,10 +21,70 @@ class SinaisPlugin(Plugin):
     - Modular, testável, documentado e sem hardcode.
     - Autoidentificação de dependências/plugins.
     """
+
     PLUGIN_NAME = "sinais_plugin"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["sinais", "consolidador", "analise"]
     PLUGIN_PRIORIDADE = 100
+
+    _RESULTADO_PADRAO = {
+        "analise_mercado": {
+            "direcao": "LATERAL",
+            "forca": "FRACA",
+            "confianca": 0.0,
+            "preco_atual": 0.0,
+            "volume": 0.0,
+            "rsi": 50.0,
+            "tendencia": "LATERAL",
+            "suporte": 0.0,
+            "resistencia": 0.0,
+            "atr": 0.0,
+        }
+    }
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        tabelas = {
+            "sinais_gerados": {
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "direcao": "VARCHAR(10) NOT NULL",
+                    "preco_entrada": "DECIMAL(18,8) NOT NULL",
+                    "stop_loss": "DECIMAL(18,8) NOT NULL",
+                    "take_profit": "DECIMAL(18,8) NOT NULL",
+                    "confianca": "DECIMAL(5,2) NOT NULL",
+                    "alavancagem": "INTEGER NOT NULL",
+                    "status": "VARCHAR(20) NOT NULL",
+                    "resultado": "DECIMAL(18,8)",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+            },
+            "analises_consolidadas": {
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "tipo_analise": "VARCHAR(50) NOT NULL",
+                    "valor": "DECIMAL(18,8)",
+                    "direcao": "VARCHAR(10)",
+                    "peso": "DECIMAL(5,2)",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+            },
+        }
+        return tabelas
 
     @classmethod
     def dependencias(cls):
@@ -30,15 +92,17 @@ class SinaisPlugin(Plugin):
         Retorna lista de nomes das dependências obrigatórias do plugin SinaisPlugin.
         """
         return [
-            "price_action",
-            "medias_moveis",
+            "gerenciador_banco",
             "indicadores_tendencia",
             "indicadores_osciladores",
-            "indicadores_volatilidade",
             "indicadores_volume",
+            "calculo_alavancagem",
+            "calculo_risco",
         ]
 
-    def consolidar_sinais_multi_timeframe(self, sinais_timeframes: dict, symbol: str, config: dict) -> dict:
+    def consolidar_sinais_multi_timeframe(
+        self, sinais_timeframes: dict, symbol: str, config: dict
+    ) -> dict:
         """
         Consolida sinais de múltiplos timeframes para um único sinal final, usando pesos definidos em config.
         Args:
@@ -65,7 +129,16 @@ class SinaisPlugin(Plugin):
                     continue
                 direcao = direcoes.get(str(sinal.get("direcao", "LATERAL")).upper(), 0)
                 confianca = float(sinal.get("confianca", 0.0))
-                forca = 1 if str(sinal.get("forca", "FRACA")).upper() == "FORTE" else (0.5 if str(sinal.get("forca", "FRACA")).upper() == "MEDIA" or str(sinal.get("forca", "FRACA")).upper() == "MÉDIA" else 0)
+                forca = (
+                    1
+                    if str(sinal.get("forca", "FRACA")).upper() == "FORTE"
+                    else (
+                        0.5
+                        if str(sinal.get("forca", "FRACA")).upper() == "MEDIA"
+                        or str(sinal.get("forca", "FRACA")).upper() == "MÉDIA"
+                        else 0
+                    )
+                )
                 alavancagem = float(sinal.get("alavancagem", 0.0))
                 sl = float(sinal.get("stop_loss", 0.0) or 0.0)
                 tp = float(sinal.get("take_profit", 0.0) or 0.0)
@@ -129,19 +202,9 @@ class SinaisPlugin(Plugin):
                 "take_profit": 0.0,
             }
 
-    PLUGIN_NAME = "sinais_plugin"
-    PLUGIN_CATEGORIA = "plugin"
-    PLUGIN_TAGS = ["consolidacao", "sinal", "output"]
-    PLUGIN_PRIORIDADE = 99
-
     def __init__(self, calculo_alavancagem=None, calculo_risco=None, **kwargs):
         """
         Inicializa o plugin SinaisPlugin com dependências injetadas.
-
-        Args:
-            calculo_alavancagem: Instância de CalculoAlavancagem.
-            calculo_risco: Instância de CalculoRisco.
-            **kwargs: Outras dependências.
         """
         super().__init__(**kwargs)
         self._calculo_alavancagem = calculo_alavancagem
@@ -151,7 +214,7 @@ class SinaisPlugin(Plugin):
             "calculo_risco": 0.3,
             "outros": 0.3,
         }
-        self._confianca_min = 0.0
+        self._confianca_min = 0.45
         self._confianca_max = 1.0
         self._ultimos_sinais = {}
 
@@ -168,6 +231,14 @@ class SinaisPlugin(Plugin):
         try:
             if not super().inicializar(config):
                 logger.error(f"[{self.nome}] Falha na inicialização base")
+                return False
+
+            # Verifica se as dependências foram injetadas
+            if not self._calculo_alavancagem:
+                logger.error(f"[{self.nome}] calculo_alavancagem não foi injetado")
+                return False
+            if not self._calculo_risco:
+                logger.error(f"[{self.nome}] calculo_risco não foi injetado")
                 return False
 
             config_sinais = config.get("sinais_plugin", {})
@@ -209,65 +280,210 @@ class SinaisPlugin(Plugin):
 
     def executar(self, *args, **kwargs) -> bool:
         """
-        Executa a consolidação de sinais e armazena o resultado.
-
-        Args:
-            symbol (str): Símbolo do par.
-            timeframe (str): Timeframe.
-            dados_completos (dict): Dados de análise.
-            config (dict, optional): Configurações.
-
-        Returns:
-            bool: True (mesmo em erro, para não interromper o pipeline).
+        Executa a análise de sinais.
         """
-        symbol = kwargs.get("symbol")
-        timeframe = kwargs.get("timeframe")
-        dados_completos = kwargs.get("dados_completos", {})
-        config = kwargs.get("config", self._config)
-
-        resultado_padrao = {
-            "sinais": {
-                "direcao": "NENHUMA",
-                "forca": "NENHUMA",
-                "confianca": 0.0,
-                "alavancagem": 0.0,
-                "timestamp": None,
-                "stop_loss": None,
-                "take_profit": None,
-            }
-        }
-
-        if not isinstance(dados_completos, dict):
-            logger.error(
-                f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
-            )
-            dados_completos["sinais"] = resultado_padrao["sinais"]
-            return True
-
-        if not all([symbol, timeframe]):
-            logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes")
-            dados_completos["sinais"] = resultado_padrao["sinais"]
-            return True
-
-        if not dados_completos.get("analise_mercado"):
-            logger.error(f"[{self.nome}] analise_mercado ausente em dados_completos")
-            dados_completos["sinais"] = resultado_padrao["sinais"]
-            return True
-
         try:
-            logger.info(f"[{self.nome}] Processando {symbol} - {timeframe}")
-            novo_sinal = self._gerar_sinal(dados_completos, symbol, timeframe)
-            if novo_sinal is None:
-                dados_completos["sinais"] = resultado_padrao["sinais"]
-            else:
-                dados_completos["sinais"] = novo_sinal
-                self._ultimos_sinais[f"{symbol}-{timeframe}"] = novo_sinal
-            logger.info(f"[{self.nome}] Sinais consolidados [{symbol}]: {dados_completos['sinais']}")
+            dados_completos = kwargs.get("dados_completos")
+            if not dados_completos or not isinstance(dados_completos, dict):
+                logger.error(f"[{self.nome}] dados_completos não fornecido ou inválido")
+                return False
+
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+
+            # Garantir que o timeframe seja fornecido
+            if not kwargs.get("timeframe"):
+                kwargs["timeframe"] = "1h"  # Valor padrão caso não seja fornecido
+                logger.warning(
+                    f"[{self.nome}] Timeframe não fornecido, usando padrão '1h'"
+                )
+
+            # Adicionando validação para symbol e timeframe
+            if not symbol:
+                logger.error(f"[{self.nome}] Symbol não fornecido")
+                return False
+
+            if not timeframe:
+                logger.error(f"[{self.nome}] Timeframe não fornecido")
+                return {
+                    "direcao": "LATERAL",
+                    "forca": "FRACA",
+                    "confianca": 0.0,
+                    "alavancagem": 0.0,
+                    "timestamp": None,
+                    "stop_loss": 0.0,
+                    "take_profit": 0.0,
+                }
+
+            # Processar análise de mercado
+            analise_mercado = self._processar_analise_mercado(dados_completos)
+            dados_completos["analise_mercado"] = analise_mercado
+
+            # Log do sinal gerado
+            logger_sinais.info(
+                f"[{symbol} - {timeframe}] "
+                f"DIREÇÃO: {analise_mercado['direcao']} | "
+                f"FORÇA: {analise_mercado['forca']} | "
+                f"CONFIANÇA: {analise_mercado['confianca']:.2f}% | "
+                f"TENDÊNCIA: {analise_mercado['tendencia']} | "
+                f"VOL REL: {analise_mercado['volume']:.2f}"
+            )
+
             return True
+
         except Exception as e:
             logger.error(f"[{self.nome}] Erro na execução: {e}", exc_info=True)
-            dados_completos["sinais"] = resultado_padrao["sinais"]
-            return True
+            return False
+
+    def _processar_analise_mercado(self, dados: dict) -> dict:
+        """
+        Processa os dados de análise de mercado.
+        """
+        try:
+            analise = dados.get("analise_mercado", {})
+            if not analise:
+                return deepcopy(self._RESULTADO_PADRAO["analise_mercado"])
+
+            # Processamento de indicadores
+            rsi = float(dados.get("rsi", {}).get("valor", 50.0))
+            volume = float(dados.get("volume", {}).get("valor", 0.0))
+            volume_medio = float(dados.get("volume", {}).get("media", 1.0))
+            volume_rel = volume / volume_medio if volume_medio > 0 else 0.0
+
+            # Determinar tendência
+            tendencia = self._determinar_tendencia(dados)
+
+            # Ajustar direção e força
+            direcao = analise.get("direcao", "LATERAL")
+            forca = self._calcular_forca(
+                analise.get("forca", "FRACA"), rsi, volume_rel, tendencia
+            )
+
+            # Calcular confiança ajustada
+            confianca_base = float(analise.get("confianca", 0.0))
+            confianca = self._ajustar_confianca(
+                confianca_base, rsi, volume_rel, tendencia, direcao
+            )
+
+            return {
+                "direcao": direcao,
+                "forca": forca,
+                "confianca": confianca,
+                "preco_atual": float(analise.get("preco_atual", 0.0)),
+                "volume": volume_rel,
+                "rsi": rsi,
+                "tendencia": tendencia,
+                "suporte": float(analise.get("suporte", 0.0)),
+                "resistencia": float(analise.get("resistencia", 0.0)),
+                "atr": float(analise.get("atr", 0.0)),
+            }
+
+        except Exception as e:
+            logger.error(f"Erro ao processar análise de mercado: {e}")
+            return deepcopy(self._RESULTADO_PADRAO["analise_mercado"])
+
+    def _determinar_tendencia(self, dados: dict) -> str:
+        """
+        Determina a tendência com base nos indicadores.
+        """
+        try:
+            # Análise de médias móveis
+            ma_curta = dados.get("ma_curta", {}).get("valor", 0.0)
+            ma_media = dados.get("ma_media", {}).get("valor", 0.0)
+            ma_longa = dados.get("ma_longa", {}).get("valor", 0.0)
+
+            if not all([ma_curta, ma_media, ma_longa]):
+                return "LATERAL"
+
+            # Verificar alinhamento das médias
+            if ma_curta > ma_media > ma_longa:
+                return "ALTA"
+            elif ma_curta < ma_media < ma_longa:
+                return "BAIXA"
+
+            # Análise de momentum
+            rsi = float(dados.get("rsi", {}).get("valor", 50.0))
+            if rsi >= 70:
+                return "ALTA"
+            elif rsi <= 30:
+                return "BAIXA"
+
+            return "LATERAL"
+
+        except Exception as e:
+            logger.error(f"Erro ao determinar tendência: {e}")
+            return "LATERAL"
+
+    def _calcular_forca(
+        self, forca_base: str, rsi: float, volume_rel: float, tendencia: str
+    ) -> str:
+        """
+        Calcula a força do sinal com base em múltiplos indicadores.
+        """
+        pontos = 0
+
+        # Pontos por RSI
+        if 20 <= rsi <= 30 or 70 <= rsi <= 80:
+            pontos += 2
+        elif 30 < rsi < 40 or 60 < rsi < 70:
+            pontos += 1
+
+        # Pontos por volume
+        if volume_rel >= 2.0:
+            pontos += 2
+        elif volume_rel >= 1.5:
+            pontos += 1
+
+        # Pontos por tendência
+        if tendencia != "LATERAL":
+            pontos += 1
+
+        # Determinar força final
+        if pontos >= 4:
+            return "FORTE"
+        elif pontos >= 2:
+            return "MÉDIA"
+        return "FRACA"
+
+    def _ajustar_confianca(
+        self, base: float, rsi: float, volume_rel: float, tendencia: str, direcao: str
+    ) -> float:
+        """
+        Ajusta a confiança base com base em múltiplos fatores.
+        """
+        try:
+            confianca = base
+
+            # Ajuste por RSI
+            if (direcao == "LONG" and rsi <= 30) or (direcao == "SHORT" and rsi >= 70):
+                confianca *= 1.2  # +20%
+            elif (direcao == "LONG" and rsi >= 70) or (
+                direcao == "SHORT" and rsi <= 30
+            ):
+                confianca *= 0.8  # -20%
+
+            # Ajuste por volume
+            if volume_rel >= 2.0:
+                confianca *= 1.15  # +15%
+            elif volume_rel <= 0.5:
+                confianca *= 0.85  # -15%
+
+            # Ajuste por tendência
+            if tendencia != "LATERAL":
+                if (direcao == "LONG" and tendencia == "ALTA") or (
+                    direcao == "SHORT" and tendencia == "BAIXA"
+                ):
+                    confianca *= 1.1  # +10%
+                else:
+                    confianca *= 0.9  # -10%
+
+            return round(
+                min(max(confianca, self._confianca_min), self._confianca_max), 2
+            )
+
+        except Exception as e:
+            logger.error(f"Erro ao ajustar confiança: {e}")
+            return self._confianca_min
 
     def _volume_acima_media(self, candles: list, n: int = 20) -> bool:
         """
@@ -276,7 +492,7 @@ class SinaisPlugin(Plugin):
         try:
             if not candles or len(candles) < n + 1:
                 return False
-            volumes = [float(c[5]) for c in candles[-(n+1):]]
+            volumes = [float(c[5]) for c in candles[-(n + 1) :]]
             return volumes[-1] > (sum(volumes[:-1]) / n)
         except Exception as e:
             logger.error(f"[sinais_plugin] Erro ao validar volume: {e}")
@@ -290,12 +506,14 @@ class SinaisPlugin(Plugin):
             if not candles or len(candles) < periodo:
                 return False
             closes = [float(c[4]) for c in candles[-periodo:]]
-            return closes[-1] > (sum(closes[:-1]) / (periodo-1))
+            return closes[-1] > (sum(closes[:-1]) / (periodo - 1))
         except Exception as e:
             logger.error(f"[sinais_plugin] Erro ao validar média móvel: {e}")
             return False
 
-    def _proximo_resistencia(self, close: float, resistencias: list, margem: float = 0.001) -> bool:
+    def _proximo_resistencia(
+        self, close: float, resistencias: list, margem: float = 0.001
+    ) -> bool:
         """
         Retorna True se o preço de fechamento está muito próximo de uma resistência.
         """
@@ -335,27 +553,37 @@ class SinaisPlugin(Plugin):
             else:
                 direcao = "LATERAL"
 
-            confianca = self._calcular_confianca(dados, direcao_original, confianca_base)
+            confianca = self._calcular_confianca(
+                dados, direcao_original, confianca_base
+            )
             confianca_pct = round(confianca * 100, 2)
             alavancagem = self._calcular_alavancagem(dados, direcao, confianca)
             stop_loss, take_profit = self._extrair_sl_tp(dados, direcao)
             timestamp = self._extrair_timestamp(dados)
 
             # Filtro de confiança mínima
-            confianca_min = self._confianca_min if hasattr(self, '_confianca_min') else 0.6
+            confianca_min = (
+                self._confianca_min if hasattr(self, "_confianca_min") else 0.6
+            )
             if confianca < confianca_min:
-                logger.info(f"[sinais_plugin] Sinal descartado por confiança baixa: {confianca:.2f}")
+                logger.info(
+                    f"[sinais_plugin] Sinal descartado por confiança baixa: {confianca:.2f}"
+                )
                 return None
 
             # Filtro de volume relativo
             candles = dados.get("crus", [])
             if not self._volume_acima_media(candles, n=20):
-                logger.info(f"[sinais_plugin] Sinal descartado por volume abaixo da média.")
+                logger.info(
+                    f"[sinais_plugin] Sinal descartado por volume abaixo da média."
+                )
                 return None
 
             # Validação de contexto: preço acima da média móvel
             if direcao == "LONG" and not self._preco_acima_media(candles, periodo=20):
-                logger.info(f"[sinais_plugin] Sinal LONG descartado: preço não está acima da média móvel.")
+                logger.info(
+                    f"[sinais_plugin] Sinal LONG descartado: preço não está acima da média móvel."
+                )
                 return None
 
             # Validação de resistência (exemplo usando candles, pode ser extendido)
@@ -364,7 +592,9 @@ class SinaisPlugin(Plugin):
             if "pivots" in dados and isinstance(dados["pivots"], dict):
                 resistencias = dados["pivots"].get("resistencias", [])
             if self._proximo_resistencia(close, resistencias, margem=0.0015):
-                logger.info(f"[sinais_plugin] Sinal descartado: preço próximo de resistência relevante.")
+                logger.info(
+                    f"[sinais_plugin] Sinal descartado: preço próximo de resistência relevante."
+                )
                 return None
 
             # Correção: nunca retornar None para SL/TP
@@ -406,14 +636,24 @@ class SinaisPlugin(Plugin):
             # Peso para analise_mercado
             confianca_analise = dados.get("analise_mercado", {}).get("confianca", 0.0)
             if confianca_analise > 0:
-                confiancas.append((confianca_analise, self._confianca_pesos.get("analise_mercado", 0.4)))
+                confiancas.append(
+                    (
+                        confianca_analise,
+                        self._confianca_pesos.get("analise_mercado", 0.4),
+                    )
+                )
 
             # Peso para calculo_risco
             if self._calculo_risco and dados.get("calculo_risco"):
                 confianca_risco = dados["calculo_risco"].get("confianca", 0.0)
                 dir_risco = dados["calculo_risco"].get("direcao", "LATERAL")
                 if confianca_risco > 0:
-                    confiancas.append((confianca_risco, self._confianca_pesos.get("calculo_risco", 0.3)))
+                    confiancas.append(
+                        (
+                            confianca_risco,
+                            self._confianca_pesos.get("calculo_risco", 0.3),
+                        )
+                    )
                     if dir_risco == direcao:
                         ajuste += 0.1
                     elif dir_risco != "LATERAL":
@@ -421,10 +661,21 @@ class SinaisPlugin(Plugin):
 
             # Outros plugins
             for chave, info in dados.items():
-                if chave not in ["analise_mercado", "calculo_risco", "crus", "sinais"] and isinstance(info, dict):
+                if chave not in [
+                    "analise_mercado",
+                    "calculo_risco",
+                    "crus",
+                    "sinais",
+                ] and isinstance(info, dict):
                     c = info.get("confianca", 0.0)
                     if c > 0:
-                        confiancas.append((c, self._confianca_pesos.get("outros", 0.3) / max(1, len(dados) - 3)))
+                        confiancas.append(
+                            (
+                                c,
+                                self._confianca_pesos.get("outros", 0.3)
+                                / max(1, len(dados) - 3),
+                            )
+                        )
                         dir_info = info.get("direcao", "LATERAL")
                         if dir_info == direcao:
                             ajuste += 0.05
@@ -443,9 +694,13 @@ class SinaisPlugin(Plugin):
 
             resultado = base * (1 + ajuste)
             resultado = (resultado + media) / 2 if confiancas else resultado
-            return round(min(max(resultado, self._confianca_min), self._confianca_max), 4)  # Mais precisão interna
+            return round(
+                min(max(resultado, self._confianca_min), self._confianca_max), 4
+            )  # Mais precisão interna
         except Exception as e:
-            logger.error(f"[{self.nome}] Erro ao calcular confiança: {e}", exc_info=True)
+            logger.error(
+                f"[{self.nome}] Erro ao calcular confiança: {e}", exc_info=True
+            )
             return 0.0
 
     def _calcular_alavancagem(
@@ -518,3 +773,27 @@ class SinaisPlugin(Plugin):
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao extrair timestamp: {e}")
             return None
+
+    def log_banco(
+        self,
+        tabela: str,
+        operacao: str,
+        dados: str,
+        dados: dict,
+    ):
+        """
+        Registra uma operação no banco de dados.
+
+        Args:
+            tabela: Nome da tabela.
+            operacao: Tipo de operação (INSERT, UPDATE, DELETE).
+            dados: Descrição da operação.
+            dados: Dados a serem registrados.
+        """
+        try:
+            # Implementação de registro no banco de dados
+            # Aqui você pode usar um ORM ou uma biblioteca de banco de dados
+            # para registrar os dados
+            pass
+        except Exception as e:
+            logger.error(f"[{self.nome}] Erro ao registrar no banco de dados: {e}")

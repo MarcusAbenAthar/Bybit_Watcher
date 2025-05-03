@@ -14,7 +14,7 @@ class OutrosIndicadores(Plugin):
         """
         try:
             super().finalizar()
-            logger.info("OutrosIndicadores finalizado com sucesso.")
+            logger.debug("OutrosIndicadores finalizado com sucesso.")
         except Exception as e:
             logger.error(f"Erro ao finalizar OutrosIndicadores: {e}")
 
@@ -53,6 +53,10 @@ class OutrosIndicadores(Plugin):
             "fibonacci_janela_base": 20,  # Janela para cálculo de Fibonacci
         }
         logger.debug(f"[{self.nome}] inicializado")
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"
 
     def _validar_klines(self, klines, symbol: str, timeframe: str) -> bool:
         """

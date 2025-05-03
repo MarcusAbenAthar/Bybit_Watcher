@@ -14,7 +14,6 @@ class AnalisadorMercado(Plugin):
 
     PLUGIN_NAME = "analisador_mercado"
     PLUGIN_CATEGORIA = "plugin"
-    # Removida a tag 'analise' para garantir execução separada após plugins de análise
     PLUGIN_TAGS = ["consolidacao", "direcional"]
     PLUGIN_PRIORIDADE = 80
 
@@ -27,13 +26,12 @@ class AnalisadorMercado(Plugin):
     }
 
     # FONTES_PADRAO define as chaves esperadas em dados_completos. 'tendencia' corresponde ao plugin 'indicadores_tendencia'.
-    # FONTES_PADRAO define as chaves esperadas em dados_completos.
     # Atenção: apenas fontes que retornam dict devem ser listadas!
     # 'candles' removido para evitar erro de formato (espera dict, recebe list)
     FONTES_PADRAO = [
-        "price_action",           # Plugin de price action
-        "medias_moveis",         # Plugin de médias móveis
-        "tendencia"              # Plugin indicadores_tendencia (consolida SMA, EMA, MACD, ADX, ATR)
+        "price_action",  # Plugin de price action
+        "medias_moveis",  # Plugin de médias móveis
+        "tendencia",  # Plugin indicadores_tendencia (consolida SMA, EMA, MACD, ADX, ATR)
     ]
     MINIMO_FONTES = 2  # Mínimo de fontes válidas para consolidação
 
@@ -47,18 +45,26 @@ class AnalisadorMercado(Plugin):
         Returns:
             bool: True se inicializado com sucesso, False caso contrário.
         """
-        if not super().inicializar(config):
+        try:
+            if not super().inicializar(config):
+                self.inicializado = False  # Correção: garante False em erro
+                return False
+
+            # Garante que temos um config válido
+            if not isinstance(config, dict):
+                logger.error(f"[{self.nome}] Configuração inválida: {type(config)}")
+                self.inicializado = False  # Correção: garante False em erro
+                return False
+
+            # Inicializa fontes com valor padrão se não fornecido
+            self.fontes = config.get("fontes", self.FONTES_PADRAO)
+            self.inicializado = True
+            return True
+
+        except Exception as e:
+            logger.error(f"[{self.nome}] Erro na inicialização: {e}")
+            self.inicializado = False  # Correção: garante False em erro
             return False
-        self.fontes = config.get("fontes", self.FONTES_PADRAO)
-        if not self.fontes or not isinstance(self.fontes, list):
-            logger.warning(
-                f"[{self.nome}] Fontes inválidas, usando padrão: {self.FONTES_PADRAO}"
-            )
-            self.fontes = self.FONTES_PADRAO
-        logger.info(
-            f"[{self.nome}] inicializado com timeframes: {self._config.get('timeframes')}, fontes: {self.fontes}"
-        )
-        return True
 
     def executar(self, *args, **kwargs) -> bool:
         """

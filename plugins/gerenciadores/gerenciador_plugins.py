@@ -2,7 +2,7 @@ import json
 import os
 import inspect
 from collections import defaultdict, deque
-from typing import Optional, List
+from typing import Optional, List, Dict, Set, Type
 from plugins.plugin import Plugin, PluginRegistry
 from plugins.gerenciadores.gerenciador import BaseGerenciador
 from utils.logging_config import get_logger
@@ -35,7 +35,9 @@ class GerenciadorPlugins(BaseGerenciador):
                 logger.debug(f"Gerenciador registrado: {nome}")
             except Exception as e:
                 logger.error(f"Erro ao registrar gerenciador '{nome}': {e}")
-        logger.debug(f"Gerenciadores disponíveis após registro: {list(self.plugins.keys())}")
+        logger.debug(
+            f"Gerenciadores disponíveis após registro: {list(self.plugins.keys())}"
+        )
 
     def _coletar_dependencias_reais(self) -> dict[str, list[str]]:
         """Inspeciona os __init__ dos plugins para descobrir dependências, incluindo gerenciadores."""
@@ -47,6 +49,11 @@ class GerenciadorPlugins(BaseGerenciador):
         for nome_plugin, cls in PluginRegistry.todos().items():
             sig = inspect.signature(cls.__init__)
             deps = []
+
+            # Adiciona dependência especial para ObterDados
+            if nome_plugin == "obter_dados":
+                deps.append("conexao")
+
             for param in list(sig.parameters.values())[1:]:  # Ignora 'self'
                 if param.name in {"gerente", "args", "kwargs"} or param.name.startswith(
                     "_"
@@ -131,6 +138,159 @@ class GerenciadorPlugins(BaseGerenciador):
             ordenados.append((faltante, todos[faltante]))
         return ordenados
 
+    def _validar_grafo_dependencias(self) -> bool:
+        """Valida se o grafo de dependências é acíclico."""
+        grafo = self._construir_grafo_dependencias()
+        return self._eh_grafo_aciclico(grafo)
+
+    def _construir_grafo_dependencias(self) -> Dict[str, Set[str]]:
+        """Constrói grafo de dependências entre plugins."""
+        grafo = defaultdict(set)
+        for nome, plugin in self.plugins.items():
+            if hasattr(plugin, "PLUGIN_TABELAS"):
+                for tabela, config in plugin.PLUGIN_TABELAS.items():
+                    if "dependencias" in config:
+                        grafo[nome].update(config["dependencias"])
+        return grafo
+
+    def _ordenar_plugins_por_dependencia(self) -> List[str]:
+        """Ordena plugins baseado em dependências usando topological sort."""
+        grafo = self._construir_grafo_dependencias()
+        return self._ordenacao_topologica(grafo)
+
+    def _validar_schema_plugin(self, plugin: Type[Plugin]) -> bool:
+        """
+        Valida schema de um plugin individual.
+
+        Args:
+            plugin: Classe do plugin a ser validada
+
+        Returns:
+            bool: True se o schema é válido, False caso contrário
+        """
+        try:
+            # Verifica se o plugin tem os atributos obrigatórios
+            if not hasattr(plugin, "PLUGIN_NAME"):
+                logger.error(f"Plugin {plugin.__name__} não tem PLUGIN_NAME definido")
+                return False
+
+            if not hasattr(plugin, "PLUGIN_SCHEMA_VERSAO"):
+                logger.error(
+                    f"Plugin {plugin.__name__} não tem PLUGIN_SCHEMA_VERSAO definido"
+                )
+                return False
+
+            # Verifica se o plugin tem tabelas definidas
+            tabelas = getattr(plugin, "PLUGIN_TABELAS", None)
+            if tabelas is not None:
+                if not isinstance(tabelas, dict):
+                    logger.error(
+                        f"PLUGIN_TABELAS deve ser um dicionário em {plugin.__name__}"
+                    )
+                    return False
+
+                # Valida estrutura das tabelas
+                for nome_tabela, config in tabelas.items():
+                    if not isinstance(config, dict):
+                        logger.error(
+                            f"Configuração da tabela {nome_tabela} deve ser um dicionário em {plugin.__name__}"
+                        )
+                        return False
+
+                    if "columns" not in config:
+                        logger.error(
+                            f"Tabela {nome_tabela} não tem definição de colunas em {plugin.__name__}"
+                        )
+                        return False
+
+                    if not isinstance(config["columns"], dict):
+                        logger.error(
+                            f"Definição de colunas da tabela {nome_tabela} deve ser um dicionário em {plugin.__name__}"
+                        )
+                        return False
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro na validação do schema de {plugin.__name__}: {str(e)}")
+            return False
+
+    def _validar_schemas_plugins(self) -> bool:
+        """Valida schemas declarados por todos os plugins."""
+        for nome, plugin in self.plugins.items():
+            if hasattr(plugin, "PLUGIN_TABELAS"):
+                if not self._validar_schema_plugin(plugin.__class__):
+                    return False
+        return True
+
+    def _gerar_kwargs_plugin(self, nome_plugin: str) -> dict:
+        """
+        Gera os argumentos necessários para instanciar um plugin.
+
+        Args:
+            nome_plugin: Nome do plugin a ser instanciado
+
+        Returns:
+            dict: Dicionário com os argumentos necessários
+        """
+        kwargs = {"gerente": self}
+
+        # Casos especiais
+        if nome_plugin == "gerenciador_banco":
+            kwargs["plugins"] = self.plugins
+        elif nome_plugin == "obter_dados":
+            conexao = self.obter_plugin("conexao")
+            if conexao:
+                kwargs["conexao"] = conexao
+
+        return kwargs
+
+    def _eh_grafo_aciclico(self, grafo: Dict[str, Set[str]]) -> bool:
+        """Verifica se um grafo é acíclico."""
+        visitados = set()
+        pilha = set()
+
+        def dfs(node):
+            visitados.add(node)
+            pilha.add(node)
+            for vizinho in grafo.get(node, set()):
+                if vizinho not in visitados:
+                    if not dfs(vizinho):
+                        return False
+                elif vizinho in pilha:
+                    return False
+            pilha.remove(node)
+            return True
+
+        for node in grafo:
+            if node not in visitados:
+                if not dfs(node):
+                    return False
+        return True
+
+    def _ordenacao_topologica(self, grafo: Dict[str, Set[str]]) -> List[str]:
+        """Realiza ordenação topológica em um grafo."""
+        grau_entrada = {node: 0 for node in grafo}
+        for vizinhos in grafo.values():
+            for vizinho in vizinhos:
+                grau_entrada[vizinho] += 1
+
+        fila = deque([node for node in grafo if grau_entrada[node] == 0])
+        ordenados = []
+
+        while fila:
+            node = fila.popleft()
+            ordenados.append(node)
+            for vizinho in grafo[node]:
+                grau_entrada[vizinho] -= 1
+                if grau_entrada[vizinho] == 0:
+                    fila.append(vizinho)
+
+        if len(ordenados) != len(grafo):
+            raise ValueError("Grafo contém ciclos")
+
+        return ordenados
+
     def inicializar(self, config: dict) -> bool:
         """
         Inicializa todos os plugins do sistema usando auto plug-in, auto injeção e detecção de dependências.
@@ -146,36 +306,94 @@ class GerenciadorPlugins(BaseGerenciador):
         registry = {}  # Plugins já instanciados
         plugins_ordenados = self._ordenar_por_dependencias()
         plugins_ordenados = [(nome, cls) for nome, cls in plugins_ordenados]
-        grafo_dependencias = {nome: self._dependencias.get(nome, []) for nome, _ in plugins_ordenados}
+        grafo_dependencias = {
+            nome: self._dependencias.get(nome, []) for nome, _ in plugins_ordenados
+        }
 
-        def resolver_plugin(nome, pilha=None):
+        if not self._validar_grafo_dependencias():
+            logger.error("Grafo de dependências contém ciclos")
+            return False
+
+        if not self._validar_schemas_plugins():
+            logger.error("Erro na validação de schemas")
+            return False
+
+        def resolver_plugin(nome, **kwargs):
+            """
+            Resolve e instancia um plugin com suas dependências.
+
+            Args:
+                nome: Nome do plugin a ser resolvido
+                **kwargs: Argumentos adicionais para inicialização
+
+            Returns:
+                Plugin: Instância do plugin inicializada
+            """
             if nome in registry:
                 return registry[nome]
-            pilha = pilha or []
-            if nome in pilha:
-                logger.error(f"[GerenciadorPlugins] Ciclo de dependências detectado: {' -> '.join(pilha + [nome])}")
-                raise RuntimeError(f"Ciclo de dependências: {' -> '.join(pilha + [nome])}")
-            pilha.append(nome)
+
+            # Primeiro resolve o gerenciador_banco se for uma dependência
+            if (
+                nome != "gerenciador_banco"
+                and "gerenciador_banco" in grafo_dependencias.get(nome, [])
+            ):
+                try:
+                    kwargs["gerenciador_banco"] = resolver_plugin("gerenciador_banco")
+                except Exception as e:
+                    logger.error(
+                        f"[GerenciadorPlugins] Falha ao resolver gerenciador_banco para '{nome}': {e}"
+                    )
+                    raise
+
+            # Busca a classe do plugin/gerenciador
             classe = PluginRegistry.obter_plugin(nome)
             if not classe:
-                # Tenta buscar como gerenciador se não for plugin
                 classe = BaseGerenciador.obter_gerenciador(nome)
                 if not classe:
-                    logger.error(f"[GerenciadorPlugins] Plugin ou Gerenciador '{nome}' não encontrado no registro.")
-                    raise RuntimeError(f"Plugin ou Gerenciador '{nome}' não encontrado.")
+                    logger.error(
+                        f"[GerenciadorPlugins] Plugin ou Gerenciador '{nome}' não encontrado no registro."
+                    )
+                    raise RuntimeError(
+                        f"Plugin ou Gerenciador '{nome}' não encontrado."
+                    )
+
+            # Prepara os argumentos
+            if nome == "gerenciador_banco":
+                kwargs["plugins"] = self.plugins
+            elif nome == "obter_dados":
+                conexao = self.obter_plugin("conexao")
+                if conexao:
+                    kwargs["conexao"] = conexao
+                else:
+                    logger.error(
+                        "[GerenciadorPlugins] Plugin conexao não encontrado para ObterDados"
+                    )
+                    raise RuntimeError("Plugin conexao não encontrado")
+
+            # Garante que o gerente seja passado
+            kwargs["gerente"] = self
+
+            # Resolve outras dependências
             deps = grafo_dependencias.get(nome, [])
-            kwargs = {"gerente": self}
             for dep in deps:
-                try:
-                    kwargs[dep] = resolver_plugin(dep, pilha=list(pilha))
-                except Exception as e:
-                    logger.error(f"[GerenciadorPlugins] Falha ao resolver dependência '{dep}' para '{nome}': {e}")
-                    raise
+                if dep not in kwargs and dep != "gerenciador_banco":  # Já tratado acima
+                    try:
+                        kwargs[dep] = resolver_plugin(dep)
+                    except Exception as e:
+                        logger.error(
+                            f"[GerenciadorPlugins] Falha ao resolver dependência '{dep}' para '{nome}': {e}"
+                        )
+                        raise
+
+            # Instancia e inicializa o plugin
             try:
                 plugin = classe(**kwargs)
                 if not isinstance(plugin, (Plugin, BaseGerenciador)):
-                    logger.error(f"Plugin '{nome}' não é uma instância válida de Plugin ou BaseGerenciador")
+                    logger.error(
+                        f"Plugin '{nome}' não é uma instância válida de Plugin ou BaseGerenciador"
+                    )
                     raise TypeError(f"Plugin '{nome}' inválido.")
+
                 if plugin.inicializar(config):
                     registry[nome] = plugin
                     self.plugins[nome] = plugin
@@ -193,7 +411,9 @@ class GerenciadorPlugins(BaseGerenciador):
             try:
                 resolver_plugin(nome_plugin)
             except Exception as e:
-                logger.error(f"[GerenciadorPlugins] Plugin {nome_plugin} não carregado: {e}")
+                logger.error(
+                    f"[GerenciadorPlugins] Plugin {nome_plugin} não carregado: {e}"
+                )
                 sucesso = False
         self.inicializado = sucesso
         return sucesso

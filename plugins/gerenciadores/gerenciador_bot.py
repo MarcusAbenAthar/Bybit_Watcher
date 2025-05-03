@@ -85,13 +85,21 @@ class GerenciadorBot(BaseGerenciador):
                     logger.warning(f"Pares inválidos removidos: {invalidos}")
                 pares = [p for p in pares if p in pares_validos or p == "all"]
             else:
-                logger.warning("Não foi possível filtrar pares: plugin Conexao ausente ou sem listar_pares()")
+                logger.warning(
+                    "Não foi possível filtrar pares: plugin Conexao ausente ou sem listar_pares()"
+                )
 
             # NOVO: se 'pares' for ['all'], busca todos os símbolos disponíveis na exchange
             if pares == ["all"]:
                 conexao_plugin = self._gerente.obter_plugin("conexao")
-                if not conexao_plugin or not hasattr(conexao_plugin, "exchange") or not conexao_plugin.exchange:
-                    logger.error("Plugin de conexão não disponível ou não inicializado para buscar todos os pares.")
+                if (
+                    not conexao_plugin
+                    or not hasattr(conexao_plugin, "exchange")
+                    or not conexao_plugin.exchange
+                ):
+                    logger.error(
+                        "Plugin de conexão não disponível ou não inicializado para buscar todos os pares."
+                    )
                     return False
                 try:
                     markets = conexao_plugin.exchange.load_markets()
@@ -99,37 +107,57 @@ class GerenciadorBot(BaseGerenciador):
                     futuros = self._config.get("futuros", True)
                     # Novo filtro robusto para pares USDT
                     # Determina dinamicamente os tipos de mercado a filtrar a partir do config
-                    tipos_mercado = [k for k in ['spot', 'futuros', 'swap', 'option'] if self._config.get(k, False)]
+                    tipos_mercado = [
+                        k
+                        for k in ["spot", "futuros", "swap", "option"]
+                        if self._config.get(k, False)
+                    ]
                     # Mapeia 'futuros' -> 'future' para o campo type
-                    tipos_ccxt = [t if t != 'futuros' else 'future' for t in tipos_mercado]
+                    tipos_ccxt = [
+                        t if t != "futuros" else "future" for t in tipos_mercado
+                    ]
 
                     pares_filtrados = []
                     symbol_to_id = {}
                     for symbol, info in markets.items():
-                        tipo = info.get('type')
-                        quote_coin = info.get('quoteCoin') or info.get('quote')
-                        settle_coin = info.get('settleCoin') or info.get('settle')
-                        market_id = info.get('id', symbol)
+                        tipo = info.get("type")
+                        quote_coin = info.get("quoteCoin") or info.get("quote")
+                        settle_coin = info.get("settleCoin") or info.get("settle")
+                        market_id = info.get("id", symbol)
                         if tipo in tipos_ccxt:
-                            if tipo == 'spot' and quote_coin == 'USDT':
+                            if tipo == "spot" and quote_coin == "USDT":
                                 pares_filtrados.append(market_id)
                                 symbol_to_id[symbol] = market_id
-                            elif tipo in ['future', 'swap', 'option'] and quote_coin == 'USDT' and settle_coin == 'USDT':
+                            elif (
+                                tipo in ["future", "swap", "option"]
+                                and quote_coin == "USDT"
+                                and settle_coin == "USDT"
+                            ):
                                 pares_filtrados.append(market_id)
                                 symbol_to_id[symbol] = market_id
                     if not pares_filtrados:
-                        logger.error(f"Nenhum par USDT encontrado com os filtros: spot={self._config.get('spot', False)}, futuros={self._config.get('futuros', False)}, swap={self._config.get('swap', False)}, option={self._config.get('option', False)}.")
+                        logger.error(
+                            f"Nenhum par USDT encontrado com os filtros: spot={self._config.get('spot', False)}, futuros={self._config.get('futuros', False)}, swap={self._config.get('swap', False)}, option={self._config.get('option', False)}."
+                        )
                         return False
                     # Loga apenas os IDs dos mercados
-                    logger.info(f"Busca dinâmica de pares: {len(markets)} pares totais, {len(pares_filtrados)} IDs USDT utilizados: {[s for s in pares_filtrados]}")
+                    logger.info(
+                        f"Busca dinâmica de pares: {len(markets)} pares totais, {len(pares_filtrados)} IDs USDT utilizados: {[s for s in pares_filtrados]}"
+                    )
                     pares = pares_filtrados
-                    self._symbol_to_id = symbol_to_id  # mapping symbol->id para uso futuro
+                    self._symbol_to_id = (
+                        symbol_to_id  # mapping symbol->id para uso futuro
+                    )
                 except Exception as e:
                     logger.error(f"Erro ao buscar todos os pares da exchange: {e}")
                     return False
             else:
                 logger.info(f"Usando pares definidos na configuração: {pares}")
-            plugins_analise = [p for p in self._gerente.filtrar_por_tag("analise") if p.nome != "analisador_mercado"]
+            plugins_analise = [
+                p
+                for p in self._gerente.filtrar_por_tag("analise")
+                if p.nome != "analisador_mercado"
+            ]
             analisador_mercado = self._gerente.obter_plugin("analisador_mercado")
             sinais_plugin = self._gerente.obter_plugin("sinais_plugin")
 
@@ -144,6 +172,7 @@ class GerenciadorBot(BaseGerenciador):
 
             # Processamento em lote (batch) de symbols
             from itertools import islice
+
             batch_size = self._config.get("batch_size", 3)
 
             def batcher(iterable, n):
@@ -157,10 +186,22 @@ class GerenciadorBot(BaseGerenciador):
             resultados_gerais = []
             # Buffer para armazenar sinais por símbolo/timeframe
             buffer_sinais = {symbol: {} for symbol in pares}
+
+            # Obter o consolidador de sinais
+            consolidador = self._gerente.obter_plugin("consolidador_sinais")
+            if not consolidador:
+                logger.error("Plugin consolidador_sinais não encontrado")
+                return False
+
             for symbol_batch in batcher(pares, batch_size):
                 tarefas = [
                     self._executor.submit(
-                        self._processar_par, symbol, tf, plugins_analise, sinais_plugin, buffer_sinais
+                        self._processar_par,
+                        symbol,
+                        tf,
+                        plugins_analise,
+                        sinais_plugin,
+                        buffer_sinais,
                     )
                     for symbol in symbol_batch
                     for tf in timeframes
@@ -168,14 +209,15 @@ class GerenciadorBot(BaseGerenciador):
                 resultados = [t.result() for t in as_completed(tarefas)]
                 resultados_gerais.extend(resultados)
                 logger.execution(f"Batch finalizado para symbols: {symbol_batch}")
+
                 # Após cada batch, consolidar sinais dos símbolos processados
                 for symbol in symbol_batch:
                     if all(tf in buffer_sinais[symbol] for tf in timeframes):
-                        sinais_timeframes = buffer_sinais[symbol]
-                        sinal_final = sinais_plugin.consolidar_sinais_multi_timeframe(
-                            sinais_timeframes, symbol, self._config
-                        )
-                        logger.execution(f"Sinal consolidado multi-timeframe para {symbol}: {sinal_final}")
+                        dados_consolidacao = {
+                            "symbol": symbol,
+                            "dados_completos": buffer_sinais[symbol],
+                        }
+                        consolidador.executar(**dados_consolidacao)
 
             logger.execution(f"Ciclo finalizado para todos os pares")
             return all(resultados_gerais)
@@ -183,72 +225,77 @@ class GerenciadorBot(BaseGerenciador):
             logger.error(f"Erro geral no ciclo do bot: {e}", exc_info=True)
             return False
 
-    def _processar_par(self, symbol, timeframe, plugins_analise, sinais_plugin, buffer_sinais=None) -> bool:
+    def _processar_par(
+        self, symbol, timeframe, plugins_analise, sinais_plugin, buffer_sinais=None
+    ) -> bool:
         """
         Processa um par/timeframe, executando plugins de análise e sinais.
-
-        Args:
-            symbol: Símbolo do par (ex.: BTCUSDT).
-            timeframe: Timeframe (ex.: 1m).
-            plugins_analise: Lista de plugins com tag 'analise'.
-            sinais_plugin: Instância do plugin sinais_plugin.
-            buffer_sinais: Buffer temporário para armazenar sinais por símbolo/timeframe.
-
-        Returns:
-            bool: True se o processamento foi bem-sucedido, False caso contrário.
         """
         try:
             logger.execution(f"Início do processamento: {symbol} - {timeframe}")
-            dados = {}
+            dados_completos = {}
+            dados_completos["symbol"] = symbol
+            dados_completos["timeframe"] = timeframe
 
             # Popula k-lines via plugin ObterDados antes das análises
             obter_dados = self._gerente.obter_plugin("obter_dados")
             if obter_dados:
-                obter_dados.executar(dados_completos=dados, symbol=symbol, timeframe=timeframe)
-            else:
-                logger.warning(f"[{self.PLUGIN_NAME}] Plugin ObterDados não encontrado para {symbol}-{timeframe}")
+                obter_dados.executar(dados_completos, symbol, timeframe)
+                crus = dados_completos.get("crus", [])
+                logger.debug(
+                    f"[pipeline] Crus obtidos para {symbol}-{timeframe}: {len(crus) if crus else 0}"
+                )
+                dados_completos["crus"] = crus
 
             # Executa plugins de análise
             for plugin in plugins_analise:
-                resultado = plugin.executar(dados_completos=dados, symbol=symbol, timeframe=timeframe)
-                if not isinstance(resultado, bool) or not resultado:
-                    logger.warning(f"Plugin {plugin.PLUGIN_NAME} falhou para {symbol}-{timeframe}")
+                if hasattr(plugin, "executar"):
+                    resultado = plugin.executar(
+                        dados_completos=dados_completos,
+                        symbol=symbol,
+                        timeframe=timeframe,
+                    )
+                    if isinstance(resultado, dict):
+                        dados_completos.update(resultado)
+                    logger.debug(
+                        f"[pipeline] Após {plugin.nome}: {list(dados_completos.keys())}"
+                    )
 
-            # Executa o analisador_mercado separado, após todos os plugins de análise
-            analisador_mercado = self._gerente.obter_plugin("analisador_mercado")
-            if not analisador_mercado:
-                logger.error("Plugin 'analisador_mercado' não encontrado no registro de plugins.")
-                return False
-            logger.debug(f"[Pipeline] Executando analisador_mercado para {symbol} - {timeframe}")
-            # Validação de candles mínimos para plugins que dependem disso
-            candles = dados.get("candles")
-            if candles is None or len(candles) < 30:
-                logger.warning(f"Candles insuficientes para {symbol}-{timeframe}: {len(candles) if candles else 0}")
-                return False
-            sucesso_analise = analisador_mercado.executar(
-                dados_completos=dados, symbol=symbol, timeframe=timeframe
-            )
-            logger.debug(f"[Pipeline] analisador_mercado finalizado para {symbol} - {timeframe} (sucesso={sucesso_analise})")
-            if not isinstance(sucesso_analise, bool) or not sucesso_analise:
-                logger.warning(f"analisador_mercado falhou ou retornou valor inválido: {symbol} - {timeframe}")
-                return False
-
-            if not sinais_plugin.executar(
-                dados_completos=dados, symbol=symbol, timeframe=timeframe
+            # Garante que symbol, timeframe e crus estejam presentes
+            if not all(
+                [
+                    dados_completos.get("symbol"),
+                    dados_completos.get("timeframe"),
+                    dados_completos.get("crus"),
+                ]
             ):
-                logger.warning(f"sinais_plugin falhou para {symbol} - {timeframe}")
+                logger.error(
+                    f"[pipeline] Dados incompletos para {symbol}-{timeframe} antes do consolidador: {dados_completos}"
+                )
                 return False
 
-            # Armazena o sinal retornado no buffer temporário
+            # Chama o plugin de consolidação de sinais
+            if sinais_plugin and hasattr(sinais_plugin, "executar"):
+                resultado_sinais = sinais_plugin.executar(
+                    symbol=symbol,
+                    dados_completos=dados_completos,
+                )
+                logger.debug(f"[pipeline] Resultado consolidador: {resultado_sinais}")
+                if isinstance(resultado_sinais, dict):
+                    dados_completos.update(resultado_sinais)
+
+            # Buffer de sinais, se necessário
             if buffer_sinais is not None:
-                buffer_sinais[symbol][timeframe] = dados.get("sinais", {})
+                buffer_sinais[symbol][timeframe] = dados_completos.get("sinais", {})
 
             self._estado_ativo[symbol][timeframe] = {"timestamp": time()}
-            logger.execution(f"Processamento concluído: {symbol} - {timeframe}")
+            logger.execution(f"Fim do processamento: {symbol} - {timeframe}")
             return True
-
         except Exception as e:
-            logger.error(f"Erro crítico em {symbol}-{timeframe}: {e}", exc_info=True)
+            logger.error(
+                f"[pipeline] Erro no processamento de {symbol}-{timeframe}: {e}",
+                exc_info=True,
+            )
             return False
 
     def iniciar(self) -> bool:
@@ -292,7 +339,7 @@ class GerenciadorBot(BaseGerenciador):
             self.parar()
             self._executor.shutdown(wait=True)
             super().finalizar()
-            logger.info("GerenciadorBot finalizado com sucesso")
+            logger.debug("GerenciadorBot finalizado com sucesso")
             return True
         except Exception as e:
             logger.error(f"Erro ao finalizar GerenciadorBot: {e}")

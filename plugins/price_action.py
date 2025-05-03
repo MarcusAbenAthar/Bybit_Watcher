@@ -17,6 +17,7 @@ class PriceAction(Plugin):
     - Modular, testável, documentado e sem hardcode.
     - Autoidentificação de dependências/plugins.
     """
+
     PLUGIN_NAME = "price_action"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["analise", "price_action", "pa"]
@@ -126,57 +127,31 @@ class PriceAction(Plugin):
 
         return True
 
-    def executar(self, *args, **kwargs) -> bool:
-        """
-        Executa a análise de price action e armazena resultados.
-
-        Args:
-            dados_completos (dict): Dados crus e processados.
-            symbol (str): Símbolo do par.
-            timeframe (str): Timeframe.
-
-        Returns:
-            bool: True (mesmo em erro, para não interromper o pipeline).
-        """
-        symbol = kwargs.get("symbol")
-        timeframe = kwargs.get("timeframe")
-        dados_completos = kwargs.get("dados_completos", {})
-
-        resultado_padrao = {
-            "price_action": {
-                "direcao": "LATERAL",
-                "forca": "FRACA",
-                "confianca": 0.0,
-                "padrao": None,
-            }
-        }
-
-        if not isinstance(dados_completos, dict):
-            logger.error(
-                f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
-            )
-            dados_completos["price_action"] = resultado_padrao["price_action"]
-            return True
-
-        if not all([symbol, timeframe]):
-            logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes")
-            dados_completos["price_action"] = resultado_padrao["price_action"]
-            return True
-
-        klines = dados_completos.get("crus", [])
-        if not self._validar_klines(klines, symbol, timeframe):
-            dados_completos["price_action"] = resultado_padrao["price_action"]
-            return True
-
+    def executar(self, *args, **kwargs):
+        resultado_padrao = {"price_action": {}}
         try:
-            sinal = self.gerar_sinal(klines)
-            dados_completos["price_action"] = sinal
-            logger.info(f"[{self.nome}] Concluído para {symbol}-{timeframe}")
-            return True
+            dados_completos = kwargs.get("dados_completos")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+            if not all([dados_completos, symbol, timeframe]):
+                logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes")
+                return resultado_padrao
+            if not isinstance(dados_completos, dict):
+                logger.error(
+                    f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
+                )
+                return resultado_padrao
+            candles = dados_completos.get("crus", [])
+            if not self._validar_klines(candles, symbol, timeframe):
+                return resultado_padrao
+            resultado = self.gerar_sinal(candles)
+            logger.debug(
+                f"[{self.nome}] Price action para {symbol}-{timeframe}: {resultado}"
+            )
+            return {"price_action": resultado}
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao executar: {e}", exc_info=True)
-            dados_completos["price_action"] = resultado_padrao["price_action"]
-            return True
+            return resultado_padrao
 
     def gerar_sinal(self, klines: list) -> dict:
         """
@@ -325,3 +300,30 @@ class PriceAction(Plugin):
         except Exception as e:
             logger.error(f"[{self.nome}] Erro na extração dos dados: {e}")
             return {i: np.array([]) for i in indices}
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        tabelas = {
+            "price_action": {
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "direcao": "VARCHAR(10)",
+                    "forca": "DECIMAL(5,2)",
+                    "confianca": "DECIMAL(5,2)",
+                    "preco_entrada": "DECIMAL(18,8)",
+                    "stop_loss": "DECIMAL(18,8)",
+                    "take_profit": "DECIMAL(18,8)",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+            },
+        }
+        return tabelas
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"

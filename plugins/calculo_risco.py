@@ -17,6 +17,7 @@ class CalculoRisco(Plugin):
     - Modular, testável, documentado e sem hardcode.
     - Autoidentificação de dependências/plugins.
     """
+
     PLUGIN_NAME = "calculo_risco"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["risco", "gerenciamento", "exposicao"]
@@ -28,11 +29,6 @@ class CalculoRisco(Plugin):
         Retorna lista de nomes das dependências obrigatórias do plugin CalculoRisco.
         """
         return []
-
-    PLUGIN_NAME = "calculo_risco"
-    PLUGIN_CATEGORIA = "plugin"
-    PLUGIN_TAGS = ["risco", "volatilidade", "analise"]
-    PLUGIN_PRIORIDADE = 45
 
     def __init__(self, **kwargs):
         """
@@ -147,24 +143,10 @@ class CalculoRisco(Plugin):
 
         return True
 
-    def executar(self, *args, **kwargs) -> bool:
-        """
-        Executa o cálculo de risco e armazena resultados.
-
-        Args:
-            dados_completos (dict): Dados crus e processados.
-            symbol (str): Símbolo do par.
-            timeframe (str): Timeframe.
-
-        Returns:
-            bool: True (mesmo em erro, para não interromper o pipeline).
-        """
+    def executar(self, *args, **kwargs):
         symbol = kwargs.get("symbol", "BTCUSDT")
         timeframe = kwargs.get("timeframe", "1m")
         dados_completos = kwargs.get("dados_completos", {})
-
-        logger.debug(f"[{self.nome}] Iniciando para {symbol} - {timeframe}")
-
         resultado_padrao = {
             "calculo_risco": {
                 "direcao": "LATERAL",
@@ -173,33 +155,23 @@ class CalculoRisco(Plugin):
                 "indicadores": {},
             }
         }
-
         if not isinstance(dados_completos, dict):
             logger.error(
                 f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
             )
-            dados_completos["calculo_risco"] = resultado_padrao["calculo_risco"]
-            return True
-
+            return resultado_padrao
         if not all([symbol, timeframe]):
             logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes")
-            dados_completos["calculo_risco"] = resultado_padrao["calculo_risco"]
-            return True
-
+            return resultado_padrao
         klines = dados_completos.get("crus", [])
         if not self._validar_klines(klines, symbol, timeframe):
-            dados_completos["calculo_risco"] = resultado_padrao["calculo_risco"]
-            return True
-
+            return resultado_padrao
         try:
             sinal = self.gerar_sinal(klines)
-            dados_completos["calculo_risco"] = sinal
-            logger.info(f"[{self.nome}] Concluído para {symbol} - {timeframe}")
-            return True
+            return {"calculo_risco": sinal}
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao executar: {e}", exc_info=True)
-            dados_completos["calculo_risco"] = resultado_padrao["calculo_risco"]
-            return True
+            return resultado_padrao
 
     def _extrair_dados(self, dados: list, indices: list) -> dict:
         """
@@ -374,3 +346,25 @@ class CalculoRisco(Plugin):
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao verificar volume: {e}")
             return False
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        return {
+            "calculo_risco": {
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "risco": "DECIMAL(5,2)",
+                    "confianca": "DECIMAL(5,2)",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+            }
+        }
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"

@@ -6,6 +6,7 @@ from utils.logging_config import get_logger
 from utils.config import carregar_config
 from plugins.plugin import Plugin
 import ccxt
+from datetime import datetime
 
 logger = get_logger(__name__)
 
@@ -17,10 +18,38 @@ class ExecucaoOrdens(Plugin):
     - Modular, testável, documentado e sem hardcode.
     - Autoidentificação de dependências/plugins.
     """
+
     PLUGIN_NAME = "execucao_ordens"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["execucao", "ordens", "trading"]
     PLUGIN_PRIORIDADE = 100
+    PLUGIN_TABELAS = {
+        "ordens_executadas": {
+            "schema": {
+                "order_id": "VARCHAR(50) PRIMARY KEY",
+                "symbol": "VARCHAR(20) NOT NULL",
+                "timestamp": "TIMESTAMP NOT NULL",
+                "tipo": "VARCHAR(10)",  # LIMIT/MARKET
+                "lado": "VARCHAR(5)",  # BUY/SELL
+                "preco": "DECIMAL(18,8)",
+                "quantidade": "DECIMAL(18,8)",
+                "status": "VARCHAR(15)",
+                "sinal_origem": "VARCHAR(50)",  # ID do sinal que gerou
+            },
+            "modo_acesso": "own",
+        },
+        "historico_ordens": {
+            "schema": {
+                "id": "SERIAL",
+                "order_id": "VARCHAR(50) REFERENCES ordens_executadas(order_id)",
+                "timestamp": "TIMESTAMP NOT NULL",
+                "evento": "VARCHAR(20)",  # FILLED/CANCELED/etc
+                "preco_executado": "DECIMAL(18,8)",
+                "quantidade_executada": "DECIMAL(18,8)",
+            },
+            "modo_acesso": "own",
+        },
+    }
 
     @classmethod
     def dependencias(cls):
@@ -28,11 +57,6 @@ class ExecucaoOrdens(Plugin):
         Retorna lista de nomes das dependências obrigatórias do plugin ExecucaoOrdens.
         """
         return ["conexao", "sinais_plugin", "gerenciador_banco"]
-
-    PLUGIN_NAME = "execucao_ordens"
-    PLUGIN_CATEGORIA = "plugin"
-    PLUGIN_TAGS = ["execucao", "ordens", "trading"]
-    PLUGIN_PRIORIDADE = 100
 
     def __init__(self, conexao=None, **kwargs):
         """
@@ -138,7 +162,9 @@ class ExecucaoOrdens(Plugin):
             return True
 
         if not all([symbol_or_id, timeframe]):
-            logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes (symbol_or_id={symbol_or_id}, timeframe={timeframe})")
+            logger.error(
+                f"[{self.nome}] Parâmetros obrigatórios ausentes (symbol_or_id={symbol_or_id}, timeframe={timeframe})"
+            )
             dados_completos["execucao_ordens"] = resultado_padrao["execucao_ordens"]
             return True
 
@@ -152,14 +178,14 @@ class ExecucaoOrdens(Plugin):
         direcao = sinal.get("direcao")
         if direcao not in ["LONG", "SHORT"]:
             logger.info(
-                f"[{self.nome}] Nenhum sinal válido para {symbol} ({direcao})"
+                f"[{self.nome}] Nenhum sinal válido para {symbol_or_id} ({direcao})"
             )
             dados_completos["execucao_ordens"] = resultado_padrao["execucao_ordens"]
             return True
 
         auto_trade = self._config.get("trading", {}).get("auto_trade", False)
         if not auto_trade:
-            logger.info(f"[{self.nome}] Auto Trade desativado para {symbol}")
+            logger.info(f"[{self.nome}] Auto Trade desativado para {symbol_or_id}")
             dados_completos["execucao_ordens"] = {
                 "status": "PRONTO",
                 "ordem_id": None,
@@ -169,7 +195,9 @@ class ExecucaoOrdens(Plugin):
 
         try:
             # Usa sempre o id para swaps/futuros/options, e symbol para spot
-            if symbol_or_id in self._ordens_ativas and self._verificar_ordem_ativa(symbol_or_id):
+            if symbol_or_id in self._ordens_ativas and self._verificar_ordem_ativa(
+                symbol_or_id
+            ):
                 logger.info(f"[{self.nome}] Reentrada DCA para {symbol_or_id}")
                 resultado = self._executar_ordem(
                     dados_completos, symbol_or_id, sinal, dca=True
@@ -267,7 +295,7 @@ class ExecucaoOrdens(Plugin):
 
             crus = dados_completos.get("crus", [])
             if not crus or not isinstance(crus[-1], (list, tuple)) or len(crus[-1]) < 5:
-                logger.error(f"[{self.nome}] crus inválido para {symbol}")
+                logger.error(f"[{self.nome}] crus inválido para {symbol_or_id}")
                 return {
                     "status": "ERRO",
                     "ordem_id": None,
@@ -302,10 +330,10 @@ class ExecucaoOrdens(Plugin):
             }
 
             params = {"leverage": alavancagem}
-            if stop_loss is not None:
-                params["stopLossPrice"] = stop_loss
-            if take_profit is not None:
-                params["takeProfitPrice"] = take_profit
+            if sl is not None:
+                params["stopLossPrice"] = sl
+            if tp is not None:
+                params["takeProfitPrice"] = tp
 
             logger.info(
                 f"[{self.nome}] Enviando ordem para {symbol_or_id}: {ordem}, params={params}"
@@ -321,6 +349,24 @@ class ExecucaoOrdens(Plugin):
             ordem_id = resposta.get("id")
             if not dca:
                 self._ordens_ativas[symbol_or_id] = ordem_id
+
+            # Exemplo de uso:
+            self.log_banco(
+                tabela="ordens_executadas",
+                operacao="INSERT",
+                dados="Ordem executada",
+                dados={
+                    "order_id": ordem["id"],
+                    "symbol": ordem["symbol"],
+                    "timestamp": datetime.now(),
+                    "tipo": ordem["type"],
+                    "lado": ordem["side"],
+                    "preco": ordem["price"],
+                    "quantidade": ordem["amount"],
+                    "status": "OPEN",
+                    "sinal_origem": sinal.get("id", "desconhecido"),
+                },
+            )
 
             return {
                 "status": "EXECUTADO",

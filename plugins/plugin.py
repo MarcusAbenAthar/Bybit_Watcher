@@ -1,10 +1,15 @@
 # plugin.py
 # Plugin Base Class com Autoregistro e suporte a detecção inteligente de dependências
 
-from typing import Dict, Optional, Any, List, Type
-import numpy as np
+from __future__ import annotations
 import inspect
-from utils.logging_config import get_logger
+from typing import TYPE_CHECKING, Dict, Optional, Any, List, Type
+import numpy as np
+import logging
+from utils.logging_config import get_logger, log_banco, log_banco
+
+if TYPE_CHECKING:
+    from plugins.gerenciadores.gerenciador import BaseGerenciador
 
 logger = get_logger(__name__)
 
@@ -69,52 +74,133 @@ class PluginRegistry:
 
 class Plugin:
     """
-    Classe base para todos os plugins do sistema Bybit_Watcher.
+    Classe base para todos os plugins do sistema.
 
-    Regras:
-    - PLUGIN_NAME obrigatório e único.
-    - Implementar o método dependencias(), retornando lista de nomes de dependências (strings).
-    - Documentação clara via docstring e comentários.
-    - Suporte à autoidentificação, auto plug-in e injeção dinâmica de dependências.
+    Atributos Obrigatórios:
+        PLUGIN_NAME (str): Nome único do plugin
+        PLUGIN_CATEGORIA (str): Categoria do plugin (ex: 'indicador', 'analise', etc)
+        PLUGIN_TAGS (List[str]): Tags para categorização
+        PLUGIN_SCHEMA_VERSAO (str): Versão do schema do plugin
     """
-    PLUGIN_NAME: Optional[str] = None
+
+    PLUGIN_NAME: str = None
+    PLUGIN_CATEGORIA: str = None
+    PLUGIN_TAGS: List[str] = []
+    PLUGIN_SCHEMA_VERSAO: str = "1.0"
+    PLUGIN_TABELAS: Dict[str, Dict] = {}
 
     def __init_subclass__(cls, **kwargs):
+        """Registra automaticamente subclasses e valida atributos obrigatórios."""
         super().__init_subclass__(**kwargs)
-        PluginRegistry.registrar(cls)
-        if not getattr(cls, "PLUGIN_NAME", None):
-            raise ValueError(f"{cls.__name__} precisa definir PLUGIN_NAME.")
-        if not hasattr(cls, "dependencias"):
-            logger.warning(f"{cls.__name__} deveria implementar o método dependencias().")
 
-    @classmethod
-    def dependencias(cls) -> List[str]:
+        # Valida atributos obrigatórios
+        if not getattr(cls, "PLUGIN_NAME", None):
+            raise ValueError(f"{cls.__name__} precisa definir PLUGIN_NAME")
+
+        if not getattr(cls, "PLUGIN_CATEGORIA", None):
+            raise ValueError(f"{cls.__name__} precisa definir PLUGIN_CATEGORIA")
+
+        if not getattr(cls, "PLUGIN_TAGS", None):
+            raise ValueError(f"{cls.__name__} precisa definir PLUGIN_TAGS")
+
+        if not getattr(cls, "PLUGIN_SCHEMA_VERSAO", None):
+            cls.PLUGIN_SCHEMA_VERSAO = "1.0"  # Valor padrão
+
+        # Registra o plugin
+        PluginRegistry.registrar(cls)
+
+    def __init__(self, gerente=None, **kwargs):
         """
-        Retorna lista de nomes (strings) das dependências obrigatórias do plugin.
-        Deve ser sobrescrito nas subclasses.
+        Inicializa o plugin com gerente e argumentos opcionais.
+
+        Args:
+            gerente: Instância do gerenciador de plugins
+            **kwargs: Argumentos adicionais específicos do plugin
         """
-        return []
+        self.gerente = gerente
+        self.inicializado = False
+        self._config = {}
+
+    def inicializar(self, config: dict) -> bool:
+        """
+        Inicializa o plugin com a configuração fornecida.
+
+        Args:
+            config: Dicionário com configurações necessárias
+
+        Returns:
+            bool: True se inicializado com sucesso, False caso contrário
+        """
+        try:
+            if self.inicializado:
+                return True
+
+            self._config = config
+            self.inicializado = True
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro ao inicializar {self.PLUGIN_NAME}: {str(e)}")
+            return False
+
+    def executar(self, *args, **kwargs) -> bool:
+        """
+        Executa a lógica principal do plugin.
+        Deve ser implementado pelas subclasses.
+        """
+        raise NotImplementedError("Plugin precisa implementar executar()")
+
+    def finalizar(self) -> bool:
+        """
+        Finaliza o plugin, limpando recursos e conexões.
+
+        Returns:
+            bool: True se finalizado com sucesso, False caso contrário
+        """
+        try:
+            if not self.inicializado:
+                return True
+
+            self._config = {}
+            self.inicializado = False
+            return True
+
+        except Exception as e:
+            logger.error(f"Erro ao finalizar {self.PLUGIN_NAME}: {str(e)}")
+            return False
+
+    @property
+    def plugin_tabelas(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Retorna um dicionário com as definições das tabelas do plugin.
+        Deve ser sobrescrito nas subclasses que precisam de tabelas.
+
+        Returns:
+            Dict[str, Dict[str, Any]]: Dicionário no formato:
+                {
+                    "nome_tabela": {
+                        "columns": {
+                            "coluna1": "TIPO_SQL",
+                            "coluna2": "TIPO_SQL"
+                        },
+                        "plugin": "nome_do_plugin"
+                    }
+                }
+        """
+        return {}
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        """
+        Retorna a versão do schema do plugin.
+        Deve ser sobrescrito nas subclasses que precisam de tabelas.
+
+        Returns:
+            str: Versão do schema no formato "X.Y"
+        """
+        return "1.0"
 
     # Os demais métodos e atributos permanecem conforme já implementados, mantendo compatibilidade e clareza.
-
-    """
-    Classe base para plugins.
-
-    Atributos esperados:
-        PLUGIN_NAME: Nome único
-        PLUGIN_CATEGORIA: Ex: "plugin", "gerenciador"
-        PLUGIN_TAGS: Lista de strings
-        PLUGIN_PRIORIDADE: Prioridade de carga
-    """
-
-    PLUGIN_NAME: Optional[str] = None
-    PLUGIN_CATEGORIA: str = "plugin"
-    PLUGIN_TAGS: List[str] = []
-    PLUGIN_PRIORIDADE: int = 100
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        PluginRegistry.registrar(cls)
 
     def __init__(self, **kwargs):
         self._nome = self.PLUGIN_NAME or self.__class__.__name__
@@ -148,97 +234,6 @@ class Plugin:
         Subclasses devem sobrescrever este método se houver configurações específicas.
         """
         return []
-
-    def inicializar(self, config: Dict[str, Any]) -> bool:
-        """
-        Inicializa o plugin com a configuração fornecida.
-
-        Args:
-            config: Dicionário com configurações necessárias.
-
-        Returns:
-            bool: True se inicializado com sucesso, False caso contrário.
-        """
-        try:
-            if self.inicializado:
-                return True
-            requeridas = self.configuracoes_requeridas()
-            if not all(k in config for k in requeridas):
-                logger.error(
-                    f"Configuração incompleta para {self.nome}: faltam {requeridas}"
-                )
-                return False
-            self._config = config
-            for dependencia in self._dependencias:
-                if not dependencia.inicializado:
-                    logger.error(
-                        f"Dependência {dependencia.nome} não inicializada para {self.nome}"
-                    )
-                    return False
-            self.inicializado = True
-            return True
-        except KeyError as e:
-            logger.error(f"Chave de configuração ausente para {self.nome}: {e}")
-            return False
-        except TypeError as e:
-            logger.error(f"Erro de tipo na configuração de {self.nome}: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Erro inesperado ao inicializar {self.nome}: {e}")
-            return False
-
-    def executar(self, *args, **kwargs) -> bool:
-        """
-        Executa a lógica principal do plugin.
-
-        Args:
-            dados_completos: Dicionário com dados de mercado.
-            symbol: Símbolo do ativo (ex.: BTCUSDT).
-            timeframe: Timeframe dos dados (ex.: 1m, 1h).
-
-        Returns:
-            bool: True se executado com sucesso, False caso contrário.
-        """
-        try:
-            if not self.inicializado:
-                logger.error(f"Plugin {self.nome} não inicializado")
-                return False
-            dados_completos = kwargs.get("dados_completos")
-            symbol = kwargs.get("symbol")
-            timeframe = kwargs.get("timeframe")
-            if not all([dados_completos, symbol, timeframe]):
-                logger.error(f"Parâmetros obrigatórios ausentes em {self.nome}")
-                return False
-            if not isinstance(dados_completos, dict):
-                logger.warning(f"dados_completos inválido em {self.nome}")
-                return False
-            return True
-        except KeyError as e:
-            logger.error(f"Chave ausente em kwargs para {self.nome}: {e}")
-            return False
-        except TypeError as e:
-            logger.error(f"Erro de tipo em {self.nome}: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Erro inesperado ao executar {self.nome}: {e}")
-            return False
-
-    def finalizar(self):
-        """
-        Finaliza o plugin, limpando configurações, dependências e garantindo shutdown seguro.
-        """
-        try:
-            if not self.inicializado:
-                return
-            self._config = None
-            self._dependencias.clear()
-            self.inicializado = False
-            logger.info(f"Plugin {self.nome} finalizado com sucesso")
-            # Se houver super().finalizar(), chamar para garantir padronização
-            if hasattr(super(), 'finalizar'):
-                super().finalizar()
-        except Exception as e:
-            logger.error(f"Erro inesperado ao finalizar {self.nome}: {e}")
 
     def _extrair_dados(
         self, dados_completos: List[Any], indices: List[int]
@@ -281,3 +276,11 @@ class Plugin:
         except Exception as e:
             logger.error(f"Erro inesperado ao extrair dados em {self.nome}: {e}")
             return {idx: np.array([]) for idx in indices}
+
+    @property
+    def should_log_banco(self) -> bool:
+        """
+        Determina se o plugin deve registrar logs de banco.
+        Padrão: True se declarar PLUGIN_TABELAS
+        """
+        return hasattr(self, "PLUGIN_TABELAS")

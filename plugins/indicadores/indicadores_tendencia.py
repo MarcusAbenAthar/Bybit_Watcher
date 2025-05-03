@@ -6,6 +6,7 @@ import talib
 from utils.logging_config import get_logger
 from plugins.plugin import Plugin
 from plugins.gerenciadores.gerenciador_plugins import GerenciadorPlugins
+import logging
 
 logger = get_logger(__name__)
 
@@ -17,33 +18,69 @@ class IndicadoresTendencia(Plugin):
         """
         try:
             super().finalizar()
-            logger.info("IndicadoresTendencia finalizado com sucesso.")
+            logger.debug("IndicadoresTendencia finalizado com sucesso.")
         except Exception as e:
             logger.error(f"Erro ao finalizar IndicadoresTendencia: {e}")
 
     """
-    Plugin de indicadores de tendência (ex: EMA, ADX, MACD).
-    - Responsabilidade única: cálculo de indicadores de tendência.
+    Plugin para cálculo de indicadores de tendência.
+    - Responsabilidade única: indicadores de tendência.
     - Modular, testável, documentado e sem hardcode.
     - Autoidentificação de dependências/plugins.
     """
     PLUGIN_NAME = "indicadores_tendencia"
-    PLUGIN_CATEGORIA = "plugin"
-    PLUGIN_TAGS = ["indicadores", "tendencia", "analise"]
-    PLUGIN_PRIORIDADE = 100
+    PLUGIN_CATEGORIA = "indicador"
+    PLUGIN_TAGS = ["indicador", "tendencia", "analise"]
+    PLUGIN_PRIORIDADE = 50
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        tabelas = {
+            "indicadores_tendencia": {
+                "descricao": "Tabela com indicadores de tendência calculados.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+                "columns": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "indicador": "VARCHAR(50) NOT NULL",
+                    "valor": "DECIMAL(18,8)",
+                    "direcao": "VARCHAR(10)",
+                    "forca": "DECIMAL(5,2)",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+            },
+            "medias_moveis": {
+                "descricao": "Tabela com médias móveis calculadas.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+                "columns": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "tipo": "VARCHAR(20) NOT NULL",
+                    "periodo": "INTEGER NOT NULL",
+                    "valor": "DECIMAL(18,8) NOT NULL",
+                    "direcao": "VARCHAR(10)",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+            },
+        }
+        return tabelas
 
     @classmethod
     def dependencias(cls):
         """
         Retorna lista de nomes das dependências obrigatórias do plugin IndicadoresTendencia.
         """
-        return []
-
-    PLUGIN_NAME = "indicadores_tendencia"
-    PLUGIN_TYPE = "indicador"
-    PLUGIN_CATEGORIA = "plugin"
-    # Adicionada a tag 'analise' para garantir execução no pipeline de análise do bot.
-    PLUGIN_TAGS = ["indicador", "tendencia", "analise"]
+        return ["gerenciador_banco", "obter_dados"]
 
     def __init__(self, gerente: GerenciadorPlugins):
         super().__init__(gerente=gerente)
@@ -159,70 +196,44 @@ class IndicadoresTendencia(Plugin):
             logger.error(f"[{self.nome}] Erro ao extrair OHLC: {e}")
             return {"high": np.array([]), "low": np.array([]), "close": np.array([])}
 
-    def executar(self, dados_completos, symbol, timeframe) -> bool:
-        """
-        Executa o cálculo dos indicadores de tendência e armazena resultados.
-
-        Args:
-            dados_completos (dict): Dicionário com dados crus e processados.
-            symbol (str): Símbolo do par.
-            timeframe (str): Timeframe.
-
-        Returns:
-            bool: True (mesmo em caso de erro, para não interromper o pipeline).
-        """
+    def executar(self, dados_completos, symbol, timeframe):
         resultado_padrao = {
-            "medias_moveis": {},
-            "macd": {},
-            "adx": {},
-            "atr": 0.0,
+            "tendencia": {
+                "medias_moveis": {},
+                "macd": {},
+                "adx": {},
+                "atr": 0.0,
+            }
         }
-
         try:
             if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes")
-                if isinstance(dados_completos, dict):
-                    dados_completos["tendencia"] = resultado_padrao
-                return True
-
+                return resultado_padrao
             if not isinstance(dados_completos, dict):
                 logger.error(
                     f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
                 )
-                dados_completos["tendencia"] = resultado_padrao
-                return True
-
+                return resultado_padrao
             candles = dados_completos.get("crus", [])
             if not self._validar_candles(candles, symbol, timeframe):
-                dados_completos["tendencia"] = resultado_padrao
-                return True
-
+                return resultado_padrao
             ohlc = self._extrair_ohlcv(candles)
             close = ohlc["close"]
             if len(close) < 30:
-                dados_completos["tendencia"] = resultado_padrao
-                return True
-
+                return resultado_padrao
             media = np.mean(close[-14:])
             volatilidade = np.std(close[-14:]) / media if media != 0 else 0.0
-
             periodos = self._ajustar_periodos(timeframe, volatilidade)
-
-            # Médias móveis
             sma_r = talib.SMA(close, timeperiod=periodos["sma_rapida"])
             sma_l = talib.SMA(close, timeperiod=periodos["sma_lenta"])
             ema_r = talib.EMA(close, timeperiod=periodos["ema_rapida"])
             ema_l = talib.EMA(close, timeperiod=periodos["ema_lenta"])
-
-            # MACD
             macd, signal, hist = talib.MACD(
                 close,
                 fastperiod=periodos["ema_rapida"],
                 slowperiod=periodos["ema_lenta"],
                 signalperiod=periodos["macd_signal"],
             )
-
-            # ADX
             adx = talib.ADX(
                 ohlc["high"], ohlc["low"], close, timeperiod=periodos["adx_periodo"]
             )
@@ -232,13 +243,10 @@ class IndicadoresTendencia(Plugin):
             ndi = talib.MINUS_DI(
                 ohlc["high"], ohlc["low"], close, timeperiod=periodos["adx_periodo"]
             )
-
-            # ATR
             atr = talib.ATR(
                 ohlc["high"], ohlc["low"], close, timeperiod=periodos["atr_periodo"]
             )
-
-            dados_completos["tendencia"] = {
+            tendencia = {
                 "medias_moveis": {
                     "sma_rapida": float(sma_r[-1]) if sma_r.size else None,
                     "sma_lenta": float(sma_l[-1]) if sma_l.size else None,
@@ -257,9 +265,7 @@ class IndicadoresTendencia(Plugin):
                 },
                 "atr": float(atr[-1]) if atr.size else 0.0,
             }
-            return True
+            return {"tendencia": tendencia}
         except Exception as e:
             logger.error(f"[{self.nome}] Erro geral ao executar: {e}")
-            if isinstance(dados_completos, dict):
-                dados_completos["tendencia"] = resultado_padrao
-            return True
+            return resultado_padrao

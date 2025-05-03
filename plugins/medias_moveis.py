@@ -2,10 +2,11 @@
 Plugin para cálculo de sinais baseados em médias móveis.
 """
 
-from utils.logging_config import get_logger
+from utils.logging_config import get_logger, log_banco
 import numpy as np
 import talib
 from plugins.plugin import Plugin
+from datetime import datetime
 
 logger = get_logger(__name__)
 
@@ -17,23 +18,11 @@ class MediasMoveis(Plugin):
     - Modular, testável, documentado e sem hardcode.
     - Autoidentificação de dependências/plugins.
     """
+
     PLUGIN_NAME = "medias_moveis"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["analise", "medias_moveis", "ma"]
     PLUGIN_PRIORIDADE = 100
-
-    @classmethod
-    def dependencias(cls):
-        """
-        Retorna lista de nomes das dependências obrigatórias do plugin MediasMoveis.
-        """
-        return []
-
-    PLUGIN_NAME = "medias_moveis"
-    PLUGIN_CATEGORIA = "plugin"
-    # Adicionada a tag 'analise' para garantir execução no pipeline de análise do bot.
-    PLUGIN_TAGS = ["tendencia", "indicador", "mm", "analise"]
-    PLUGIN_PRIORIDADE = 40
 
     def __init__(self, **kwargs):
         """
@@ -125,51 +114,31 @@ class MediasMoveis(Plugin):
 
         return True
 
-    def executar(self, *args, **kwargs) -> bool:
-        """
-        Executa o cálculo de sinais de médias móveis e armazena resultados.
-
-        Args:
-            dados_completos (dict): Dados crus e processados.
-            symbol (str): Símbolo do par.
-            timeframe (str): Timeframe.
-
-        Returns:
-            bool: True (mesmo em erro, para não interromper o pipeline).
-        """
-        symbol = kwargs.get("symbol")
-        timeframe = kwargs.get("timeframe")
-        dados_completos = kwargs.get("dados_completos")
-
-        logger.debug(f"[{self.nome}] Iniciando para {symbol} - {timeframe}")
-
-        resultado_padrao = {
-            "direcao": "LATERAL",
-            "forca": "FRACA",
-            "confianca": 0.0,
-            "indicadores": {"ma_curta": None, "ma_longa": None},
-        }
-
-        if not isinstance(dados_completos, dict) or not all([symbol, timeframe]):
-            logger.error(f"[{self.nome}] Parâmetros inválidos recebidos")
-            if isinstance(dados_completos, dict):
-                dados_completos["medias_moveis"] = resultado_padrao
-            return True
-
-        dados_crus = dados_completos.get("crus", [])
-        if not self._validar_klines(dados_crus, symbol, timeframe):
-            dados_completos["medias_moveis"] = resultado_padrao
-            return True
-
+    def executar(self, *args, **kwargs):
+        resultado_padrao = {"medias_moveis": {}}
         try:
-            sinal = self.gerar_sinal(dados_crus)
-            dados_completos["medias_moveis"] = sinal
-            logger.info(f"[{self.nome}] Concluído para {symbol} - {timeframe}")
-            return True
+            dados_completos = kwargs.get("dados_completos")
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
+            if not all([dados_completos, symbol, timeframe]):
+                logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes")
+                return resultado_padrao
+            if not isinstance(dados_completos, dict):
+                logger.error(
+                    f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
+                )
+                return resultado_padrao
+            candles = dados_completos.get("crus", [])
+            if not self._validar_klines(candles, symbol, timeframe):
+                return resultado_padrao
+            medias = self.gerar_sinal(candles)
+            logger.debug(
+                f"[{self.nome}] Médias móveis para {symbol}-{timeframe}: {medias}"
+            )
+            return {"medias_moveis": medias}
         except Exception as e:
-            logger.error(f"[{self.nome}] Erro ao processar: {e}", exc_info=True)
-            dados_completos["medias_moveis"] = resultado_padrao
-            return True
+            logger.error(f"[{self.nome}] Erro ao executar: {e}", exc_info=True)
+            return resultado_padrao
 
     def _extrair_dados(self, crus: list, indices: list) -> dict:
         """
@@ -291,3 +260,28 @@ class MediasMoveis(Plugin):
             "confianca": 0.0,
             "indicadores": {"ma_curta": None, "ma_longa": None},
         }
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        tabelas = {
+            "medias_moveis": {
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "tipo": "VARCHAR(20) NOT NULL",
+                    "periodo": "INTEGER NOT NULL",
+                    "valor": "DECIMAL(18,8) NOT NULL",
+                    "direcao": "VARCHAR(10)",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+            },
+        }
+        return tabelas
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"

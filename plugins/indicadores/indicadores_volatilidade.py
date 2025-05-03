@@ -16,7 +16,7 @@ class IndicadoresVolatilidade(Plugin):
         """
         try:
             super().finalizar()
-            logger.info("IndicadoresVolatilidade finalizado com sucesso.")
+            logger.debug("IndicadoresVolatilidade finalizado com sucesso.")
         except Exception as e:
             logger.error(f"Erro ao finalizar IndicadoresVolatilidade: {e}")
 
@@ -37,12 +37,6 @@ class IndicadoresVolatilidade(Plugin):
         Retorna lista de nomes das dependências obrigatórias do plugin IndicadoresVolatilidade.
         """
         return []
-
-    PLUGIN_NAME = "indicadores_volatilidade"
-    PLUGIN_TYPE = "indicador"
-    PLUGIN_CATEGORIA = "plugin"
-    PLUGIN_TAGS = ["indicador", "volatilidade"]
-    PLUGIN_PRIORIDADE = 50
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -162,56 +156,34 @@ class IndicadoresVolatilidade(Plugin):
             )
             return {i: np.array([]) for i in indices}
 
-    def executar(self, dados_completos, symbol, timeframe) -> bool:
-        """
-        Executa o cálculo dos indicadores de volatilidade e insere o resultado em 'dados_completos["volatilidade"]'.
-
-        Args:
-            dados_completos (dict): Dicionário com dados crus e processados.
-            symbol (str): Símbolo do par.
-            timeframe (str): Timeframe.
-
-        Returns:
-            bool: True (mesmo em caso de erro, para não interromper o pipeline).
-        """
+    def executar(self, *args, **kwargs):
         resultado_padrao = {
-            "bandas_bollinger": {"superior": None, "media": None, "inferior": None},
-            "atr": None,
-            "volatilidade": 0.0,
+            "volatilidade": {
+                "bandas_bollinger": {"superior": None, "media": None, "inferior": None},
+                "atr": None,
+                "volatilidade": 0.0,
+            }
         }
-
         try:
             dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
-
             if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes")
-                if isinstance(dados_completos, dict):
-                    dados_completos["volatilidade"] = resultado_padrao
-                return True
-
+                return resultado_padrao
             if not isinstance(dados_completos, dict):
                 logger.error(
                     f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
                 )
-                dados_completos["volatilidade"] = resultado_padrao
-                return True
-
+                return resultado_padrao
             klines = dados_completos.get("crus", [])
             if not self._validar_klines(klines, symbol, timeframe):
-                dados_completos["volatilidade"] = resultado_padrao
-                return True
-
+                return resultado_padrao
             close = self._extrair_dados(klines, [4])[4]
             if close.size == 0:
-                dados_completos["volatilidade"] = resultado_padrao
-                return True
-
+                return resultado_padrao
             volatilidade_base = self._calcular_volatilidade_base(close)
             periodos = self._ajustar_periodos(timeframe, volatilidade_base)
-
-            # Bollinger Bands
             if len(close) < periodos["bb"]:
                 logger.warning(
                     f"[{self.nome}] Menos de {periodos['bb']} candles para Bollinger"
@@ -225,13 +197,10 @@ class IndicadoresVolatilidade(Plugin):
                     nbdevdn=self.config["bb_desvio_padrao"],
                     matype=0,
                 )
-
-            # ATR
             dados_ohlc = self._extrair_dados(klines, [2, 3, 4])
             high, low, close_atr = dados_ohlc[2], dados_ohlc[3], dados_ohlc[4]
             atr = talib.ATR(high, low, close_atr, timeperiod=periodos["atr"])
             atr_valor = float(atr[-1]) if atr.size > 0 else None
-
             resultado = {
                 "bandas_bollinger": {
                     "superior": float(upper[-1]) if upper.size else None,
@@ -241,14 +210,33 @@ class IndicadoresVolatilidade(Plugin):
                 "atr": atr_valor,
                 "volatilidade": round(volatilidade_base, 4),
             }
-
-            dados_completos["volatilidade"] = resultado
             logger.debug(
                 f"[{self.nome}] Volatilidade calculada para {symbol} - {timeframe}"
             )
-            return True
+            return {"volatilidade": resultado}
         except Exception as e:
             logger.error(f"[{self.nome}] Erro geral ao executar: {e}", exc_info=True)
-            if isinstance(dados_completos, dict):
-                dados_completos["volatilidade"] = resultado_padrao
-            return True
+            return resultado_padrao
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        return {
+            "indicadores_volatilidade": {
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "indicador": "VARCHAR(50) NOT NULL",
+                    "valor": "DECIMAL(18,8)",
+                    "volatilidade": "DECIMAL(18,8)",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+            }
+        }
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"

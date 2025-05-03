@@ -19,6 +19,7 @@ class CalculoAlavancagem(Plugin):
     - Modular, testável, documentado e sem hardcode.
     - Autoidentificação de dependências/plugins.
     """
+
     PLUGIN_NAME = "calculo_alavancagem"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["alavancagem", "gerenciamento", "risco"]
@@ -117,64 +118,35 @@ class CalculoAlavancagem(Plugin):
 
         return True
 
-    def executar(self, *args, **kwargs) -> bool:
-        """
-        Método executado pelo sistema principal. Injeta a alavancagem nos dados_completos.
-
-        Args:
-            dados_completos (dict): Dados crus e processados.
-            symbol (str): Símbolo do par.
-            timeframe (str): Timeframe.
-            direcao (str, opcional): Direção do sinal.
-            confianca (float, opcional): Confiança do sinal.
-
-        Returns:
-            bool: True (mesmo em erro, para não interromper o pipeline).
-        """
+    def executar(self, *args, **kwargs):
         resultado_padrao = {"alavancagem": self._alav_min}
-
         try:
             dados_completos = kwargs.get("dados_completos")
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
-
             if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes")
-                if isinstance(dados_completos, dict):
-                    dados_completos.update(resultado_padrao)
-                return True
-
+                return resultado_padrao
             if not isinstance(dados_completos, dict):
                 logger.error(
                     f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
                 )
-                dados_completos["alavancagem"] = resultado_padrao["alavancagem"]
-                return True
-
+                return resultado_padrao
             crus = dados_completos.get("crus", [])
             if not self._validar_klines(crus, symbol, timeframe):
-                dados_completos["alavancagem"] = resultado_padrao["alavancagem"]
-                return True
-
+                return resultado_padrao
             direcao = kwargs.get("direcao", None)
             confianca = kwargs.get("confianca", 0.0)
-
-            # Corrigido: chamada correta para calcular_alavancagem (sem underline)
             alavancagem = self.calcular_alavancagem(
                 crus, direcao=direcao, confianca=confianca
             )
-
-            dados_completos["alavancagem"] = alavancagem
             logger.debug(
                 f"[{self.nome}] Alavancagem atribuída para {symbol}-{timeframe}: {alavancagem}x"
             )
-            return True
-
+            return {"alavancagem": alavancagem}
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao executar: {e}", exc_info=True)
-            if isinstance(dados_completos, dict):
-                dados_completos.update(resultado_padrao)
-            return True
+            return resultado_padrao
 
     def calcular_alavancagem(
         self, crus: list, direcao: str = None, confianca: float = 0.0
@@ -247,3 +219,26 @@ class CalculoAlavancagem(Plugin):
                 f"[{self.nome}] Erro no cálculo de alavancagem: {e}", exc_info=True
             )
             return self._alav_min
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        return {
+            "outros_indicadores": {
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "indicador": "VARCHAR(50) NOT NULL",
+                    "valor": "DECIMAL(18,8)",
+                    "descricao": "TEXT",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+            }
+        }
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"

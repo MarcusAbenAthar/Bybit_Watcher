@@ -1,6 +1,7 @@
 from plugins.gerenciadores.gerenciador_plugins import GerenciadorPlugins
 from utils.logging_config import get_logger
 from plugins.plugin import Plugin
+import logging
 
 import talib
 import numpy as np
@@ -16,33 +17,52 @@ class IndicadoresVolume(Plugin):
         """
         try:
             super().finalizar()
-            logger.info("IndicadoresVolume finalizado com sucesso.")
+            logger.debug("IndicadoresVolume finalizado com sucesso.")
         except Exception as e:
             logger.error(f"Erro ao finalizar IndicadoresVolume: {e}")
 
     """
-    Plugin de indicadores de volume (ex: OBV, Volume Médio).
-    - Responsabilidade única: cálculo de indicadores de volume.
+    Plugin para cálculo de indicadores de volume.
+    - Responsabilidade única: indicadores de volume.
     - Modular, testável, documentado e sem hardcode.
     - Autoidentificação de dependências/plugins.
     """
     PLUGIN_NAME = "indicadores_volume"
-    PLUGIN_CATEGORIA = "plugin"
-    PLUGIN_TAGS = ["indicadores", "volume", "analise"]
-    PLUGIN_PRIORIDADE = 100
+    PLUGIN_CATEGORIA = "indicador"
+    PLUGIN_TAGS = ["indicador", "volume", "analise"]
+    PLUGIN_PRIORIDADE = 50
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        return {
+            "indicadores_volume": {
+                "columns": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "indicador": "VARCHAR(50) NOT NULL",
+                    "valor": "DECIMAL(18,8)",
+                    "volume_base": "DECIMAL(18,8)",
+                    "volume_quote": "DECIMAL(18,8)",
+                    "direcao": "VARCHAR(10)",
+                    "forca": "DECIMAL(5,2)",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+                "plugin": self.PLUGIN_NAME,
+            }
+        }
 
     @classmethod
     def dependencias(cls):
         """
         Retorna lista de nomes das dependências obrigatórias do plugin IndicadoresVolume.
         """
-        return []
-
-    PLUGIN_NAME = "indicadores_volume"
-    PLUGIN_TYPE = "indicador"
-    PLUGIN_CATEGORIA = "plugin"
-    PLUGIN_TAGS = ["indicador", "volume"]
-    PLUGIN_PRIORIDADE = 50
+        return ["gerenciador_banco", "obter_dados"]
 
     def __init__(self, gerente: GerenciadorPlugins):
         super().__init__(gerente=gerente)
@@ -213,22 +233,25 @@ class IndicadoresVolume(Plugin):
             logger.error(f"[{self.nome}] Erro ao calcular volatilidade: {e}")
             return 0.0
 
-    def executar(self, dados_completos, symbol, timeframe): 
+    def executar(self, *args, **kwargs) -> bool:
         """
-        Executa o cálculo dos indicadores de volume e armazena resultados.
+        Executa a análise de volume.
 
         Args:
-            dados_completos (dict): Dicionário com dados crus e processados.
-            symbol (str): Símbolo do par.
-            timeframe (str): Timeframe.
+            *args: Argumentos posicionais
+            **kwargs: Argumentos nomeados, deve incluir dados_completos
 
         Returns:
-            bool: True (mesmo em caso de erro, para não interromper o pipeline).
+            bool: True se executado com sucesso
         """
-        resultado_padrao = {"obv": None, "cmf": None, "mfi": None}
-
         try:
             dados_completos = kwargs.get("dados_completos")
+            if not dados_completos:
+                logger.error(f"[{self.nome}] dados_completos não fornecido")
+                return False
+
+            resultado_padrao = {"obv": None, "cmf": None, "mfi": None}
+
             symbol = kwargs.get("symbol")
             timeframe = kwargs.get("timeframe")
 
@@ -282,4 +305,4 @@ class IndicadoresVolume(Plugin):
             logger.error(f"[{self.nome}] Erro geral na execução: {e}", exc_info=True)
             if isinstance(dados_completos, dict):
                 dados_completos["volume"] = resultado_padrao
-            return True
+            return False

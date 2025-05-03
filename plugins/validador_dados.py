@@ -16,6 +16,7 @@ class ValidadorDados(Plugin):
     - Modular, testável, documentado e sem hardcode.
     - Autoidentificação de dependências/plugins.
     """
+
     PLUGIN_NAME = "validador_dados"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["validador", "dados", "analise"]
@@ -27,11 +28,6 @@ class ValidadorDados(Plugin):
         Retorna lista de nomes das dependências obrigatórias do plugin ValidadorDados.
         """
         return []
-
-    PLUGIN_NAME = "validador_dados"
-    PLUGIN_CATEGORIA = "plugin"
-    PLUGIN_TAGS = ["validação", "dados"]
-    PLUGIN_PRIORIDADE = 30
 
     def __init__(self, conexao=None, **kwargs):
         """
@@ -106,8 +102,7 @@ class ValidadorDados(Plugin):
                 logger.error(
                     f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
                 )
-                dados_completos["validador_dados"] = resultado_padrao["validador_dados"]
-                return True
+                return True  # Retorna cedo, pois não podemos modificar None
 
             if not all([symbol, timeframe]):
                 logger.error(
@@ -143,7 +138,8 @@ class ValidadorDados(Plugin):
             return True
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao executar: {e}", exc_info=True)
-            dados_completos["validador_dados"] = {"status": "INVALIDO"}
+            if isinstance(dados_completos, dict):
+                dados_completos["validador_dados"] = {"status": "INVALIDO"}
             return True
 
     def _validar(self, candles: list, symbol: str, timeframe: str) -> bool:
@@ -261,6 +257,6 @@ class ValidadorDados(Plugin):
         """
         try:
             super().finalizar()
-            logger.info("ValidadorDados finalizado com sucesso.")
+            logger.debug("ValidadorDados finalizado com sucesso.")
         except Exception as e:
             logger.error(f"Erro ao finalizar ValidadorDados: {e}")

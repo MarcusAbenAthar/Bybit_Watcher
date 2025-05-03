@@ -5,6 +5,7 @@ from utils.logging_config import get_logger
 import talib
 import numpy as np
 from plugins.plugin import Plugin
+import logging
 
 logger = get_logger(__name__)
 
@@ -16,27 +17,56 @@ class IndicadoresOsciladores(Plugin):
         """
         try:
             super().finalizar()
-            logger.info("IndicadoresOsciladores finalizado com sucesso.")
+            logger.debug("IndicadoresOsciladores finalizado com sucesso.")
         except Exception as e:
             logger.error(f"Erro ao finalizar IndicadoresOsciladores: {e}")
 
     """
-    Plugin de indicadores osciladores (ex: RSI, Estocástico).
-    - Responsabilidade única: cálculo de indicadores osciladores.
+    Plugin para cálculo de indicadores osciladores.
+    - Responsabilidade única: indicadores osciladores.
     - Modular, testável, documentado e sem hardcode.
     - Autoidentificação de dependências/plugins.
     """
     PLUGIN_NAME = "indicadores_osciladores"
-    PLUGIN_CATEGORIA = "plugin"
-    PLUGIN_TAGS = ["indicadores", "osciladores", "analise"]
-    PLUGIN_PRIORIDADE = 100
+    PLUGIN_CATEGORIA = "indicador"
+    PLUGIN_TAGS = ["indicador", "oscilador", "analise"]
+    PLUGIN_PRIORIDADE = 50
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        tabelas = {
+            "indicadores_osciladores": {
+                "schema": {},
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+                "columns": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "indicador": "VARCHAR(50) NOT NULL",
+                    "valor": "DECIMAL(18,8)",
+                    "zona": "VARCHAR(20)",
+                    "sinal": "VARCHAR(10)",
+                    "forca": "DECIMAL(5,2)",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+            },
+        }
+        return tabelas
 
     @classmethod
     def dependencias(cls):
         """
         Retorna lista de nomes das dependências obrigatórias do plugin IndicadoresOsciladores.
         """
-        return []
+        return ["gerenciador_banco", "obter_dados"]
 
     PLUGIN_NAME = "indicadores_osciladores"
     PLUGIN_TYPE = "indicador"
@@ -215,37 +245,24 @@ class IndicadoresOsciladores(Plugin):
             logger.error(f"[{self.nome}] Erro ao calcular volatilidade: {e}")
             return 0.0
 
-    def executar(self, dados_completos: dict, symbol: str, timeframe: str) -> bool:
-        """
-        Executa o cálculo dos indicadores osciladores e armazena resultados.
-
-        Args:
-            dados_completos: Dicionário com dados a serem processados.
-            symbol (str): Símbolo do par.
-            timeframe (str): Timeframe.
-
-        Returns:
-            bool: True (mesmo em caso de erro, para não interromper o pipeline).
-        """
+    def executar(self, dados_completos: dict, symbol: str, timeframe: str):
         resultado_padrao = {
-            "rsi": None,
-            "estocastico": {"slowk": None, "slowd": None},
-            "mfi": None,
-            "volatilidade": 0.0,
+            "osciladores": {
+                "rsi": None,
+                "estocastico": {"slowk": None, "slowd": None},
+                "mfi": None,
+                "volatilidade": 0.0,
+            }
         }
-
         try:
             if not self._validar_dados_completos(dados_completos, symbol, timeframe):
-                dados_completos["osciladores"] = resultado_padrao
-                return True
-
+                return resultado_padrao
             crus = dados_completos.get("crus", [])
             rsi = self.calcular_rsi(crus, symbol, timeframe)
             slowk, slowd = self.calcular_estocastico(crus, timeframe)
             mfi = self.calcular_mfi(crus)
             close = self._extrair_dados(crus, [4])[4]
             volatilidade = self._calcular_volatilidade(close)
-
             resultado = {
                 "rsi": float(rsi[-1]) if rsi.size else None,
                 "estocastico": {
@@ -255,11 +272,7 @@ class IndicadoresOsciladores(Plugin):
                 "mfi": float(mfi[-1]) if mfi.size else None,
                 "volatilidade": volatilidade,
             }
-
-            dados_completos["osciladores"] = resultado
-            return True
+            return {"osciladores": resultado}
         except Exception as e:
             logger.error(f"[{self.nome}] Erro geral ao executar: {e}")
-            if isinstance(dados_completos, dict):
-                dados_completos["osciladores"] = resultado_padrao
-            return True
+            return resultado_padrao
