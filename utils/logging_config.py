@@ -22,7 +22,7 @@ def validar_caminho_log(caminho: Path) -> Path:
 
 # Caminhos
 LOG_ROOT = validar_caminho_log(Path("logs"))
-SUBDIRS = ["bot", "erros", "sinais", "banco"]
+SUBDIRS = ["bot", "erros", "sinais", "banco", "rastreamento"]
 for subdir in SUBDIRS:
     (LOG_ROOT / subdir).mkdir(parents=True, exist_ok=True)
 
@@ -33,9 +33,19 @@ ARQUIVOS_LOG = {
     "erros": LOG_ROOT / "erros" / f"erros_{DATA_ATUAL}.log",
     "sinais": LOG_ROOT / "sinais" / f"sinais_{DATA_ATUAL}.log",
     "banco": LOG_ROOT / "banco" / f"banco_{DATA_ATUAL}.log",
+    "rastreamento": LOG_ROOT / "rastreamento" / f"rastreamento_{DATA_ATUAL}.log",
 }
 
-# Nível customizado
+# Nível customizado para rastreamento
+TRACE_LEVEL = 5
+logging.addLevelName(TRACE_LEVEL, "RASTREAMENTO")
+logging.Logger.trace = lambda self, msg, *args, **kwargs: (
+    self._log(TRACE_LEVEL, msg, args, **kwargs)
+    if self.isEnabledFor(TRACE_LEVEL)
+    else None
+)
+
+# Nível customizado para
 EXECUTION_LEVEL = 15
 logging.addLevelName(EXECUTION_LEVEL, "EXECUÇÃO")
 logging.Logger.execution = lambda self, msg, *args, **kwargs: (
@@ -56,6 +66,10 @@ FORMATADORES = {
     },
     "banco": {
         "format": "%(asctime)s | %(levelname)-8s | %(name)-15s | %(message)s",
+        "datefmt": "%d-%m-%Y %H:%M:%S",
+    },
+    "rastreamento": {
+        "format": "%(asctime)s | RASTREAMENTO | %(name)s | %(filename)s:%(funcName)s:%(lineno)d | %(message)s",
         "datefmt": "%d-%m-%Y %H:%M:%S",
     },
 }
@@ -108,6 +122,9 @@ HANDLERS = {
     "null": {
         "class": "logging.NullHandler",
     },
+    "rastreamento": _criar_handler_arquivo(
+        "rastreamento", ARQUIVOS_LOG["rastreamento"], 5, "RASTREAMENTO", "rastreamento"
+    ),
 }
 
 # Config
@@ -130,6 +147,11 @@ BASE_CONFIG = {
         "banco": {
             "handlers": ["banco"],
             "level": "INFO",
+            "propagate": False,
+        },
+        "rastreamento": {
+            "handlers": ["rastreamento"],
+            "level": "RASTREAMENTO",
             "propagate": False,
         },
         "ccxt": {"handlers": ["null"], "propagate": False},
@@ -210,3 +232,41 @@ def log_banco(
         logger.log(nivel, log_msg)
     except Exception as e:
         logger.error(f"Falha ao registrar log de banco: {e}", exc_info=True)
+
+
+def log_rastreamento(
+    componente: str, acao: str, detalhes: str = "", nivel: int = TRACE_LEVEL
+) -> None:
+    """
+    Registra logs detalhados para rastreamento de atividades do sistema.
+
+    Args:
+        componente (str): Nome do componente (ex.: "modulo_autenticacao").
+        acao (str): Tipo de ação realizada (ex.: "LOGIN").
+        detalhes (str, optional): Detalhes adicionais da ação. Padrão: "".
+        nivel (int, optional): Nível de log (ex.: TRACE_LEVEL). Padrão: TRACE_LEVEL.
+
+    Raises:
+        TypeError: Se componente, acao ou detalhes não forem strings.
+        ValueError: Se nivel não for um inteiro.
+    """
+    # Valida parâmetros obrigatórios
+    if not all(isinstance(arg, str) for arg in [componente, acao]):
+        raise TypeError("componente e acao devem ser strings")
+    if not isinstance(detalhes, str):
+        raise TypeError("detalhes deve ser uma string")
+
+    # Valida se nivel é um inteiro
+    if not isinstance(nivel, int):
+
+        raise ValueError(
+            f"nivel deve ser um inteiro, recebido: {type(nivel)} ({nivel})"
+        )
+
+    logger = logging.getLogger("rastreamento")
+    try:
+        # Formata mensagem de log
+        log_msg = f"[RASTREAMENTO] {acao} no componente {componente} | Detalhes: {detalhes if detalhes else 'N/A'}"
+        logger.log(nivel, log_msg)
+    except Exception as e:
+        logger.error(f"Falha ao registrar log de rastreamento: {e}", exc_info=True)

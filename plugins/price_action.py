@@ -3,9 +3,11 @@ Plugin de análise de price action com reconhecimento de padrões simples de can
 baseado em corpo, pavio e direção.
 """
 
-from utils.logging_config import get_logger
+from utils.logging_config import get_logger, log_rastreamento
 import numpy as np
 from plugins.plugin import Plugin
+from utils.config import carregar_config
+from utils.plugin_utils import validar_klines
 
 logger = get_logger(__name__)
 
@@ -40,6 +42,13 @@ class PriceAction(Plugin):
         Inicializa o plugin de price action.
         """
         super().__init__(**kwargs)
+        # Carrega config institucional centralizada
+        config = carregar_config()
+        self._config = (
+            config.get("plugins", {}).get("price_action", {}).copy()
+            if "plugins" in config and "price_action" in config["plugins"]
+            else {}
+        )
         self._min_klines = 20  # Mínimo de k-lines para análise
         self._doji_threshold = 0.1  # Proporção corpo/range para doji
 
@@ -100,39 +109,62 @@ class PriceAction(Plugin):
         """
         if not isinstance(klines, list):
             logger.error(f"[{self.nome}] klines não é uma lista: {type(klines)}")
-            return False
-
-        if len(klines) < self._min_klines:
-            logger.error(
-                f"[{self.nome}] Dados insuficientes para {symbol} - {timeframe}: {len(klines)} klines, "
-                f"requer {self._min_klines}"
+            log_rastreamento(
+                componente=f"price_action/{symbol}-{timeframe}",
+                acao="validacao_falha",
+                detalhes="klines não é lista",
             )
             return False
-
+        if len(klines) < 20:
+            logger.error(
+                f"[{self.nome}] Dados insuficientes para {symbol} - {timeframe}: {len(klines)} klines, "
+                f"requer 20"
+            )
+            log_rastreamento(
+                componente=f"price_action/{symbol}-{timeframe}",
+                acao="validacao_falha",
+                detalhes=f"klines insuficientes: {len(klines)}",
+            )
+            return False
         for kline in klines:
             if not isinstance(kline, (list, tuple)) or len(kline) < 6:
                 logger.error(
                     f"[{self.nome}] K-line malformada para {symbol} - {timeframe}: {kline}"
                 )
+                log_rastreamento(
+                    componente=f"price_action/{symbol}-{timeframe}",
+                    acao="validacao_falha",
+                    detalhes=f"kline malformada: {kline}",
+                )
                 return False
             try:
-                # Verificar se open, high, low, close, volume são numéricos
                 for i in [1, 2, 3, 4, 5]:
                     float(kline[i])
             except (TypeError, ValueError):
                 logger.error(
                     f"[{self.nome}] Valor não numérico em k-line para {symbol} - {timeframe}: {kline}"
                 )
+                log_rastreamento(
+                    componente=f"price_action/{symbol}-{timeframe}",
+                    acao="validacao_falha",
+                    detalhes=f"valor não numérico em kline: {kline}",
+                )
                 return False
-
         return True
 
-    def executar(self, *args, **kwargs):
+    def executar(self, *args, **kwargs) -> bool:
+        from utils.logging_config import log_rastreamento
+
+        symbol = kwargs.get("symbol")
+        timeframe = kwargs.get("timeframe")
+        dados_completos = kwargs.get("dados_completos")
+        log_rastreamento(
+            componente=f"price_action/{symbol}-{timeframe}",
+            acao="entrada",
+            detalhes=f"chaves={list(dados_completos.keys()) if isinstance(dados_completos, dict) else dados_completos}",
+        )
         resultado_padrao = {"price_action": {}}
         try:
-            dados_completos = kwargs.get("dados_completos")
-            symbol = kwargs.get("symbol")
-            timeframe = kwargs.get("timeframe")
             if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes")
                 return resultado_padrao
@@ -148,7 +180,14 @@ class PriceAction(Plugin):
             logger.debug(
                 f"[{self.nome}] Price action para {symbol}-{timeframe}: {resultado}"
             )
-            return {"price_action": resultado}
+            if isinstance(dados_completos, dict):
+                dados_completos["price_action"] = resultado
+            log_rastreamento(
+                componente=f"price_action/{symbol}-{timeframe}",
+                acao="saida",
+                detalhes=f"price_action={resultado}",
+            )
+            return True
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao executar: {e}", exc_info=True)
             return resultado_padrao
@@ -171,6 +210,13 @@ class PriceAction(Plugin):
                 dados[3],
                 dados[4],
                 dados[5],
+            )
+            from utils.logging_config import log_rastreamento
+
+            log_rastreamento(
+                componente=f"price_action/gerar_sinal",
+                acao="dados_extraidos",
+                detalhes=f"len_close={len(close)}, close_exemplo={close[-5:].tolist() if len(close) >= 5 else close.tolist()}",
             )
 
             ultimo = {
@@ -196,12 +242,18 @@ class PriceAction(Plugin):
                 else "MÉDIA" if confianca >= 0.3 else "FRACA"
             )
 
-            return {
+            resultado = {
                 "direcao": direcao_final,
                 "forca": forca_label,
                 "confianca": confianca,
                 "padrao": padrao,
             }
+            log_rastreamento(
+                componente=f"price_action/gerar_sinal",
+                acao="sinal_calculado",
+                detalhes=f"resultado={resultado}",
+            )
+            return resultado
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao gerar sinal: {e}", exc_info=True)
             return {
@@ -303,26 +355,34 @@ class PriceAction(Plugin):
 
     @property
     def plugin_tabelas(self) -> dict:
-        tabelas = {
+        return {
             "price_action": {
+                "descricao": "Armazena sinais de price action, padrões identificados, faixas de entrada, score, contexto de mercado, observações e candle bruto para rastreabilidade e auditoria.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
                 "schema": {
                     "id": "SERIAL PRIMARY KEY",
                     "timestamp": "TIMESTAMP NOT NULL",
                     "symbol": "VARCHAR(20) NOT NULL",
                     "timeframe": "VARCHAR(10) NOT NULL",
+                    "padrao": "VARCHAR(50)",
                     "direcao": "VARCHAR(10)",
                     "forca": "DECIMAL(5,2)",
                     "confianca": "DECIMAL(5,2)",
                     "preco_entrada": "DECIMAL(18,8)",
+                    "faixa_entrada_min": "DECIMAL(18,8)",
+                    "faixa_entrada_max": "DECIMAL(18,8)",
                     "stop_loss": "DECIMAL(18,8)",
                     "take_profit": "DECIMAL(18,8)",
+                    "volume": "DECIMAL(18,8)",
+                    "score": "DECIMAL(5,2)",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "candle": "JSONB",
                     "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
                 },
-                "modo_acesso": "own",
-                "plugin": self.PLUGIN_NAME,
-            },
+            }
         }
-        return tabelas
 
     @property
     def plugin_schema_versao(self) -> str:

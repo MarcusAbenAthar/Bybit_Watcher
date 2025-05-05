@@ -6,6 +6,8 @@ from typing import Optional, List, Dict, Set, Type
 from plugins.plugin import Plugin, PluginRegistry
 from plugins.gerenciadores.gerenciador import BaseGerenciador
 from utils.logging_config import get_logger
+from utils.config import carregar_config
+from utils.plugin_utils import validar_klines
 
 logger = get_logger(__name__)
 
@@ -23,7 +25,13 @@ class GerenciadorPlugins(BaseGerenciador):
         """Inicializa o gerenciador de plugins com suporte à classe base."""
         super().__init__(**kwargs)
         self.plugins: dict[str, Plugin] = {}
-        self._config: dict = {}
+        # Carrega config institucional centralizada
+        config = carregar_config()
+        self._config = (
+            config.get("gerenciadores", {}).get("plugins", {}).copy()
+            if "gerenciadores" in config and "plugins" in config["gerenciadores"]
+            else {}
+        )
         self._dependencias: dict[str, list[str]] = {}
 
     def _registrar_gerenciadores(self):
@@ -525,3 +533,27 @@ class GerenciadorPlugins(BaseGerenciador):
         """Lista todos os plugins registrados."""
         for nome in self.plugins:
             logger.info(f"Plugin disponível: {nome}")
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        return {
+            "ciclos_plugins": {
+                "descricao": "Armazena logs dos ciclos de inicialização e coordenação dos plugins, incluindo status, contexto, observações e rastreabilidade.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "status": "VARCHAR(20)",
+                    "plugins_inicializados": "JSONB",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "detalhes": "JSONB",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+            }
+        }
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"

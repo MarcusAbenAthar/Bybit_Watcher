@@ -42,40 +42,39 @@ class Conexao(Plugin):
             # Se quiser forçar swap no bot independentemente da config:
             market = "swap"
 
-            self.exchange = ccxt.bybit({
-                "apiKey": api_key,
-                "secret": api_secret,
-                "enableRateLimit": True,
-                "options": {"defaultType": market},
-            })
+            self.exchange = ccxt.bybit(
+                {
+                    "apiKey": api_key,
+                    "secret": api_secret,
+                    "enableRateLimit": True,
+                    "options": {"defaultType": market},
+                }
+            )
 
             # Ajusta URL se estiver em ambiente de teste
             if testnet:
-                self.exchange.urls['api'] = {
-                    'public': base_url,
-                    'private': base_url,
+                self.exchange.urls["api"] = {
+                    "public": base_url,
+                    "private": base_url,
                 }
 
             logger.info("Conexão com Bybit inicializada com sucesso.")
             logger.debug(f"Conectado ao mercado: {market.upper()}")
             return True
         except Exception as e:
-            logger.error(
-                f"Erro ao inicializar conexão com Bybit: {e}", exc_info=True)
+            logger.error(f"Erro ao inicializar conexão com Bybit: {e}", exc_info=True)
             return False
 
     def obter_cliente(self):
         """Retorna a instância autenticada do cliente Bybit."""
         if not self.exchange:
-            logger.warning(
-                "Cliente Bybit não inicializado. Chame inicializar() antes.")
+            logger.warning("Cliente Bybit não inicializado. Chame inicializar() antes.")
         return self.exchange
 
     def listar_pares(self) -> list:
         """Retorna a lista de IDs dos símbolos disponíveis na Bybit."""
         if not self.exchange:
-            logger.error(
-                "Cliente Bybit não inicializado, impossível listar pares.")
+            logger.error("Cliente Bybit não inicializado, impossível listar pares.")
             return []
         try:
             markets = self.exchange.fetch_markets()
@@ -86,8 +85,7 @@ class Conexao(Plugin):
             self.pares_info = {m["id"]: m for m in markets}
             return list(self.pares_info.keys())
         except Exception as e:
-            logger.error(
-                f"[conexao] Erro ao buscar mercados: {e}", exc_info=True)
+            logger.error(f"[conexao] Erro ao buscar mercados: {e}", exc_info=True)
             return []
 
     def obter_info_par(self, symbol: str) -> dict:
@@ -104,5 +102,28 @@ class Conexao(Plugin):
             super().finalizar()
             logger.info("Conexão com Bybit finalizada.")
         except Exception as e:
-            logger.error(
-                f"Erro ao finalizar conexão Bybit: {e}", exc_info=True)
+            logger.error(f"Erro ao finalizar conexão Bybit: {e}", exc_info=True)
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        return {
+            "conexoes": {
+                "descricao": "Armazena logs de conexões e autenticações realizadas com a Bybit, incluindo status, contexto, observações e rastreabilidade.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "api_key": "VARCHAR(100)",
+                    "status": "VARCHAR(20)",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "detalhes": "JSONB",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+            }
+        }
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"

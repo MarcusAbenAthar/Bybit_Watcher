@@ -6,6 +6,8 @@ from utils.logging_config import get_logger
 import numpy as np
 import talib
 from plugins.plugin import Plugin
+from utils.config import carregar_config
+from utils.plugin_utils import validar_klines
 
 logger = get_logger(__name__)
 
@@ -35,6 +37,13 @@ class CalculoRisco(Plugin):
         Inicializa o plugin CalculoRisco.
         """
         super().__init__(**kwargs)
+        # Carrega config institucional centralizada
+        config = carregar_config()
+        self._config = (
+            config.get("plugins", {}).get("calculo_risco", {}).copy()
+            if "plugins" in config and "calculo_risco" in config["plugins"]
+            else {}
+        )
         self._min_klines = 50
         self._ma_curta = 9
         self._ma_media = 21
@@ -349,19 +358,32 @@ class CalculoRisco(Plugin):
 
     @property
     def plugin_tabelas(self) -> dict:
+        """
+        Define as tabelas do plugin conforme padrão institucional (regras de ouro).
+        """
         return {
             "calculo_risco": {
+                "descricao": "Armazena os cálculos de risco realizados pelo plugin, incluindo direção, força, confiança, indicadores, score, contexto, observações e candle para rastreabilidade.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
                 "schema": {
                     "id": "SERIAL PRIMARY KEY",
                     "timestamp": "TIMESTAMP NOT NULL",
                     "symbol": "VARCHAR(20) NOT NULL",
                     "timeframe": "VARCHAR(10) NOT NULL",
-                    "risco": "DECIMAL(5,2)",
+                    "direcao": "VARCHAR(10)",
+                    "forca": "VARCHAR(10)",
                     "confianca": "DECIMAL(5,2)",
+                    "indicadores": "JSONB",
+                    "risco": "DECIMAL(5,2)",
+                    "faixa_entrada_min": "DECIMAL(18,8)",
+                    "faixa_entrada_max": "DECIMAL(18,8)",
+                    "score": "DECIMAL(5,2)",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "candle": "JSONB",
                     "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
                 },
-                "modo_acesso": "own",
-                "plugin": self.PLUGIN_NAME,
             }
         }
 

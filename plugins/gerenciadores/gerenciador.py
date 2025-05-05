@@ -8,6 +8,8 @@ Incorpora sistema de auto-registro semelhante ao Plugin.
 
 from typing import Type, Dict, List
 from utils.logging_config import get_logger
+from utils.config import carregar_config
+from utils.plugin_utils import validar_klines
 
 logger = get_logger(__name__)
 
@@ -91,7 +93,13 @@ class BaseGerenciador:
         Args:
             **kwargs: Argumentos adicionais específicos do gerenciador
         """
-        self._config = {}
+        # Carrega config institucional centralizada
+        config = carregar_config()
+        self._config = (
+            config.get("gerenciadores", {}).get(self.PLUGIN_NAME, {}).copy()
+            if "gerenciadores" in config and self.PLUGIN_NAME in config["gerenciadores"]
+            else {}
+        )
         self.inicializado = False
 
     def configuracoes_requeridas(self) -> List[str]:

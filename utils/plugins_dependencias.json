@@ -1,8 +1,6 @@
 {
     "analisador_mercado": [],
-    "analise_candles": [
-        "gerenciador_banco"
-    ],
+    "analise_candles": [],
     "banco_dados": [
         "gerenciador_banco"
     ],
@@ -10,9 +8,7 @@
     "calculo_risco": [],
     "conexao": [],
     "consolidador_sinais": [],
-    "execucao_ordens": [
-        "conexao"
-    ],
+    "execucao_ordens": [],
     "indicadores_osciladores": [],
     "indicadores_tendencia": [],
     "indicadores_volatilidade": [],
@@ -25,11 +21,13 @@
     ],
     "price_action": [],
     "sinais_plugin": [
+        "gerenciador_banco",
+        "indicadores_tendencia",
+        "indicadores_osciladores",
+        "indicadores_volume",
         "calculo_alavancagem",
         "calculo_risco"
     ],
     "sltp": [],
-    "validador_dados": [
-        "conexao"
-    ]
+    "validador_dados": []
 }

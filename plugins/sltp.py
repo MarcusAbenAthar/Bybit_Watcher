@@ -333,8 +333,11 @@ class SLTP(Plugin):
 
     @property
     def plugin_tabelas(self) -> dict:
-        tabelas = {
+        return {
             "sltp": {
+                "descricao": "Armazena cálculos de SL/TP, score, contexto, observações e candle para rastreabilidade e auditoria.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
                 "schema": {
                     "id": "SERIAL PRIMARY KEY",
                     "timestamp": "TIMESTAMP NOT NULL",
@@ -343,13 +346,14 @@ class SLTP(Plugin):
                     "stop_loss": "DECIMAL(18,8)",
                     "take_profit": "DECIMAL(18,8)",
                     "confianca": "DECIMAL(5,2)",
+                    "score": "DECIMAL(5,2)",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "candle": "JSONB",
                     "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
                 },
-                "modo_acesso": "own",
-                "plugin": self.PLUGIN_NAME,
-            },
+            }
         }
-        return tabelas
 
     @property
     def plugin_schema_versao(self) -> str:

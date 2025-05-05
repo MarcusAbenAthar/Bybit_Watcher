@@ -8,6 +8,8 @@ import talib
 
 from plugins.plugin import Plugin
 from utils.logging_config import get_logger
+from utils.config import carregar_config
+from utils.plugin_utils import validar_klines
 
 logger = get_logger(__name__)
 
@@ -42,7 +44,13 @@ class CalculoAlavancagem(Plugin):
         Plugin para cálculo dinâmico de alavancagem baseado em volatilidade e confiança.
         """
         super().__init__(**kwargs)
-        self._config = {}
+        # Carrega config institucional centralizada
+        config = carregar_config()
+        self._config = (
+            config.get("plugins", {}).get("calculo_alavancagem", {}).copy()
+            if "plugins" in config and "calculo_alavancagem" in config["plugins"]
+            else {}
+        )
         self._alav_max = 5.0  # Valor padrão de segurança
         self._alav_min = 1.0
         self._confianca_fallback = 0.3  # Fallback para confiança inválida
@@ -222,20 +230,27 @@ class CalculoAlavancagem(Plugin):
 
     @property
     def plugin_tabelas(self) -> dict:
+        """
+        Define as tabelas do plugin conforme padrão institucional (regras de ouro).
+        """
         return {
-            "outros_indicadores": {
+            "alavancagem_calculada": {
+                "descricao": "Armazena os cálculos de alavancagem sugeridos pelo plugin, incluindo faixas, score e contexto.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
                 "schema": {
                     "id": "SERIAL PRIMARY KEY",
                     "timestamp": "TIMESTAMP NOT NULL",
                     "symbol": "VARCHAR(20) NOT NULL",
                     "timeframe": "VARCHAR(10) NOT NULL",
-                    "indicador": "VARCHAR(50) NOT NULL",
-                    "valor": "DECIMAL(18,8)",
-                    "descricao": "TEXT",
+                    "alavancagem": "DECIMAL(5,2)",
+                    "faixa_entrada_min": "DECIMAL(18,8)",
+                    "faixa_entrada_max": "DECIMAL(18,8)",
+                    "score": "DECIMAL(5,2)",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
                     "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
                 },
-                "modo_acesso": "own",
-                "plugin": self.PLUGIN_NAME,
             }
         }
 

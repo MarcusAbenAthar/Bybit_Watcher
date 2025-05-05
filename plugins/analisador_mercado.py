@@ -1,4 +1,4 @@
-from utils.logging_config import get_logger
+from utils.logging_config import get_logger, log_rastreamento
 from typing import Dict, Optional, Any
 from plugins.plugin import Plugin
 from copy import deepcopy
@@ -81,6 +81,11 @@ class AnalisadorMercado(Plugin):
         dados_completos = kwargs.get("dados_completos")
         symbol = kwargs.get("symbol")
         timeframe = kwargs.get("timeframe")
+        log_rastreamento(
+            componente=f"analisador_mercado/{symbol}-{timeframe}",
+            acao="entrada",
+            detalhes=f"chaves={list(dados_completos.keys()) if isinstance(dados_completos, dict) else dados_completos}",
+        )
 
         if not all([dados_completos, symbol, timeframe]):
             logger.error(f"[{self.nome}] Parâmetros necessários ausentes")
@@ -121,6 +126,13 @@ class AnalisadorMercado(Plugin):
             if isinstance(dados_completos, dict):
                 self._aplicar_resultado_padrao(dados_completos)
             return True
+
+        finally:
+            log_rastreamento(
+                componente=f"analisador_mercado/{symbol}-{timeframe}",
+                acao="saida",
+                detalhes=f"analise_mercado={dados_completos.get('analise_mercado', {})}",
+            )
 
     def _aplicar_resultado_padrao(self, destino: dict) -> None:
         """
@@ -246,3 +258,30 @@ class AnalisadorMercado(Plugin):
             "forca": forca,
             "confianca": confianca_final,
         }
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        return {
+            "analise_mercado": {
+                "descricao": "Armazena consolidação dos sinais dos plugins, direção, força, confiança, contexto, observações e candle para rastreabilidade.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "direcao": "VARCHAR(10)",
+                    "forca": "VARCHAR(10)",
+                    "confianca": "DECIMAL(5,2)",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "candle": "JSONB",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+            }
+        }
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"

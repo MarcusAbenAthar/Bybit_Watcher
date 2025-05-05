@@ -1,11 +1,13 @@
 """Gerenciador principal do bot de trading - versão inteligente com paralelismo."""
 
-from utils.logging_config import get_logger
+from utils.logging_config import get_logger, log_rastreamento
 from plugins.gerenciadores.gerenciador import BaseGerenciador
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 from time import time
 from typing import List
+from utils.config import carregar_config
+from utils.plugin_utils import validar_klines
 
 logger = get_logger(__name__)
 
@@ -21,7 +23,16 @@ class GerenciadorBot(BaseGerenciador):
         super().__init__(**kwargs)
         self._gerente = gerente  # Essencial para acessar plugins
         self._status = "parado"
-        self._executor = ThreadPoolExecutor(max_workers=4)  # Paralelismo ajustável
+        # Lê o número de workers do config centralizado
+        config = carregar_config()
+        max_workers = (
+            config.get("gerenciadores", {})
+            .get("bot", {})
+            .get("executor_max_workers", 4)
+        )
+        self._executor = ThreadPoolExecutor(
+            max_workers=max_workers
+        )  # Paralelismo ajustável via config
         self._estado_ativo = defaultdict(dict)  # Guarda o status por par e timeframe
 
     def configuracoes_requeridas(self) -> List[str]:
@@ -213,11 +224,39 @@ class GerenciadorBot(BaseGerenciador):
                 # Após cada batch, consolidar sinais dos símbolos processados
                 for symbol in symbol_batch:
                     if all(tf in buffer_sinais[symbol] for tf in timeframes):
-                        dados_consolidacao = {
+                        for tf in timeframes:
+                            logger.debug(
+                                f"[pipeline] Antes do consolidador: {symbol}-{tf} chaves = {list(buffer_sinais[symbol][tf].keys())}"
+                            )
+                        # Monta dicionário de dados completos para todos os timeframes
+                        dados_timeframes = {}
+                        for tf in timeframes:
+                            dados_tf = buffer_sinais[symbol].get(tf, {})
+                            # Garante que todos os campos essenciais estejam presentes
+                            dados_timeframes[tf] = dados_tf.copy()
+
+                        # Adiciona o symbol ao dicionário de timeframes
+                        dados_completos = {
                             "symbol": symbol,
-                            "dados_completos": buffer_sinais[symbol],
+                            "timeframes": dados_timeframes,
                         }
-                        consolidador.executar(**dados_consolidacao)
+
+                        logger.debug(
+                            f"[pipeline] Dados enviados ao consolidador para {symbol}: chaves = {list(dados_timeframes.keys())}"
+                        )
+
+                        # Chama o consolidador passando o dicionário completo
+                        sinal_final = consolidador.executar(
+                            dados_completos=dados_completos
+                        )
+
+                        log_rastreamento(
+                            componente=f"pipeline/consolidador/{symbol}",
+                            acao="sinal_final",
+                            detalhes=str(sinal_final),
+                        )
+                        # Propaga o resultado para o buffer
+                        buffer_sinais[symbol]["sinal_final"] = sinal_final
 
             logger.execution(f"Ciclo finalizado para todos os pares")
             return all(resultados_gerais)
@@ -240,7 +279,9 @@ class GerenciadorBot(BaseGerenciador):
             # Popula k-lines via plugin ObterDados antes das análises
             obter_dados = self._gerente.obter_plugin("obter_dados")
             if obter_dados:
-                obter_dados.executar(dados_completos, symbol, timeframe)
+                obter_dados.executar(
+                    dados_completos=dados_completos, symbol=symbol, timeframe=timeframe
+                )
                 crus = dados_completos.get("crus", [])
                 logger.debug(
                     f"[pipeline] Crus obtidos para {symbol}-{timeframe}: {len(crus) if crus else 0}"
@@ -258,7 +299,7 @@ class GerenciadorBot(BaseGerenciador):
                     if isinstance(resultado, dict):
                         dados_completos.update(resultado)
                     logger.debug(
-                        f"[pipeline] Após {plugin.nome}: {list(dados_completos.keys())}"
+                        f"[pipeline] Após {plugin.nome}: chaves em dados_completos = {list(dados_completos.keys())}"
                     )
 
             # Garante que symbol, timeframe e crus estejam presentes
@@ -274,19 +315,28 @@ class GerenciadorBot(BaseGerenciador):
                 )
                 return False
 
-            # Chama o plugin de consolidação de sinais
+            # Executa o plugin de sinais (analise_mercado consolidada)
             if sinais_plugin and hasattr(sinais_plugin, "executar"):
                 resultado_sinais = sinais_plugin.executar(
                     symbol=symbol,
+                    timeframe=timeframe,
                     dados_completos=dados_completos,
                 )
-                logger.debug(f"[pipeline] Resultado consolidador: {resultado_sinais}")
+                logger.debug(
+                    f"[pipeline] Após sinais_plugin: {list(dados_completos.keys())}"
+                )
                 if isinstance(resultado_sinais, dict):
                     dados_completos.update(resultado_sinais)
 
             # Buffer de sinais, se necessário
             if buffer_sinais is not None:
-                buffer_sinais[symbol][timeframe] = dados_completos.get("sinais", {})
+                # Armazene o dicionário COMPLETO de dados_completos para cada timeframe
+                from copy import deepcopy
+
+                logger.debug(
+                    f"[pipeline] Antes de armazenar no buffer: {symbol}-{timeframe} chaves = {list(dados_completos.keys())}"
+                )
+                buffer_sinais[symbol][timeframe] = deepcopy(dados_completos)
 
             self._estado_ativo[symbol][timeframe] = {"timestamp": time()}
             logger.execution(f"Fim do processamento: {symbol} - {timeframe}")
@@ -344,3 +394,28 @@ class GerenciadorBot(BaseGerenciador):
         except Exception as e:
             logger.error(f"Erro ao finalizar GerenciadorBot: {e}")
             return False
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        return {
+            "ciclos_bot": {
+                "descricao": "Armazena logs dos ciclos do bot, incluindo status, contexto, observações e rastreabilidade.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "status": "VARCHAR(20)",
+                    "pares": "JSONB",
+                    "timeframes": "JSONB",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "detalhes": "JSONB",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+            }
+        }
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"

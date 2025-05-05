@@ -9,6 +9,8 @@ import datetime
 
 from utils.logging_config import get_logger
 from plugins.plugin import Plugin
+from utils.config import carregar_config
+from utils.plugin_utils import validar_klines
 
 logger = get_logger(__name__)
 
@@ -62,18 +64,23 @@ class AnaliseCandles(Plugin):
         """
         return ["gerenciador_banco"]
 
-    def __init__(self, gerente=None, gerenciador_banco=None, **kwargs):
+    def __init__(self, **kwargs):
         """
         Inicializa o plugin AnaliseCandles.
 
         Args:
-            gerente: Instância do GerenciadorPlugins
-            gerenciador_banco: Instância do GerenciadorBanco
             **kwargs: Outras dependências
         """
         super().__init__(**kwargs)
-        self._gerente = gerente
-        self._gerenciador_banco = gerenciador_banco
+        # Carrega config institucional centralizada
+        config = carregar_config()
+        self._config = (
+            config.get("plugins", {}).get("analise_candles", {}).copy()
+            if "plugins" in config and "analise_candles" in config["plugins"]
+            else {}
+        )
+        self._gerente = kwargs.get("gerente")
+        self._gerenciador_banco = kwargs.get("gerenciador_banco")
         self._padroes_talib = self._carregar_padroes()
         self._funcoes_talib = self._mapear_funcoes_talib()
 

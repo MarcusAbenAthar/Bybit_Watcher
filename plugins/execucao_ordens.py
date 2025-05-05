@@ -2,11 +2,12 @@
 Plugin para executar ordens de compra/venda com SL/TP, incluindo reentradas (DCA) e controle de posição ativa.
 """
 
-from utils.logging_config import get_logger
+from utils.logging_config import get_logger, log_rastreamento
 from utils.config import carregar_config
 from plugins.plugin import Plugin
 import ccxt
 from datetime import datetime
+from utils.plugin_utils import validar_klines
 
 logger = get_logger(__name__)
 
@@ -23,33 +24,6 @@ class ExecucaoOrdens(Plugin):
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["execucao", "ordens", "trading"]
     PLUGIN_PRIORIDADE = 100
-    PLUGIN_TABELAS = {
-        "ordens_executadas": {
-            "schema": {
-                "order_id": "VARCHAR(50) PRIMARY KEY",
-                "symbol": "VARCHAR(20) NOT NULL",
-                "timestamp": "TIMESTAMP NOT NULL",
-                "tipo": "VARCHAR(10)",  # LIMIT/MARKET
-                "lado": "VARCHAR(5)",  # BUY/SELL
-                "preco": "DECIMAL(18,8)",
-                "quantidade": "DECIMAL(18,8)",
-                "status": "VARCHAR(15)",
-                "sinal_origem": "VARCHAR(50)",  # ID do sinal que gerou
-            },
-            "modo_acesso": "own",
-        },
-        "historico_ordens": {
-            "schema": {
-                "id": "SERIAL",
-                "order_id": "VARCHAR(50) REFERENCES ordens_executadas(order_id)",
-                "timestamp": "TIMESTAMP NOT NULL",
-                "evento": "VARCHAR(20)",  # FILLED/CANCELED/etc
-                "preco_executado": "DECIMAL(18,8)",
-                "quantidade_executada": "DECIMAL(18,8)",
-            },
-            "modo_acesso": "own",
-        },
-    }
 
     @classmethod
     def dependencias(cls):
@@ -58,19 +32,25 @@ class ExecucaoOrdens(Plugin):
         """
         return ["conexao", "sinais_plugin", "gerenciador_banco"]
 
-    def __init__(self, conexao=None, **kwargs):
+    def __init__(self, gerente=None, **kwargs):
         """
         Inicializa o plugin ExecucaoOrdens.
 
         Args:
-            conexao: Instância do plugin Conexao.
+            gerente: Instância do plugin Gerente.
             **kwargs: Outras dependências.
         """
         super().__init__(**kwargs)
-        self._conexao = conexao
+        self._gerente = gerente
+        # Carrega config institucional centralizada
+        config = carregar_config()
+        self._config = (
+            config.get("plugins", {}).get("execucao_ordens", {}).copy()
+            if "plugins" in config and "execucao_ordens" in config["plugins"]
+            else {}
+        )
         self._exchange = None
         self._ordens_ativas = {}
-        self._config = None  # Inicializado em inicializar
 
     def inicializar(self, config_dict: dict = None) -> bool:
         """
@@ -88,7 +68,11 @@ class ExecucaoOrdens(Plugin):
                 logger.error(f"[{self.nome}] Falha na inicialização base")
                 return False
 
-            if not self._conexao or not self._conexao.exchange:
+            # Corrigir acesso à dependência de conexão
+            conexao_plugin = (
+                self._gerente.obter_plugin("conexao") if self._gerente else None
+            )
+            if not conexao_plugin or not hasattr(conexao_plugin, "exchange"):
                 logger.error(
                     f"[{self.nome}] Plugin de conexão não encontrado ou não inicializado"
                 )
@@ -118,7 +102,7 @@ class ExecucaoOrdens(Plugin):
                 )
                 return False
 
-            self._exchange = self._conexao.exchange
+            self._exchange = conexao_plugin.exchange
             self._exchange.set_sandbox_mode(True)
             logger.info(f"[{self.nome}] Inicializado em modo sandbox")
             return True
@@ -143,6 +127,11 @@ class ExecucaoOrdens(Plugin):
         market_id = kwargs.get("market_id")
         timeframe = kwargs.get("timeframe")
         dados_completos = kwargs.get("dados_completos")
+        log_rastreamento(
+            componente=f"execucao_ordens/{symbol or market_id}-{timeframe}",
+            acao="entrada",
+            detalhes=f"chaves={list(dados_completos.keys()) if isinstance(dados_completos, dict) else dados_completos}",
+        )
         # Se market_id for fornecido, ele tem prioridade
         symbol_or_id = market_id or symbol
 
@@ -159,6 +148,11 @@ class ExecucaoOrdens(Plugin):
                 f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
             )
             dados_completos["execucao_ordens"] = resultado_padrao["execucao_ordens"]
+            log_rastreamento(
+                componente=f"execucao_ordens/{symbol or market_id}-{timeframe}",
+                acao="saida",
+                detalhes=f"execucao_ordens={dados_completos.get('execucao_ordens', {})}",
+            )
             return True
 
         if not all([symbol_or_id, timeframe]):
@@ -166,11 +160,21 @@ class ExecucaoOrdens(Plugin):
                 f"[{self.nome}] Parâmetros obrigatórios ausentes (symbol_or_id={symbol_or_id}, timeframe={timeframe})"
             )
             dados_completos["execucao_ordens"] = resultado_padrao["execucao_ordens"]
+            log_rastreamento(
+                componente=f"execucao_ordens/{symbol or market_id}-{timeframe}",
+                acao="saida",
+                detalhes=f"execucao_ordens={dados_completos.get('execucao_ordens', {})}",
+            )
             return True
 
         if not dados_completos.get("sinais") or not dados_completos.get("crus"):
             logger.error(f"[{self.nome}] Sinais ou crus ausentes em dados_completos")
             dados_completos["execucao_ordens"] = resultado_padrao["execucao_ordens"]
+            log_rastreamento(
+                componente=f"execucao_ordens/{symbol or market_id}-{timeframe}",
+                acao="saida",
+                detalhes=f"execucao_ordens={dados_completos.get('execucao_ordens', {})}",
+            )
             return True
 
         sinal = self._extrair_sinal(dados_completos)
@@ -181,6 +185,11 @@ class ExecucaoOrdens(Plugin):
                 f"[{self.nome}] Nenhum sinal válido para {symbol_or_id} ({direcao})"
             )
             dados_completos["execucao_ordens"] = resultado_padrao["execucao_ordens"]
+            log_rastreamento(
+                componente=f"execucao_ordens/{symbol or market_id}-{timeframe}",
+                acao="saida",
+                detalhes=f"execucao_ordens={dados_completos.get('execucao_ordens', {})}",
+            )
             return True
 
         auto_trade = self._config.get("trading", {}).get("auto_trade", False)
@@ -191,6 +200,11 @@ class ExecucaoOrdens(Plugin):
                 "ordem_id": None,
                 "resultado": "Sinal válido detectado - aguardando confirmação manual",
             }
+            log_rastreamento(
+                componente=f"execucao_ordens/{symbol or market_id}-{timeframe}",
+                acao="saida",
+                detalhes=f"execucao_ordens={dados_completos.get('execucao_ordens', {})}",
+            )
             return True
 
         try:
@@ -206,6 +220,11 @@ class ExecucaoOrdens(Plugin):
                 logger.info(f"[{self.nome}] Ordem principal para {symbol_or_id}")
                 resultado = self._executar_ordem(dados_completos, symbol_or_id, sinal)
             dados_completos["execucao_ordens"] = resultado
+            log_rastreamento(
+                componente=f"execucao_ordens/{symbol or market_id}-{timeframe}",
+                acao="saida",
+                detalhes=f"execucao_ordens={dados_completos.get('execucao_ordens', {})}",
+            )
             return True
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao executar: {e}", exc_info=True)
@@ -214,6 +233,11 @@ class ExecucaoOrdens(Plugin):
                 "ordem_id": None,
                 "resultado": str(e),
             }
+            log_rastreamento(
+                componente=f"execucao_ordens/{symbol or market_id}-{timeframe}",
+                acao="saida",
+                detalhes=f"execucao_ordens={dados_completos.get('execucao_ordens', {})}",
+            )
             return True
 
     def _extrair_sinal(self, dados_completos: dict) -> dict:
@@ -354,14 +378,13 @@ class ExecucaoOrdens(Plugin):
             self.log_banco(
                 tabela="ordens_executadas",
                 operacao="INSERT",
-                dados="Ordem executada",
                 dados={
-                    "order_id": ordem["id"],
+                    "order_id": ordem_id,
                     "symbol": ordem["symbol"],
                     "timestamp": datetime.now(),
                     "tipo": ordem["type"],
                     "lado": ordem["side"],
-                    "preco": ordem["price"],
+                    "preco": ordem.get("price"),
                     "quantidade": ordem["amount"],
                     "status": "OPEN",
                     "sinal_origem": sinal.get("id", "desconhecido"),
@@ -440,3 +463,51 @@ class ExecucaoOrdens(Plugin):
             logger.info(f"[{self.nome}] Finalizado e ordens limpas")
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao finalizar: {e}", exc_info=True)
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        return {
+            "ordens_executadas": {
+                "descricao": "Armazena ordens executadas, incluindo score, contexto, observações e candle para rastreabilidade.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+                "schema": {
+                    "order_id": "VARCHAR(50) PRIMARY KEY",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "tipo": "VARCHAR(10)",
+                    "lado": "VARCHAR(5)",
+                    "preco": "DECIMAL(18,8)",
+                    "quantidade": "DECIMAL(18,8)",
+                    "status": "VARCHAR(15)",
+                    "sinal_origem": "VARCHAR(50)",
+                    "score": "DECIMAL(5,2)",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "candle": "JSONB",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+            },
+            "historico_ordens": {
+                "descricao": "Armazena histórico de eventos das ordens, incluindo score, contexto, observações e candle para rastreabilidade.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "order_id": "VARCHAR(50) REFERENCES ordens_executadas(order_id)",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "evento": "VARCHAR(20)",
+                    "preco_executado": "DECIMAL(18,8)",
+                    "quantidade_executada": "DECIMAL(18,8)",
+                    "score": "DECIMAL(5,2)",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "candle": "JSONB",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+            },
+        }
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"

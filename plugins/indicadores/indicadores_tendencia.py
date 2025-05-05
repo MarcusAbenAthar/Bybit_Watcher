@@ -3,10 +3,12 @@
 from typing import Dict
 import numpy as np
 import talib
-from utils.logging_config import get_logger
+from utils.logging_config import get_logger, log_rastreamento
 from plugins.plugin import Plugin
 from plugins.gerenciadores.gerenciador_plugins import GerenciadorPlugins
 import logging
+from utils.config import carregar_config
+from utils.plugin_utils import ajustar_periodos_generico, extrair_ohlcv, validar_klines
 
 logger = get_logger(__name__)
 
@@ -39,12 +41,12 @@ class IndicadoresTendencia(Plugin):
 
     @property
     def plugin_tabelas(self) -> dict:
-        tabelas = {
+        return {
             "indicadores_tendencia": {
-                "descricao": "Tabela com indicadores de tendência calculados.",
+                "descricao": "Armazena valores dos indicadores de tendência (SMA, EMA, MACD, ADX, ATR, etc.), score, contexto, observações e candle para rastreabilidade.",
                 "modo_acesso": "own",
                 "plugin": self.PLUGIN_NAME,
-                "columns": {
+                "schema": {
                     "id": "SERIAL PRIMARY KEY",
                     "timestamp": "TIMESTAMP NOT NULL",
                     "symbol": "VARCHAR(20) NOT NULL",
@@ -53,14 +55,18 @@ class IndicadoresTendencia(Plugin):
                     "valor": "DECIMAL(18,8)",
                     "direcao": "VARCHAR(10)",
                     "forca": "DECIMAL(5,2)",
+                    "score": "DECIMAL(5,2)",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "candle": "JSONB",
                     "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
                 },
             },
             "medias_moveis": {
-                "descricao": "Tabela com médias móveis calculadas.",
+                "descricao": "Armazena médias móveis calculadas (SMA, EMA, etc.), score, contexto, observações e candle para rastreabilidade.",
                 "modo_acesso": "own",
                 "plugin": self.PLUGIN_NAME,
-                "columns": {
+                "schema": {
                     "id": "SERIAL PRIMARY KEY",
                     "timestamp": "TIMESTAMP NOT NULL",
                     "symbol": "VARCHAR(20) NOT NULL",
@@ -69,11 +75,14 @@ class IndicadoresTendencia(Plugin):
                     "periodo": "INTEGER NOT NULL",
                     "valor": "DECIMAL(18,8) NOT NULL",
                     "direcao": "VARCHAR(10)",
+                    "score": "DECIMAL(5,2)",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "candle": "JSONB",
                     "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
                 },
             },
         }
-        return tabelas
 
     @classmethod
     def dependencias(cls):
@@ -85,118 +94,21 @@ class IndicadoresTendencia(Plugin):
     def __init__(self, gerente: GerenciadorPlugins):
         super().__init__(gerente=gerente)
         self._gerente = gerente
+        # Carrega config institucional centralizada
+        config = carregar_config()
+        self.config = config["indicadores"]["tendencia"].copy()
 
-    def _validar_candles(self, candles, symbol: str, timeframe: str) -> bool:
-        """
-        Valida o formato da lista de candles.
+    def executar(self, *args, **kwargs) -> bool:
+        from utils.logging_config import log_rastreamento
 
-        Args:
-            candles: Lista de k-lines.
-            symbol (str): Símbolo do par.
-            timeframe (str): Timeframe.
-
-        Returns:
-            bool: True se válido, False caso contrário.
-        """
-        if not isinstance(candles, list):
-            logger.error(f"[{self.nome}] candles não é uma lista: {type(candles)}")
-            return False
-
-        if len(candles) < 30:
-            logger.warning(
-                f"[{self.nome}] Candles insuficientes para {symbol} - {timeframe}"
-            )
-            return False
-
-        for item in candles:
-            if not isinstance(item, (list, tuple)) or len(item) < 5:
-                logger.error(
-                    f"[{self.nome}] Item inválido em candles para {symbol} - {timeframe}: {item}"
-                )
-                return False
-            # Verificar se os elementos necessários são numéricos
-            for idx in [2, 3, 4]:  # high, low, close
-                if not isinstance(item[idx], (int, float)):
-                    try:
-                        float(item[idx])
-                    except (TypeError, ValueError):
-                        logger.error(
-                            f"[{self.nome}] Valor não numérico em candles[{idx}]: {item[idx]}"
-                        )
-                        return False
-
-        return True
-
-    def _ajustar_periodos(self, timeframe: str, volatilidade: float) -> dict:
-        """
-        Ajusta períodos dos indicadores com base em timeframe e volatilidade.
-
-        Args:
-            timeframe (str): Timeframe (ex.: '1m', '1d').
-            volatilidade (float): Volatilidade calculada.
-
-        Returns:
-            dict: Períodos ajustados para indicadores.
-        """
-        multiplicador = 1.0
-        if timeframe == "1m":
-            multiplicador = 0.5
-        elif timeframe == "1d":
-            multiplicador = 1.5
-        multiplicador += min(max(volatilidade * 2, -0.5), 1.0)
-
-        return {
-            "sma_rapida": int(max(5, 9 * multiplicador)),
-            "sma_lenta": int(max(10, 21 * multiplicador)),
-            "ema_rapida": int(max(5, 12 * multiplicador)),
-            "ema_lenta": int(max(10, 26 * multiplicador)),
-            "macd_signal": 9,
-            "adx_periodo": int(max(5, 14 * multiplicador)),
-            "atr_periodo": int(max(5, 14 * multiplicador)),
-        }
-
-    def _extrair_ohlcv(self, dados_completos) -> dict:
-        """
-        Extrai OHLC de candles com validação de tipos.
-
-        Args:
-            dados_completos: Lista de k-lines.
-
-        Returns:
-            dict: Arrays com high, low, close.
-        """
-        try:
-            high = []
-            low = []
-            close = []
-            for d in dados_completos:
-                # Validar tipos antes da conversão
-                for idx, field in [(2, "high"), (3, "low"), (4, "close")]:
-                    if not isinstance(d[idx], (int, float)):
-                        try:
-                            float(d[idx])
-                        except (TypeError, ValueError):
-                            logger.error(
-                                f"[{self.nome}] Valor inválido para {field}: {d[idx]}"
-                            )
-                            return {
-                                "high": np.array([]),
-                                "low": np.array([]),
-                                "close": np.array([]),
-                            }
-                high.append(float(d[2]))
-                low.append(float(d[3]))
-                close.append(float(d[4]))
-            return {
-                "high": np.array(high),
-                "low": np.array(low),
-                "close": np.array(close),
-            }
-        except Exception as e:
-            logger.error(f"[{self.nome}] Erro ao extrair OHLC: {e}")
-            return {"high": np.array([]), "low": np.array([]), "close": np.array([])}
-
-    def executar(self, dados_completos, symbol, timeframe):
+        symbol = kwargs.get("symbol")
+        timeframe = kwargs.get("timeframe")
+        dados_completos = kwargs.get("dados_completos")
+        log_rastreamento(
+            componente=f"indicadores_tendencia/{symbol}-{timeframe}",
+            acao="entrada",
+            detalhes=f"chaves={list(dados_completos.keys()) if isinstance(dados_completos, dict) else dados_completos}",
+        )
         resultado_padrao = {
             "tendencia": {
                 "medias_moveis": {},
@@ -215,15 +127,20 @@ class IndicadoresTendencia(Plugin):
                 )
                 return resultado_padrao
             candles = dados_completos.get("crus", [])
-            if not self._validar_candles(candles, symbol, timeframe):
+            if not validar_klines(candles, min_len=20):
                 return resultado_padrao
-            ohlc = self._extrair_ohlcv(candles)
-            close = ohlc["close"]
+            ohlc = extrair_ohlcv(candles, [2, 3, 4])
+            close = ohlc[4]
+            log_rastreamento(
+                componente=f"indicadores_tendencia/{symbol}-{timeframe}",
+                acao="dados_extraidos",
+                detalhes=f"len_close={len(close)}, close_exemplo={close[-5:].tolist() if len(close) >= 5 else close.tolist()}",
+            )
             if len(close) < 30:
                 return resultado_padrao
             media = np.mean(close[-14:])
             volatilidade = np.std(close[-14:]) / media if media != 0 else 0.0
-            periodos = self._ajustar_periodos(timeframe, volatilidade)
+            periodos = ajustar_periodos_generico(self.config, timeframe, volatilidade)
             sma_r = talib.SMA(close, timeperiod=periodos["sma_rapida"])
             sma_l = talib.SMA(close, timeperiod=periodos["sma_lenta"])
             ema_r = talib.EMA(close, timeperiod=periodos["ema_rapida"])
@@ -234,17 +151,30 @@ class IndicadoresTendencia(Plugin):
                 slowperiod=periodos["ema_lenta"],
                 signalperiod=periodos["macd_signal"],
             )
-            adx = talib.ADX(
-                ohlc["high"], ohlc["low"], close, timeperiod=periodos["adx_periodo"]
-            )
+            adx = talib.ADX(ohlc[2], ohlc[3], close, timeperiod=periodos["adx_periodo"])
             pdi = talib.PLUS_DI(
-                ohlc["high"], ohlc["low"], close, timeperiod=periodos["adx_periodo"]
+                ohlc[2], ohlc[3], close, timeperiod=periodos["adx_periodo"]
             )
             ndi = talib.MINUS_DI(
-                ohlc["high"], ohlc["low"], close, timeperiod=periodos["adx_periodo"]
+                ohlc[2], ohlc[3], close, timeperiod=periodos["adx_periodo"]
             )
-            atr = talib.ATR(
-                ohlc["high"], ohlc["low"], close, timeperiod=periodos["atr_periodo"]
+            atr = talib.ATR(ohlc[2], ohlc[3], close, timeperiod=periodos["atr_periodo"])
+            log_rastreamento(
+                componente=f"indicadores_tendencia/{symbol}-{timeframe}",
+                acao="indicadores_calculados",
+                detalhes=(
+                    f"sma_r={sma_r[-1] if sma_r.size else None}, "
+                    f"sma_l={sma_l[-1] if sma_l.size else None}, "
+                    f"ema_r={ema_r[-1] if ema_r.size else None}, "
+                    f"ema_l={ema_l[-1] if ema_l.size else None}, "
+                    f"macd={macd[-1] if macd.size else None}, "
+                    f"signal={signal[-1] if signal.size else None}, "
+                    f"hist={hist[-1] if hist.size else None}, "
+                    f"adx={adx[-1] if adx.size else None}, "
+                    f"pdi={pdi[-1] if pdi.size else None}, "
+                    f"ndi={ndi[-1] if ndi.size else None}, "
+                    f"atr={atr[-1] if atr.size else None}"
+                ),
             )
             tendencia = {
                 "medias_moveis": {
@@ -265,7 +195,22 @@ class IndicadoresTendencia(Plugin):
                 },
                 "atr": float(atr[-1]) if atr.size else 0.0,
             }
-            return {"tendencia": tendencia}
+            if isinstance(dados_completos, dict):
+                dados_completos["tendencia"] = tendencia
+                dados_completos["atr"] = tendencia["atr"]
+                dados_completos["preco_atual"] = (
+                    float(close[-1]) if len(close) > 0 else 0.0
+                )
+                if "suporte" in dados_completos:
+                    dados_completos["suporte"] = dados_completos["suporte"]
+                if "resistencia" in dados_completos:
+                    dados_completos["resistencia"] = dados_completos["resistencia"]
+            log_rastreamento(
+                componente=f"indicadores_tendencia/{symbol}-{timeframe}",
+                acao="saida",
+                detalhes=f"tendencia={tendencia}",
+            )
+            return True
         except Exception as e:
             logger.error(f"[{self.nome}] Erro geral ao executar: {e}")
             return resultado_padrao

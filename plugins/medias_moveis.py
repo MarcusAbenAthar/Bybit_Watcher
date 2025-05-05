@@ -2,11 +2,13 @@
 Plugin para cálculo de sinais baseados em médias móveis.
 """
 
-from utils.logging_config import get_logger, log_banco
+from utils.logging_config import get_logger, log_banco, log_rastreamento
 import numpy as np
 import talib
 from plugins.plugin import Plugin
 from datetime import datetime
+from utils.config import carregar_config
+from utils.plugin_utils import validar_klines
 
 logger = get_logger(__name__)
 
@@ -29,8 +31,19 @@ class MediasMoveis(Plugin):
         Inicializa o plugin de médias móveis.
         """
         super().__init__(**kwargs)
-        self._periodo_curto = 20  # Padrão para MA curta
-        self._periodo_longo = 50  # Padrão para MA longa
+        # Carrega config institucional centralizada
+        config = carregar_config()
+        self._config = (
+            config.get("plugins", {}).get("medias_moveis", {}).copy()
+            if "plugins" in config and "medias_moveis" in config["plugins"]
+            else {}
+        )
+        self._periodo_curto = self._config.get(
+            "periodo_curto", 20
+        )  # Padrão para MA curta
+        self._periodo_longo = self._config.get(
+            "periodo_longo", 50
+        )  # Padrão para MA longa
 
     def inicializar(self, config: dict) -> bool:
         """
@@ -114,12 +127,19 @@ class MediasMoveis(Plugin):
 
         return True
 
-    def executar(self, *args, **kwargs):
+    def executar(self, *args, **kwargs) -> bool:
+        from utils.logging_config import log_rastreamento
+
+        symbol = kwargs.get("symbol")
+        timeframe = kwargs.get("timeframe")
+        dados_completos = kwargs.get("dados_completos")
+        log_rastreamento(
+            componente=f"medias_moveis/{symbol}-{timeframe}",
+            acao="entrada",
+            detalhes=f"chaves={list(dados_completos.keys()) if isinstance(dados_completos, dict) else dados_completos}",
+        )
         resultado_padrao = {"medias_moveis": {}}
         try:
-            dados_completos = kwargs.get("dados_completos")
-            symbol = kwargs.get("symbol")
-            timeframe = kwargs.get("timeframe")
             if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"[{self.nome}] Parâmetros obrigatórios ausentes")
                 return resultado_padrao
@@ -135,6 +155,13 @@ class MediasMoveis(Plugin):
             logger.debug(
                 f"[{self.nome}] Médias móveis para {symbol}-{timeframe}: {medias}"
             )
+            log_rastreamento(
+                componente=f"medias_moveis/{symbol}-{timeframe}",
+                acao="saida",
+                detalhes=f"medias_moveis={medias}",
+            )
+            if isinstance(dados_completos, dict):
+                dados_completos["medias_moveis"] = medias
             return {"medias_moveis": medias}
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao executar: {e}", exc_info=True)
@@ -263,24 +290,32 @@ class MediasMoveis(Plugin):
 
     @property
     def plugin_tabelas(self) -> dict:
-        tabelas = {
+        """
+        Define as tabelas do plugin conforme padrão institucional (regras de ouro).
+        """
+        return {
             "medias_moveis": {
+                "descricao": "Armazena médias móveis calculadas, faixas, score, contexto e demais métricas relevantes.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
                 "schema": {
                     "id": "SERIAL PRIMARY KEY",
                     "timestamp": "TIMESTAMP NOT NULL",
                     "symbol": "VARCHAR(20) NOT NULL",
                     "timeframe": "VARCHAR(10) NOT NULL",
-                    "tipo": "VARCHAR(20) NOT NULL",
-                    "periodo": "INTEGER NOT NULL",
-                    "valor": "DECIMAL(18,8) NOT NULL",
-                    "direcao": "VARCHAR(10)",
+                    "ma_curta": "DECIMAL(18,8)",
+                    "ma_longa": "DECIMAL(18,8)",
+                    "faixa_ma_curta_min": "DECIMAL(18,8)",
+                    "faixa_ma_curta_max": "DECIMAL(18,8)",
+                    "faixa_ma_longa_min": "DECIMAL(18,8)",
+                    "faixa_ma_longa_max": "DECIMAL(18,8)",
+                    "score": "DECIMAL(5,2)",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
                     "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
                 },
-                "modo_acesso": "own",
-                "plugin": self.PLUGIN_NAME,
-            },
+            }
         }
-        return tabelas
 
     @property
     def plugin_schema_versao(self) -> str:

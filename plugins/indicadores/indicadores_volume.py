@@ -1,11 +1,18 @@
 from plugins.gerenciadores.gerenciador_plugins import GerenciadorPlugins
-from utils.logging_config import get_logger
+from utils.logging_config import get_logger, log_rastreamento
 from plugins.plugin import Plugin
 import logging
 
 import talib
 import numpy as np
 import pandas as pd
+from utils.config import carregar_config
+from utils.plugin_utils import (
+    ajustar_periodos_generico,
+    extrair_ohlcv,
+    validar_klines,
+    calcular_volatilidade_generico,
+)
 
 logger = get_logger(__name__)
 
@@ -40,7 +47,10 @@ class IndicadoresVolume(Plugin):
     def plugin_tabelas(self) -> dict:
         return {
             "indicadores_volume": {
-                "columns": {
+                "descricao": "Armazena valores dos indicadores de volume (OBV, MFI, CMF, etc.), score, contexto, observações e candle para rastreabilidade.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+                "schema": {
                     "id": "SERIAL PRIMARY KEY",
                     "timestamp": "TIMESTAMP NOT NULL",
                     "symbol": "VARCHAR(20) NOT NULL",
@@ -51,9 +61,12 @@ class IndicadoresVolume(Plugin):
                     "volume_quote": "DECIMAL(18,8)",
                     "direcao": "VARCHAR(10)",
                     "forca": "DECIMAL(5,2)",
+                    "score": "DECIMAL(5,2)",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "candle": "JSONB",
                     "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
                 },
-                "plugin": self.PLUGIN_NAME,
             }
         }
 
@@ -64,14 +77,15 @@ class IndicadoresVolume(Plugin):
         """
         return ["gerenciador_banco", "obter_dados"]
 
-    def __init__(self, gerente: GerenciadorPlugins):
-        super().__init__(gerente=gerente)
-        self._gerente = gerente
-        self.config = {
-            "periodo_base": 14,
-            "periodo_maximo": 28,
-            "periodo_minimo": 7,
-        }
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Carrega config institucional centralizada
+        config = carregar_config()
+        self.config = (
+            config["indicadores"].get("volume", {}).copy()
+            if "volume" in config["indicadores"]
+            else {}
+        )
         logger.debug(f"[{self.nome}] inicializado")
 
     def _validar_klines(self, klines, symbol: str, timeframe: str) -> bool:
@@ -88,30 +102,46 @@ class IndicadoresVolume(Plugin):
         """
         if not isinstance(klines, list):
             logger.error(f"[{self.nome}] klines não é uma lista: {type(klines)}")
+            log_rastreamento(
+                componente=f"indicadores_volume/{symbol}-{timeframe}",
+                acao="validacao_falha",
+                detalhes="klines não é lista",
+            )
             return False
-
         if len(klines) < 20:
             logger.warning(
                 f"[{self.nome}] Dados insuficientes para {symbol} - {timeframe}"
             )
+            log_rastreamento(
+                componente=f"indicadores_volume/{symbol}-{timeframe}",
+                acao="validacao_falha",
+                detalhes=f"klines insuficientes: {len(klines)}",
+            )
             return False
-
         for item in klines:
             if not isinstance(item, (list, tuple)) or len(item) < 6:
                 logger.error(
                     f"[{self.nome}] Item inválido em klines para {symbol} - {timeframe}: {item}"
                 )
+                log_rastreamento(
+                    componente=f"indicadores_volume/{symbol}-{timeframe}",
+                    acao="validacao_falha",
+                    detalhes=f"item inválido: {item}",
+                )
                 return False
             for idx in [2, 3, 4, 5]:  # high, low, close, volume
-                if not isinstance(item[idx], (int, float)):
-                    try:
-                        float(item[idx])
-                    except (TypeError, ValueError):
-                        logger.error(
-                            f"[{self.nome}] Valor não numérico em klines[{idx}]: {item[idx]}"
-                        )
-                        return False
-
+                try:
+                    float(item[idx])
+                except (TypeError, ValueError):
+                    logger.error(
+                        f"[{self.nome}] Valor não numérico em klines[{idx}]: {item[idx]}"
+                    )
+                    log_rastreamento(
+                        componente=f"indicadores_volume/{symbol}-{timeframe}",
+                        acao="validacao_falha",
+                        detalhes=f"valor não numérico em klines[{idx}]: {item[idx]}",
+                    )
+                    return False
         return True
 
     def _extrair_dados(self, dados: list, colunas: list) -> list:
@@ -244,63 +274,91 @@ class IndicadoresVolume(Plugin):
         Returns:
             bool: True se executado com sucesso
         """
+        from utils.logging_config import log_rastreamento
+
+        symbol = kwargs.get("symbol")
+        timeframe = kwargs.get("timeframe")
+        dados_completos = kwargs.get("dados_completos")
+        log_rastreamento(
+            componente=f"indicadores_volume/{symbol}-{timeframe}",
+            acao="entrada",
+            detalhes=f"chaves={list(dados_completos.keys()) if isinstance(dados_completos, dict) else dados_completos}",
+        )
+        resultado_padrao = {"obv": None, "cmf": None, "mfi": None}
         try:
-            dados_completos = kwargs.get("dados_completos")
-            if not dados_completos:
-                logger.error(f"[{self.nome}] dados_completos não fornecido")
-                return False
-
-            resultado_padrao = {"obv": None, "cmf": None, "mfi": None}
-
-            symbol = kwargs.get("symbol")
-            timeframe = kwargs.get("timeframe")
-
             if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"[{self.nome}] Parâmetros ausentes")
                 if isinstance(dados_completos, dict):
                     dados_completos["volume"] = resultado_padrao
                 return True
-
             if not isinstance(dados_completos, dict):
                 logger.error(
                     f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
                 )
                 dados_completos["volume"] = resultado_padrao
                 return True
-
             klines = dados_completos.get("crus", [])
-            if not self._validar_klines(klines, symbol, timeframe):
+            if not validar_klines(klines, min_len=20):
                 dados_completos["volume"] = resultado_padrao
                 return True
-
-            # Extrair high, low, close, volume
-            high, low, close, volume = self._extrair_dados(klines, [2, 3, 4, 5])
+            extr = extrair_ohlcv(klines, [2, 3, 4, 5])
+            high, low, close, volume = extr[2], extr[3], extr[4], extr[5]
+            log_rastreamento(
+                componente=f"indicadores_volume/{symbol}-{timeframe}",
+                acao="dados_extraidos",
+                detalhes=f"len_volume={len(volume)}, volume_exemplo={volume[-5:].tolist() if len(volume) >= 5 else volume.tolist()}",
+            )
             if not all([high.size, low.size, close.size, volume.size]):
                 logger.warning(
                     f"[{self.nome}] Dados extraídos vazios para {symbol} - {timeframe}"
                 )
                 dados_completos["volume"] = resultado_padrao
                 return True
-
-            volatilidade = self.calcular_volatilidade(close)
-            periodo = self._ajustar_periodo(timeframe, volatilidade)
-
-            obv = self.calcular_obv(close, volume)
-            cmf = self.calcular_cmf(high, low, close, volume, periodo)
-            mfi = self.calcular_mfi(high, low, close, volume, periodo)
-
+            volatilidade = calcular_volatilidade_generico(
+                close, periodo=self.config.get("periodo_base", 14)
+            )
+            periodo = ajustar_periodos_generico(
+                {"periodo": self.config.get("periodo_base", 14)},
+                timeframe,
+                volatilidade,
+            )["periodo"]
+            obv = talib.OBV(close, volume)
+            # CMF
+            try:
+                money_flow_volume = (
+                    (2 * close - high - low) / (high - low + 1e-6)
+                ) * volume
+                mfv_sum = pd.Series(money_flow_volume).rolling(window=periodo).sum()
+                vol_sum = pd.Series(volume).rolling(window=periodo).sum()
+                cmf = (mfv_sum / (vol_sum + 1e-6)).fillna(0.0).to_numpy()
+            except Exception as e:
+                logger.error(f"[{self.nome}] Erro ao calcular CMF: {e}")
+                cmf = np.array([])
+            mfi = talib.MFI(high, low, close, volume, timeperiod=periodo)
+            log_rastreamento(
+                componente=f"indicadores_volume/{symbol}-{timeframe}",
+                acao="indicadores_calculados",
+                detalhes=(
+                    f"obv={obv[-1] if obv.size > 0 else None}, "
+                    f"cmf={cmf[-1] if cmf.size > 0 else None}, "
+                    f"mfi={mfi[-1] if mfi.size > 0 else None}"
+                ),
+            )
             resultado = {
                 "obv": float(obv[-1]) if obv.size > 0 else None,
                 "cmf": float(cmf[-1]) if cmf.size > 0 else None,
                 "mfi": float(mfi[-1]) if mfi.size > 0 else None,
             }
-
             dados_completos["volume"] = resultado
             logger.debug(
                 f"[{self.nome}] Indicadores de volume gerados para {symbol} - {timeframe}: {resultado}"
             )
+            log_rastreamento(
+                componente=f"indicadores_volume/{symbol}-{timeframe}",
+                acao="saida",
+                detalhes=f"indicadores_volume={resultado}",
+            )
             return True
-
         except Exception as e:
             logger.error(f"[{self.nome}] Erro geral na execução: {e}", exc_info=True)
             if isinstance(dados_completos, dict):

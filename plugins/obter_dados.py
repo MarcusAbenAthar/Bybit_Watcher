@@ -1,11 +1,14 @@
 """Plugin para obter dados de mercado (candles) usando a conexão autenticada."""
 
 from plugins.plugin import Plugin
-from utils.logging_config import get_logger
+from utils.logging_config import get_logger, log_rastreamento
+from utils.config import carregar_config
+from utils.plugin_utils import validar_klines
 
 logger = get_logger(__name__)
 
 import requests
+
 
 class ObterDados(Plugin):
     """
@@ -14,6 +17,7 @@ class ObterDados(Plugin):
     - Modular, testável, documentado e sem hardcode.
     - Autoidentificação de dependências/plugins.
     """
+
     PLUGIN_NAME = "obter_dados"
     PLUGIN_CATEGORIA = "plugin"
     PLUGIN_TAGS = ["dados", "externos", "coleta"]
@@ -39,14 +43,23 @@ class ObterDados(Plugin):
     PLUGIN_TAGS = ["dados", "candles", "mercado"]
     PLUGIN_PRIORIDADE = 15
 
-    def __init__(self, conexao, **kwargs):
+    def __init__(self, conexao=None, **kwargs):
         """
         Inicializa o plugin com a dependência de conexão.
         """
         super().__init__(**kwargs)
         self._conexao = conexao
+        # Carrega config institucional centralizada
+        config = carregar_config()
+        self._config = (
+            config.get("plugins", {}).get("obter_dados", {}).copy()
+            if "plugins" in config and "obter_dados" in config["plugins"]
+            else {}
+        )
 
-    def executar(self, dados_completos: dict, symbol: str, timeframe: str, limit: int = 200) -> bool:
+    def executar(
+        self, dados_completos: dict, symbol: str, timeframe: str, limit: int = 200
+    ) -> bool:
         """
         Busca candles da Bybit e popula dados_completos['crus'] com os dados crus (lista de k-lines).
         Também mantém compatibilidade preenchendo dados_completos['candles'].
@@ -77,7 +90,9 @@ class ObterDados(Plugin):
             exchange_symbol = info.get("symbol", symbol) if info else symbol
             candles = cliente.fetch_ohlcv(exchange_symbol, timeframe, limit=limit)
             if not candles or not isinstance(candles, list):
-                logger.warning(f"[{self.nome}] Nenhum candle recebido para {symbol}-{timeframe}.")
+                logger.warning(
+                    f"[{self.nome}] Nenhum candle recebido para {symbol}-{timeframe}."
+                )
                 dados_completos["crus"] = resultado_padrao
                 dados_completos["candles"] = resultado_padrao
                 return True
@@ -93,7 +108,19 @@ class ObterDados(Plugin):
             # Preenche tanto 'crus' (preferencial) quanto 'candles' (legado)
             dados_completos["crus"] = candles
             dados_completos["candles"] = candles
-            logger.info(f"[{self.nome}] Candles crus populados para {symbol}-{timeframe} ({len(candles)})")
+            from utils.logging_config import log_rastreamento
+
+            if candles:
+                exemplo_primeiro = candles[0] if len(candles) > 0 else None
+                exemplo_ultimo = candles[-1] if len(candles) > 1 else None
+                log_rastreamento(
+                    componente=f"obter_dados/{symbol}-{timeframe}",
+                    acao="candles_obtidos",
+                    detalhes=f"qtd={len(candles)}, primeiro={exemplo_primeiro}, ultimo={exemplo_ultimo}, campos_primeiro={len(exemplo_primeiro) if exemplo_primeiro else 0}, campos_ultimo={len(exemplo_ultimo) if exemplo_ultimo else 0}",
+                )
+            logger.info(
+                f"[{self.nome}] Candles crus populados para {symbol}-{timeframe} ({len(candles)})"
+            )
             return True
 
         except Exception as e:
@@ -110,16 +137,17 @@ class ObterDados(Plugin):
         """
         from utils.config import carregar_config
         import time
+
         config = carregar_config()
-        url = config.get('FGI_URL', 'https://api.alternative.me/fng/')
-        cache_key = '_cache_fgi'
-        cache_ttl = int(config.get('FGI_CACHE_TTL', 300))  # segundos
+        url = config.get("FGI_URL", "https://api.alternative.me/fng/")
+        cache_key = "_cache_fgi"
+        cache_ttl = int(config.get("FGI_CACHE_TTL", 300))  # segundos
         now = int(time.time())
         if hasattr(self, cache_key):
             cache = getattr(self, cache_key)
-            if now - cache.get('timestamp', 0) < cache_ttl:
-                logger.debug('[obter_dados] FGI cache hit')
-                return cache['data']
+            if now - cache.get("timestamp", 0) < cache_ttl:
+                logger.debug("[obter_dados] FGI cache hit")
+                return cache["data"]
         try:
             response = requests.get(url, timeout=5)
             if response.status_code == 200:
@@ -130,18 +158,28 @@ class ObterDados(Plugin):
                         "value": int(info["value"]),
                         "classification": info["value_classification"],
                         "timestamp": int(info["timestamp"]),
-                        "fonte": url
+                        "fonte": url,
                     }
                     setattr(self, cache_key, {"timestamp": now, "data": fgi})
                     logger.info(f"[obter_dados] Fear & Greed Index: {fgi}")
                     return fgi
             logger.warning("[obter_dados] Não foi possível obter o Fear & Greed Index.")
-            return {"value": None, "classification": None, "timestamp": None, "fonte": url}
+            return {
+                "value": None,
+                "classification": None,
+                "timestamp": None,
+                "fonte": url,
+            }
         except Exception as e:
             logger.error(f"[obter_dados] Erro ao buscar Fear & Greed Index: {e}")
-            return {"value": None, "classification": None, "timestamp": None, "fonte": url}
+            return {
+                "value": None,
+                "classification": None,
+                "timestamp": None,
+                "fonte": url,
+            }
 
-    def obter_long_short_ratio(self, symbol: str = 'BTCUSDT') -> dict:
+    def obter_long_short_ratio(self, symbol: str = "BTCUSDT") -> dict:
         """
         Obtém o Long/Short Ratio (LSR) de uma exchange, configurável via config/env.
         Implementa cache inteligente e logs claros. Nunca hardcoded.
@@ -152,45 +190,64 @@ class ObterDados(Plugin):
         """
         from utils.config import carregar_config
         import time
+
         config = carregar_config()
-        url = config.get('LSR_URL', '').format(symbol=symbol)
-        cache_key = f'_cache_lsr_{symbol}'
-        cache_ttl = int(config.get('LSR_CACHE_TTL', 300))
+        url = config.get("LSR_URL", "").format(symbol=symbol)
+        cache_key = f"_cache_lsr_{symbol}"
+        cache_ttl = int(config.get("LSR_CACHE_TTL", 300))
         now = int(time.time())
         if hasattr(self, cache_key):
             cache = getattr(self, cache_key)
-            if now - cache.get('timestamp', 0) < cache_ttl:
-                logger.debug(f'[obter_dados] LSR cache hit para {symbol}')
-                return cache['data']
+            if now - cache.get("timestamp", 0) < cache_ttl:
+                logger.debug(f"[obter_dados] LSR cache hit para {symbol}")
+                return cache["data"]
         try:
             response = requests.get(url, timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 # O formato esperado deve ser padronizado via config/env
-                lsr = float(data.get('longShortRatio', 1.0))
-                long_pct = float(data.get('longAccount', 0.0))
-                short_pct = float(data.get('shortAccount', 0.0))
+                lsr = float(data.get("longShortRatio", 1.0))
+                long_pct = float(data.get("longAccount", 0.0))
+                short_pct = float(data.get("shortAccount", 0.0))
                 direcao = (
-                    'Long Pesado' if lsr > float(config.get('LSR_LIMITE_LONG', 1.5)) else
-                    'Short Pesado' if lsr < float(config.get('LSR_LIMITE_SHORT', 0.7)) else
-                    'Equilibrado'
+                    "Long Pesado"
+                    if lsr > float(config.get("LSR_LIMITE_LONG", 1.5))
+                    else (
+                        "Short Pesado"
+                        if lsr < float(config.get("LSR_LIMITE_SHORT", 0.7))
+                        else "Equilibrado"
+                    )
                 )
                 resultado = {
-                    'lsr': lsr,
-                    'long': long_pct,
-                    'short': short_pct,
-                    'direcao': direcao,
-                    'fonte': url,
-                    'timestamp': now
+                    "lsr": lsr,
+                    "long": long_pct,
+                    "short": short_pct,
+                    "direcao": direcao,
+                    "fonte": url,
+                    "timestamp": now,
                 }
                 setattr(self, cache_key, {"timestamp": now, "data": resultado})
                 logger.info(f"[obter_dados] LSR: {resultado}")
                 return resultado
             logger.warning(f"[obter_dados] Não foi possível obter o LSR para {symbol}.")
-            return {'lsr': None, 'long': None, 'short': None, 'direcao': None, 'fonte': url, 'timestamp': now}
+            return {
+                "lsr": None,
+                "long": None,
+                "short": None,
+                "direcao": None,
+                "fonte": url,
+                "timestamp": now,
+            }
         except Exception as e:
             logger.error(f"[obter_dados] Erro ao buscar LSR: {e}")
-            return {'lsr': None, 'long': None, 'short': None, 'direcao': None, 'fonte': url, 'timestamp': now}
+            return {
+                "lsr": None,
+                "long": None,
+                "short": None,
+                "direcao": None,
+                "fonte": url,
+                "timestamp": now,
+            }
 
     def obter_btc_dominance(self) -> dict:
         """
@@ -201,39 +258,88 @@ class ObterDados(Plugin):
         """
         from utils.config import carregar_config
         import time
+
         config = carregar_config()
-        url = config.get('BTC_DOMINANCE_URL', '')
-        cache_key = '_cache_btc_dominance'
-        cache_ttl = int(config.get('BTC_DOMINANCE_CACHE_TTL', 300))
+        url = config.get("BTC_DOMINANCE_URL", "")
+        cache_key = "_cache_btc_dominance"
+        cache_ttl = int(config.get("BTC_DOMINANCE_CACHE_TTL", 300))
         now = int(time.time())
         if hasattr(self, cache_key):
             cache = getattr(self, cache_key)
-            if now - cache.get('timestamp', 0) < cache_ttl:
-                logger.debug('[obter_dados] BTC.d cache hit')
-                return cache['data']
+            if now - cache.get("timestamp", 0) < cache_ttl:
+                logger.debug("[obter_dados] BTC.d cache hit")
+                return cache["data"]
         try:
             response = requests.get(url, timeout=5)
             if response.status_code == 200:
                 data = response.json()
-                dominance = float(data.get('btc_dominance', 0.0))
-                direcao = data.get('direction', 'Estável')
+                dominance = float(data.get("btc_dominance", 0.0))
+                direcao = data.get("direction", "Estável")
                 categoria = (
-                    'Alta' if dominance >= float(config.get('BTC_DOMINANCE_LIMITE_ALTA', 50)) else
-                    'Baixa' if dominance <= float(config.get('BTC_DOMINANCE_LIMITE_BAIXA', 45)) else
-                    'Média'
+                    "Alta"
+                    if dominance >= float(config.get("BTC_DOMINANCE_LIMITE_ALTA", 50))
+                    else (
+                        "Baixa"
+                        if dominance
+                        <= float(config.get("BTC_DOMINANCE_LIMITE_BAIXA", 45))
+                        else "Média"
+                    )
                 )
                 resultado = {
-                    'dominance': dominance,
-                    'direcao': direcao,
-                    'categoria': categoria,
-                    'fonte': url,
-                    'timestamp': now
+                    "dominance": dominance,
+                    "direcao": direcao,
+                    "categoria": categoria,
+                    "fonte": url,
+                    "timestamp": now,
                 }
                 setattr(self, cache_key, {"timestamp": now, "data": resultado})
                 logger.info(f"[obter_dados] BTC Dominance: {resultado}")
                 return resultado
-            logger.warning('[obter_dados] Não foi possível obter BTC Dominance.')
-            return {'dominance': None, 'direcao': None, 'categoria': None, 'fonte': url, 'timestamp': now}
+            logger.warning("[obter_dados] Não foi possível obter BTC Dominance.")
+            return {
+                "dominance": None,
+                "direcao": None,
+                "categoria": None,
+                "fonte": url,
+                "timestamp": now,
+            }
         except Exception as e:
             logger.error(f"[obter_dados] Erro ao buscar BTC Dominance: {e}")
-            return {'dominance': None, 'direcao': None, 'categoria': None, 'fonte': url, 'timestamp': now}
+            return {
+                "dominance": None,
+                "direcao": None,
+                "categoria": None,
+                "fonte": url,
+                "timestamp": now,
+            }
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        """
+        Define a tabela de candles crus para armazenamento e futuros aprendizados de máquina.
+        """
+        return {
+            "candles_crus": {
+                "descricao": "Armazena candles crus (OHLCV) obtidos da Bybit para cada símbolo/timeframe, visando rastreabilidade e aprendizado de máquina.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "open": "DECIMAL(18,8)",
+                    "high": "DECIMAL(18,8)",
+                    "low": "DECIMAL(18,8)",
+                    "close": "DECIMAL(18,8)",
+                    "volume": "DECIMAL(18,8)",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+            }
+        }
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"

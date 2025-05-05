@@ -7,10 +7,11 @@ import psycopg2
 import psycopg2.extensions
 from typing import Optional, List, TYPE_CHECKING
 from pathlib import Path
-from utils.config import SCHEMA_JSON_PATH
+from utils.config import SCHEMA_JSON_PATH, carregar_config
 from utils.logging_config import log_banco
 from plugins.gerenciadores.gerenciador import BaseGerenciador
 from utils.paths import get_schema_path
+from utils.plugin_utils import validar_klines
 
 if TYPE_CHECKING:
     from plugins.plugin import Plugin
@@ -37,10 +38,16 @@ class GerenciadorBanco(BaseGerenciador):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        # Carrega config institucional centralizada
+        config = carregar_config()
+        self._config = (
+            config.get("gerenciadores", {}).get("banco", {}).copy()
+            if "gerenciadores" in config and "banco" in config["gerenciadores"]
+            else {}
+        )
         self._conn: Optional[psycopg2.extensions.connection] = None
         self._plugins: dict = kwargs.get("plugins", {})
         self.inicializado = False
-        self._config = {}
 
     @classmethod
     def dependencias(cls) -> List[str]:
@@ -567,3 +574,27 @@ class GerenciadorBanco(BaseGerenciador):
                 nivel=logging.ERROR,
             )
             raise
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        return {
+            "tabelas_registradas": {
+                "descricao": "Histórico de tabelas registradas, plugins responsáveis, versões e rastreabilidade.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+                "schema": {
+                    "nome_tabela": "VARCHAR(255) PRIMARY KEY",
+                    "plugin_owner": "VARCHAR(255) NOT NULL",
+                    "schema_versao": "VARCHAR(20) NOT NULL",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "detalhes": "JSONB",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                    "updated_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+            }
+        }
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"

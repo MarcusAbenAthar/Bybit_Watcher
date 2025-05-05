@@ -19,6 +19,8 @@ except UnicodeDecodeError:
 SCHEMA_JSON_PATH = os.getenv("SCHEMA_JSON_PATH", os.path.join("utils", "schema.json"))
 PAIRS_JSON_PATH = os.getenv("PAIRS_JSON_PATH", os.path.join("utils", "pares.json"))
 
+_config_cache = None
+
 
 def _validar_estilos_sltp(estilos: dict) -> dict:
     """Valida os estilos SLTP para garantir que sl_mult e tp_mult sejam float > 0."""
@@ -49,10 +51,17 @@ class ConfigManager:
             cls._instance._config = {}
         return cls._instance
 
-    def carregar_config(self, caminho: str = None) -> Dict[str, Any]:
-        """Carrega todas as configurações fixas e sensíveis do sistema.
-        Inclui exemplo institucional para monitoramento contínuo e ativos monitorados.
+    def carregar_config(self, force_reload=False):
         """
+        Carrega as configurações do arquivo .env e config.json, com cache para evitar múltiplas leituras.
+        Args:
+            force_reload (bool): Se True, recarrega a configuração do zero.
+        Returns:
+            dict: Configuração carregada.
+        """
+        global _config_cache
+        if _config_cache is not None and not force_reload:
+            return _config_cache
         testnet = os.getenv("BYBIT_TESTNET", "True").lower() == "true"
 
         # Chaves obrigatórias mínimas
@@ -80,7 +89,7 @@ class ConfigManager:
 
         # Configuração institucional pronta para uso
         # Edite aqui os pares que deseja monitorar
-        ativos = ["TRUMPUSDT"]
+        ativos = ["BTCUSDT"]
 
         bot_cycle_interval = 5  # Intervalo do loop principal
 
@@ -129,6 +138,8 @@ class ConfigManager:
             "timeframes": ["5m", "15m", "1h", "4h"],
             # Quantidade de symbols processados em lote (ajuste conforme desejado)
             "batch_size": 3,
+            # Número máximo de workers para o ThreadPoolExecutor (ajuste conforme desejado)
+            "executor_max_workers": 4,
             "trading": {
                 "auto_trade": False,
                 "risco_por_operacao": 0.05,
@@ -177,6 +188,36 @@ class ConfigManager:
         # Inclui os pesos globais na configuração retornada
         config["PESOS_TIMEFRAME"] = PESOS_TIMEFRAME
         config["PESOS_PLUGIN"] = PESOS_PLUGIN
+
+        # --- CONFIGURAÇÕES PADRÃO DE INDICADORES ---
+        config["indicadores"] = {
+            "tendencia": {
+                "sma_rapida": 9,
+                "sma_lenta": 21,
+                "ema_rapida": 12,
+                "ema_lenta": 26,
+                "macd_signal": 9,
+                "adx_periodo": 14,
+                "atr_periodo": 14,
+            },
+            "volatilidade": {
+                "bb": 20,  # Parâmetro obrigatório para Bandas de Bollinger
+                "atr": 14,  # Parâmetro obrigatório para ATR
+                "bb_periodo_base": 20,
+                "bb_desvio_padrao": 2,
+                "atr_periodo_base": 14,
+                "volatilidade_periodo_base": 14,
+            },
+            "osciladores": {
+                "rsi_periodo": 14,
+                "mfi_periodo": 14,
+                "estocastico_fastk": 5,
+                "estocastico_slowk": 3,
+                "estocastico_slowd": 3,
+            },
+            # Outros grupos podem ser adicionados aqui
+        }
+        _config_cache = config
         return config
 
 

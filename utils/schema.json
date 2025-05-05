@@ -10,47 +10,262 @@
       },
       "plugin": "system"
     },
-    "outros_indicadores": {
+    "tabelas_registradas": {
+      "columns": {
+        "descricao": "Hist\u00f3rico de tabelas registradas, plugins respons\u00e1veis, vers\u00f5es e rastreabilidade.",
+        "modo_acesso": "own",
+        "plugin": "gerenciador_banco",
+        "schema": {
+          "nome_tabela": "VARCHAR(255) PRIMARY KEY",
+          "plugin_owner": "VARCHAR(255) NOT NULL",
+          "schema_versao": "VARCHAR(20) NOT NULL",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "detalhes": "JSONB",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+          "updated_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        }
+      },
+      "plugin": "gerenciador_banco",
+      "schema_versao": "1.0"
+    },
+    "ciclos_bot": {
+      "columns": {
+        "descricao": "Armazena logs dos ciclos do bot, incluindo status, contexto, observa\u00e7\u00f5es e rastreabilidade.",
+        "modo_acesso": "own",
+        "plugin": "gerenciador_bot",
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "status": "VARCHAR(20)",
+          "pares": "JSONB",
+          "timeframes": "JSONB",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "detalhes": "JSONB",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        }
+      },
+      "plugin": "gerenciador_bot",
+      "schema_versao": "1.0"
+    },
+    "ciclos_plugins": {
+      "columns": {
+        "descricao": "Armazena logs dos ciclos de inicializa\u00e7\u00e3o e coordena\u00e7\u00e3o dos plugins, incluindo status, contexto, observa\u00e7\u00f5es e rastreabilidade.",
+        "modo_acesso": "own",
+        "plugin": "gerenciador_plugins",
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "status": "VARCHAR(20)",
+          "plugins_inicializados": "JSONB",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "detalhes": "JSONB",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        }
+      },
+      "plugin": "gerenciador_plugins",
+      "schema_versao": "1.0"
+    },
+    "analise_mercado": {
+      "columns": {
+        "descricao": "Armazena consolida\u00e7\u00e3o dos sinais dos plugins, dire\u00e7\u00e3o, for\u00e7a, confian\u00e7a, contexto, observa\u00e7\u00f5es e candle para rastreabilidade.",
+        "modo_acesso": "own",
+        "plugin": "analisador_mercado",
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timeframe": "VARCHAR(10) NOT NULL",
+          "direcao": "VARCHAR(10)",
+          "forca": "VARCHAR(10)",
+          "confianca": "DECIMAL(5,2)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "candle": "JSONB",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        }
+      },
+      "plugin": "analisador_mercado",
+      "schema_versao": "1.0"
+    },
+    "padroes_candles": {
       "columns": {
         "schema": {
           "id": "SERIAL PRIMARY KEY",
           "timestamp": "TIMESTAMP NOT NULL",
           "symbol": "VARCHAR(20) NOT NULL",
           "timeframe": "VARCHAR(10) NOT NULL",
-          "indicador": "VARCHAR(50) NOT NULL",
-          "valor": "DECIMAL(18,8)",
-          "descricao": "TEXT",
+          "padrao": "VARCHAR(50) NOT NULL",
+          "direcao": "VARCHAR(10) NOT NULL",
+          "forca": "DECIMAL(5,2)",
+          "confianca": "DECIMAL(5,2)",
+          "preco_entrada": "DECIMAL(18,8)",
+          "stop_loss": "DECIMAL(18,8)",
+          "take_profit": "DECIMAL(18,8)",
+          "volume": "DECIMAL(18,8)",
           "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
         },
         "modo_acesso": "own",
-        "plugin": "calculo_alavancagem"
+        "plugin": "analise_candles"
+      },
+      "plugin": "analise_candles",
+      "schema_versao": "1.0"
+    },
+    "alavancagem_calculada": {
+      "columns": {
+        "descricao": "Armazena os c\u00e1lculos de alavancagem sugeridos pelo plugin, incluindo faixas, score e contexto.",
+        "modo_acesso": "own",
+        "plugin": "calculo_alavancagem",
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timeframe": "VARCHAR(10) NOT NULL",
+          "alavancagem": "DECIMAL(5,2)",
+          "faixa_entrada_min": "DECIMAL(18,8)",
+          "faixa_entrada_max": "DECIMAL(18,8)",
+          "score": "DECIMAL(5,2)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        }
       },
       "plugin": "calculo_alavancagem",
       "schema_versao": "1.0"
     },
     "calculo_risco": {
       "columns": {
+        "descricao": "Armazena os c\u00e1lculos de risco realizados pelo plugin, incluindo dire\u00e7\u00e3o, for\u00e7a, confian\u00e7a, indicadores, score, contexto, observa\u00e7\u00f5es e candle para rastreabilidade.",
+        "modo_acesso": "own",
+        "plugin": "calculo_risco",
         "schema": {
           "id": "SERIAL PRIMARY KEY",
           "timestamp": "TIMESTAMP NOT NULL",
           "symbol": "VARCHAR(20) NOT NULL",
           "timeframe": "VARCHAR(10) NOT NULL",
-          "risco": "DECIMAL(5,2)",
+          "direcao": "VARCHAR(10)",
+          "forca": "VARCHAR(10)",
           "confianca": "DECIMAL(5,2)",
+          "indicadores": "JSONB",
+          "risco": "DECIMAL(5,2)",
+          "faixa_entrada_min": "DECIMAL(18,8)",
+          "faixa_entrada_max": "DECIMAL(18,8)",
+          "score": "DECIMAL(5,2)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "candle": "JSONB",
           "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-        },
-        "modo_acesso": "own",
-        "plugin": "calculo_risco"
+        }
       },
       "plugin": "calculo_risco",
       "schema_versao": "1.0"
     },
+    "conexoes": {
+      "columns": {
+        "descricao": "Armazena logs de conex\u00f5es e autentica\u00e7\u00f5es realizadas com a Bybit, incluindo status, contexto, observa\u00e7\u00f5es e rastreabilidade.",
+        "modo_acesso": "own",
+        "plugin": "conexao",
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "api_key": "VARCHAR(100)",
+          "status": "VARCHAR(20)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "detalhes": "JSONB",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        }
+      },
+      "plugin": "conexao",
+      "schema_versao": "1.0"
+    },
+    "sinais_consolidados": {
+      "columns": {
+        "descricao": "Armazena sinais consolidados de m\u00faltiplos timeframes, incluindo faixas, SL/TP, score, contexto, observa\u00e7\u00f5es e rastreabilidade.",
+        "modo_acesso": "own",
+        "plugin": "consolidador_sinais",
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "direcao": "VARCHAR(10) NOT NULL",
+          "entrada_min": "DECIMAL(18,8) NOT NULL",
+          "entrada_max": "DECIMAL(18,8) NOT NULL",
+          "tp1": "DECIMAL(18,8) NOT NULL",
+          "tp2": "DECIMAL(18,8) NOT NULL",
+          "sl": "DECIMAL(18,8) NOT NULL",
+          "alavancagem": "INTEGER NOT NULL",
+          "confianca": "DECIMAL(5,2) NOT NULL",
+          "timeframes_concordantes": "INTEGER NOT NULL",
+          "diff_pontuacao": "DECIMAL(5,2) NOT NULL",
+          "forca": "VARCHAR(10) NOT NULL",
+          "volume_rel": "DECIMAL(10,2) NOT NULL",
+          "rsi": "DECIMAL(5,2)",
+          "tendencia": "VARCHAR(10)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "detalhes": "JSONB",
+          "ultima_atualizacao": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        }
+      },
+      "plugin": "consolidador_sinais",
+      "schema_versao": "1.0"
+    },
+    "ordens_executadas": {
+      "columns": {
+        "descricao": "Armazena ordens executadas, incluindo score, contexto, observa\u00e7\u00f5es e candle para rastreabilidade.",
+        "modo_acesso": "own",
+        "plugin": "execucao_ordens",
+        "schema": {
+          "order_id": "VARCHAR(50) PRIMARY KEY",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "tipo": "VARCHAR(10)",
+          "lado": "VARCHAR(5)",
+          "preco": "DECIMAL(18,8)",
+          "quantidade": "DECIMAL(18,8)",
+          "status": "VARCHAR(15)",
+          "sinal_origem": "VARCHAR(50)",
+          "score": "DECIMAL(5,2)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "candle": "JSONB",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        }
+      },
+      "plugin": "execucao_ordens",
+      "schema_versao": "1.0"
+    },
+    "historico_ordens": {
+      "columns": {
+        "descricao": "Armazena hist\u00f3rico de eventos das ordens, incluindo score, contexto, observa\u00e7\u00f5es e candle para rastreabilidade.",
+        "modo_acesso": "own",
+        "plugin": "execucao_ordens",
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "order_id": "VARCHAR(50) REFERENCES ordens_executadas(order_id)",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "evento": "VARCHAR(20)",
+          "preco_executado": "DECIMAL(18,8)",
+          "quantidade_executada": "DECIMAL(18,8)",
+          "score": "DECIMAL(5,2)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "candle": "JSONB",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        }
+      },
+      "plugin": "execucao_ordens",
+      "schema_versao": "1.0"
+    },
     "indicadores_osciladores": {
       "columns": {
-        "schema": {},
+        "descricao": "Armazena valores dos indicadores osciladores (RSI, Estoc\u00e1stico, MFI, etc.), score, contexto, observa\u00e7\u00f5es e candle para rastreabilidade.",
         "modo_acesso": "own",
         "plugin": "indicadores_osciladores",
-        "columns": {
+        "schema": {
           "id": "SERIAL PRIMARY KEY",
           "timestamp": "TIMESTAMP NOT NULL",
           "symbol": "VARCHAR(20) NOT NULL",
@@ -60,6 +275,10 @@
           "zona": "VARCHAR(20)",
           "sinal": "VARCHAR(10)",
           "forca": "DECIMAL(5,2)",
+          "score": "DECIMAL(5,2)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "candle": "JSONB",
           "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
         }
       },
@@ -68,10 +287,10 @@
     },
     "indicadores_tendencia": {
       "columns": {
-        "descricao": "Tabela com indicadores de tend\u00eancia calculados.",
+        "descricao": "Armazena valores dos indicadores de tend\u00eancia (SMA, EMA, MACD, ADX, ATR, etc.), score, contexto, observa\u00e7\u00f5es e candle para rastreabilidade.",
         "modo_acesso": "own",
         "plugin": "indicadores_tendencia",
-        "columns": {
+        "schema": {
           "id": "SERIAL PRIMARY KEY",
           "timestamp": "TIMESTAMP NOT NULL",
           "symbol": "VARCHAR(20) NOT NULL",
@@ -80,6 +299,10 @@
           "valor": "DECIMAL(18,8)",
           "direcao": "VARCHAR(10)",
           "forca": "DECIMAL(5,2)",
+          "score": "DECIMAL(5,2)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "candle": "JSONB",
           "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
         }
       },
@@ -88,10 +311,10 @@
     },
     "medias_moveis": {
       "columns": {
-        "descricao": "Tabela com m\u00e9dias m\u00f3veis calculadas.",
+        "descricao": "Armazena m\u00e9dias m\u00f3veis calculadas (SMA, EMA, etc.), score, contexto, observa\u00e7\u00f5es e candle para rastreabilidade.",
         "modo_acesso": "own",
         "plugin": "indicadores_tendencia",
-        "columns": {
+        "schema": {
           "id": "SERIAL PRIMARY KEY",
           "timestamp": "TIMESTAMP NOT NULL",
           "symbol": "VARCHAR(20) NOT NULL",
@@ -100,6 +323,10 @@
           "periodo": "INTEGER NOT NULL",
           "valor": "DECIMAL(18,8) NOT NULL",
           "direcao": "VARCHAR(10)",
+          "score": "DECIMAL(5,2)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "candle": "JSONB",
           "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
         }
       },
@@ -108,25 +335,36 @@
     },
     "indicadores_volatilidade": {
       "columns": {
+        "descricao": "Armazena indicadores de volatilidade (Bandas de Bollinger, ATR, etc), faixas, score e contexto.",
+        "modo_acesso": "own",
+        "plugin": "indicadores_volatilidade",
         "schema": {
           "id": "SERIAL PRIMARY KEY",
           "timestamp": "TIMESTAMP NOT NULL",
           "symbol": "VARCHAR(20) NOT NULL",
           "timeframe": "VARCHAR(10) NOT NULL",
-          "indicador": "VARCHAR(50) NOT NULL",
-          "valor": "DECIMAL(18,8)",
-          "volatilidade": "DECIMAL(18,8)",
+          "bb_superior": "DECIMAL(18,8)",
+          "bb_media": "DECIMAL(18,8)",
+          "bb_inferior": "DECIMAL(18,8)",
+          "atr": "DECIMAL(18,8)",
+          "volatilidade": "DECIMAL(10,6)",
+          "faixa_entrada_min": "DECIMAL(18,8)",
+          "faixa_entrada_max": "DECIMAL(18,8)",
+          "score": "DECIMAL(5,2)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
           "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-        },
-        "modo_acesso": "own",
-        "plugin": "indicadores_volatilidade"
+        }
       },
       "plugin": "indicadores_volatilidade",
       "schema_versao": "1.0"
     },
     "indicadores_volume": {
       "columns": {
-        "columns": {
+        "descricao": "Armazena valores dos indicadores de volume (OBV, MFI, CMF, etc.), score, contexto, observa\u00e7\u00f5es e candle para rastreabilidade.",
+        "modo_acesso": "own",
+        "plugin": "indicadores_volume",
+        "schema": {
           "id": "SERIAL PRIMARY KEY",
           "timestamp": "TIMESTAMP NOT NULL",
           "symbol": "VARCHAR(20) NOT NULL",
@@ -137,36 +375,74 @@
           "volume_quote": "DECIMAL(18,8)",
           "direcao": "VARCHAR(10)",
           "forca": "DECIMAL(5,2)",
+          "score": "DECIMAL(5,2)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "candle": "JSONB",
           "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-        },
-        "plugin": "indicadores_volume"
+        }
       },
       "plugin": "indicadores_volume",
       "schema_versao": "1.0"
     },
-    "price_action": {
+    "outros_indicadores": {
       "columns": {
+        "descricao": "Armazena valores de indicadores customizados (Ichimoku, Fibonacci, Pivot Points, etc.), score, contexto, observa\u00e7\u00f5es e candle para rastreabilidade.",
+        "modo_acesso": "own",
+        "plugin": "outros_indicadores",
         "schema": {
           "id": "SERIAL PRIMARY KEY",
           "timestamp": "TIMESTAMP NOT NULL",
           "symbol": "VARCHAR(20) NOT NULL",
           "timeframe": "VARCHAR(10) NOT NULL",
+          "indicador": "VARCHAR(50) NOT NULL",
+          "valor": "DECIMAL(18,8)",
+          "parametro": "VARCHAR(20)",
+          "score": "DECIMAL(5,2)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "candle": "JSONB",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        }
+      },
+      "plugin": "outros_indicadores",
+      "schema_versao": "1.0"
+    },
+    "price_action": {
+      "columns": {
+        "descricao": "Armazena sinais de price action, padr\u00f5es identificados, faixas de entrada, score, contexto de mercado, observa\u00e7\u00f5es e candle bruto para rastreabilidade e auditoria.",
+        "modo_acesso": "own",
+        "plugin": "price_action",
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timeframe": "VARCHAR(10) NOT NULL",
+          "padrao": "VARCHAR(50)",
           "direcao": "VARCHAR(10)",
           "forca": "DECIMAL(5,2)",
           "confianca": "DECIMAL(5,2)",
           "preco_entrada": "DECIMAL(18,8)",
+          "faixa_entrada_min": "DECIMAL(18,8)",
+          "faixa_entrada_max": "DECIMAL(18,8)",
           "stop_loss": "DECIMAL(18,8)",
           "take_profit": "DECIMAL(18,8)",
+          "volume": "DECIMAL(18,8)",
+          "score": "DECIMAL(5,2)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "candle": "JSONB",
           "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-        },
-        "modo_acesso": "own",
-        "plugin": "price_action"
+        }
       },
       "plugin": "price_action",
       "schema_versao": "1.0"
     },
     "sltp": {
       "columns": {
+        "descricao": "Armazena c\u00e1lculos de SL/TP, score, contexto, observa\u00e7\u00f5es e candle para rastreabilidade e auditoria.",
+        "modo_acesso": "own",
+        "plugin": "sltp",
         "schema": {
           "id": "SERIAL PRIMARY KEY",
           "timestamp": "TIMESTAMP NOT NULL",
@@ -175,54 +451,58 @@
           "stop_loss": "DECIMAL(18,8)",
           "take_profit": "DECIMAL(18,8)",
           "confianca": "DECIMAL(5,2)",
+          "score": "DECIMAL(5,2)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
+          "candle": "JSONB",
           "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-        },
-        "modo_acesso": "own",
-        "plugin": "sltp"
+        }
       },
       "plugin": "sltp",
       "schema_versao": "1.0"
     },
-    "sinais_gerados": {
+    "validador_dados": {
       "columns": {
+        "descricao": "Armazena logs de valida\u00e7\u00e3o de dados de entrada, status, contexto, motivo de invalida\u00e7\u00e3o, candle analisado, observa\u00e7\u00f5es e rastreabilidade.",
+        "modo_acesso": "own",
+        "plugin": "validador_dados",
         "schema": {
           "id": "SERIAL PRIMARY KEY",
           "timestamp": "TIMESTAMP NOT NULL",
           "symbol": "VARCHAR(20) NOT NULL",
           "timeframe": "VARCHAR(10) NOT NULL",
-          "direcao": "VARCHAR(10) NOT NULL",
-          "preco_entrada": "DECIMAL(18,8) NOT NULL",
-          "stop_loss": "DECIMAL(18,8) NOT NULL",
-          "take_profit": "DECIMAL(18,8) NOT NULL",
-          "confianca": "DECIMAL(5,2) NOT NULL",
-          "alavancagem": "INTEGER NOT NULL",
-          "status": "VARCHAR(20) NOT NULL",
-          "resultado": "DECIMAL(18,8)",
+          "status": "VARCHAR(10)",
+          "motivo": "TEXT",
+          "contexto_mercado": "VARCHAR(20)",
+          "candle": "JSONB",
+          "observacoes": "TEXT",
           "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-        },
-        "modo_acesso": "own",
-        "plugin": "sinais_plugin"
+        }
       },
-      "plugin": "sinais_plugin",
+      "plugin": "validador_dados",
       "schema_versao": "1.0"
     },
-    "analises_consolidadas": {
+    "candles_crus": {
       "columns": {
+        "descricao": "Armazena candles crus (OHLCV) obtidos da Bybit para cada s\u00edmbolo/timeframe, visando rastreabilidade e aprendizado de m\u00e1quina.",
+        "modo_acesso": "own",
+        "plugin": "obter_dados",
         "schema": {
           "id": "SERIAL PRIMARY KEY",
           "timestamp": "TIMESTAMP NOT NULL",
           "symbol": "VARCHAR(20) NOT NULL",
           "timeframe": "VARCHAR(10) NOT NULL",
-          "tipo_analise": "VARCHAR(50) NOT NULL",
-          "valor": "DECIMAL(18,8)",
-          "direcao": "VARCHAR(10)",
-          "peso": "DECIMAL(5,2)",
+          "open": "DECIMAL(18,8)",
+          "high": "DECIMAL(18,8)",
+          "low": "DECIMAL(18,8)",
+          "close": "DECIMAL(18,8)",
+          "volume": "DECIMAL(18,8)",
+          "contexto_mercado": "VARCHAR(20)",
+          "observacoes": "TEXT",
           "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-        },
-        "modo_acesso": "own",
-        "plugin": "sinais_plugin"
+        }
       },
-      "plugin": "sinais_plugin",
+      "plugin": "obter_dados",
       "schema_versao": "1.0"
     }
   }

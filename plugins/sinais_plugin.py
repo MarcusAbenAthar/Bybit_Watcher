@@ -3,11 +3,13 @@ Plugin para consolidação de dados de análise e geração do sinal final
 com SL/TP, confiança e alavancagem.
 """
 
-from utils.logging_config import get_logger
+from utils.logging_config import get_logger, log_rastreamento
 from plugins.plugin import Plugin
 import logging
 from copy import deepcopy
 import numpy as np
+from utils.config import carregar_config
+from utils.plugin_utils import validar_klines, padronizar_direcao
 
 logger = get_logger(__name__)
 logger_sinais = logging.getLogger("sinais")
@@ -48,27 +50,39 @@ class SinaisPlugin(Plugin):
 
     @property
     def plugin_tabelas(self) -> dict:
-        tabelas = {
+        return {
             "sinais_gerados": {
+                "descricao": "Armazena sinais finais gerados pelo bot, incluindo faixas de entrada, SL/TP, score, contexto, observações e candle bruto para rastreabilidade.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
                 "schema": {
                     "id": "SERIAL PRIMARY KEY",
                     "timestamp": "TIMESTAMP NOT NULL",
                     "symbol": "VARCHAR(20) NOT NULL",
                     "timeframe": "VARCHAR(10) NOT NULL",
                     "direcao": "VARCHAR(10) NOT NULL",
+                    "forca": "VARCHAR(10)",
+                    "confianca": "DECIMAL(5,2) NOT NULL",
                     "preco_entrada": "DECIMAL(18,8) NOT NULL",
+                    "faixa_entrada_min": "DECIMAL(18,8)",
+                    "faixa_entrada_max": "DECIMAL(18,8)",
                     "stop_loss": "DECIMAL(18,8) NOT NULL",
                     "take_profit": "DECIMAL(18,8) NOT NULL",
-                    "confianca": "DECIMAL(5,2) NOT NULL",
+                    "volume": "DECIMAL(18,8)",
                     "alavancagem": "INTEGER NOT NULL",
+                    "score": "DECIMAL(5,2)",
+                    "contexto_mercado": "VARCHAR(20)",
                     "status": "VARCHAR(20) NOT NULL",
                     "resultado": "DECIMAL(18,8)",
+                    "observacoes": "TEXT",
+                    "candle": "JSONB",
                     "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
                 },
-                "modo_acesso": "own",
-                "plugin": self.PLUGIN_NAME,
             },
             "analises_consolidadas": {
+                "descricao": "Armazena análises intermediárias consolidadas, valores, pesos, contexto, observações e candle para rastreabilidade.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
                 "schema": {
                     "id": "SERIAL PRIMARY KEY",
                     "timestamp": "TIMESTAMP NOT NULL",
@@ -78,13 +92,13 @@ class SinaisPlugin(Plugin):
                     "valor": "DECIMAL(18,8)",
                     "direcao": "VARCHAR(10)",
                     "peso": "DECIMAL(5,2)",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "candle": "JSONB",
                     "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
                 },
-                "modo_acesso": "own",
-                "plugin": self.PLUGIN_NAME,
             },
         }
-        return tabelas
 
     @classmethod
     def dependencias(cls):
@@ -202,13 +216,42 @@ class SinaisPlugin(Plugin):
                 "take_profit": 0.0,
             }
 
-    def __init__(self, calculo_alavancagem=None, calculo_risco=None, **kwargs):
+    def __init__(
+        self,
+        gerenciador_banco=None,
+        indicadores_tendencia=None,
+        indicadores_osciladores=None,
+        indicadores_volume=None,
+        calculo_alavancagem=None,
+        calculo_risco=None,
+        **kwargs,
+    ):
         """
         Inicializa o plugin SinaisPlugin com dependências injetadas.
         """
         super().__init__(**kwargs)
-        self._calculo_alavancagem = calculo_alavancagem
-        self._calculo_risco = calculo_risco
+        self.gerenciador_banco = gerenciador_banco
+        self.indicadores_tendencia = indicadores_tendencia
+        self.indicadores_osciladores = indicadores_osciladores
+        self.indicadores_volume = indicadores_volume
+        self.calculo_alavancagem = calculo_alavancagem
+        self.calculo_risco = calculo_risco
+        logger.info(
+            f"[sinais_plugin] Dependências injetadas: "
+            f"gerenciador_banco={gerenciador_banco is not None}, "
+            f"indicadores_tendencia={indicadores_tendencia is not None}, "
+            f"indicadores_osciladores={indicadores_osciladores is not None}, "
+            f"indicadores_volume={indicadores_volume is not None}, "
+            f"calculo_alavancagem={calculo_alavancagem is not None}, "
+            f"calculo_risco={calculo_risco is not None}"
+        )
+        # Carrega config institucional centralizada
+        config = carregar_config()
+        self._config = (
+            config.get("plugins", {}).get("sinais_plugin", {}).copy()
+            if "plugins" in config and "sinais_plugin" in config["plugins"]
+            else {}
+        )
         self._confianca_pesos = {
             "analise_mercado": 0.4,
             "calculo_risco": 0.3,
@@ -234,10 +277,10 @@ class SinaisPlugin(Plugin):
                 return False
 
             # Verifica se as dependências foram injetadas
-            if not self._calculo_alavancagem:
+            if not self.calculo_alavancagem:
                 logger.error(f"[{self.nome}] calculo_alavancagem não foi injetado")
                 return False
-            if not self._calculo_risco:
+            if not self.calculo_risco:
                 logger.error(f"[{self.nome}] calculo_risco não foi injetado")
                 return False
 
@@ -283,22 +326,21 @@ class SinaisPlugin(Plugin):
         Executa a análise de sinais.
         """
         try:
+            from utils.logging_config import log_rastreamento
+
+            symbol = kwargs.get("symbol")
+            timeframe = kwargs.get("timeframe")
             dados_completos = kwargs.get("dados_completos")
+            log_rastreamento(
+                componente=f"sinais_plugin/{symbol}-{timeframe}",
+                acao="entrada",
+                detalhes=f"chaves={list(dados_completos.keys()) if isinstance(dados_completos, dict) else dados_completos}",
+            )
+
             if not dados_completos or not isinstance(dados_completos, dict):
                 logger.error(f"[{self.nome}] dados_completos não fornecido ou inválido")
                 return False
 
-            symbol = kwargs.get("symbol")
-            timeframe = kwargs.get("timeframe")
-
-            # Garantir que o timeframe seja fornecido
-            if not kwargs.get("timeframe"):
-                kwargs["timeframe"] = "1h"  # Valor padrão caso não seja fornecido
-                logger.warning(
-                    f"[{self.nome}] Timeframe não fornecido, usando padrão '1h'"
-                )
-
-            # Adicionando validação para symbol e timeframe
             if not symbol:
                 logger.error(f"[{self.nome}] Symbol não fornecido")
                 return False
@@ -319,6 +361,17 @@ class SinaisPlugin(Plugin):
             analise_mercado = self._processar_analise_mercado(dados_completos)
             dados_completos["analise_mercado"] = analise_mercado
 
+            # Ao consolidar analise_mercado, padronizar direção
+            analise_mercado["direcao"] = padronizar_direcao(
+                analise_mercado.get("direcao", "LATERAL")
+            )
+
+            # Propagar campos essenciais para a saída (garantia de rastreabilidade)
+            campos_essenciais = ["preco_atual", "atr", "suporte", "resistencia"]
+            for campo in campos_essenciais:
+                if campo in dados_completos:
+                    analise_mercado[campo] = dados_completos[campo]
+
             # Log do sinal gerado
             logger_sinais.info(
                 f"[{symbol} - {timeframe}] "
@@ -326,7 +379,14 @@ class SinaisPlugin(Plugin):
                 f"FORÇA: {analise_mercado['forca']} | "
                 f"CONFIANÇA: {analise_mercado['confianca']:.2f}% | "
                 f"TENDÊNCIA: {analise_mercado['tendencia']} | "
-                f"VOL REL: {analise_mercado['volume']:.2f}"
+                f"VOL REL: {analise_mercado['volume']:.2f} | "
+                f"ATR: {analise_mercado.get('atr')} | PRECO_ATUAL: {analise_mercado.get('preco_atual')} | SUPORTE: {analise_mercado.get('suporte')} | RESISTENCIA: {analise_mercado.get('resistencia')}"
+            )
+
+            log_rastreamento(
+                componente=f"sinais_plugin/{symbol}-{timeframe}",
+                acao="saida",
+                detalhes=f"sinais_gerados={dados_completos.get('sinais_gerados', {})} | analise_mercado={analise_mercado}",
             )
 
             return True
@@ -342,7 +402,7 @@ class SinaisPlugin(Plugin):
         try:
             analise = dados.get("analise_mercado", {})
             if not analise:
-                return deepcopy(self._RESULTADO_PADRAO["analise_mercado"])
+                analise = deepcopy(self._RESULTADO_PADRAO["analise_mercado"])
 
             # Processamento de indicadores
             rsi = float(dados.get("rsi", {}).get("valor", 50.0))
@@ -365,17 +425,35 @@ class SinaisPlugin(Plugin):
                 confianca_base, rsi, volume_rel, tendencia, direcao
             )
 
+            # --- PROPAGAÇÃO DOS CAMPOS ESSENCIAIS DA RAIZ PARA ANALISE_MERCADO ---
+            campos_essenciais = ["atr", "preco_atual", "suporte", "resistencia"]
+            analise_corrigida = dict(analise)  # cópia para não alterar original
+            for campo in campos_essenciais:
+                valor_raiz = dados.get(campo)
+                valor_analise = analise_corrigida.get(campo, None)
+                if valor_raiz not in (None, 0.0):
+                    analise_corrigida[campo] = valor_raiz
+                elif valor_analise not in (None, 0.0):
+                    analise_corrigida[campo] = valor_analise
+                else:
+                    analise_corrigida[campo] = 0.0
+
+            # Ao consolidar analise_mercado, padronizar direção
+            analise_corrigida["direcao"] = padronizar_direcao(
+                analise_corrigida.get("direcao", "LATERAL")
+            )
+
             return {
-                "direcao": direcao,
+                "direcao": analise_corrigida.get("direcao"),
                 "forca": forca,
                 "confianca": confianca,
-                "preco_atual": float(analise.get("preco_atual", 0.0)),
+                "preco_atual": float(analise_corrigida.get("preco_atual", 0.0)),
                 "volume": volume_rel,
                 "rsi": rsi,
                 "tendencia": tendencia,
-                "suporte": float(analise.get("suporte", 0.0)),
-                "resistencia": float(analise.get("resistencia", 0.0)),
-                "atr": float(analise.get("atr", 0.0)),
+                "suporte": float(analise_corrigida.get("suporte", 0.0)),
+                "resistencia": float(analise_corrigida.get("resistencia", 0.0)),
+                "atr": float(analise_corrigida.get("atr", 0.0)),
             }
 
         except Exception as e:
@@ -644,7 +722,7 @@ class SinaisPlugin(Plugin):
                 )
 
             # Peso para calculo_risco
-            if self._calculo_risco and dados.get("calculo_risco"):
+            if self.calculo_risco and dados.get("calculo_risco"):
                 confianca_risco = dados["calculo_risco"].get("confianca", 0.0)
                 dir_risco = dados["calculo_risco"].get("direcao", "LATERAL")
                 if confianca_risco > 0:
@@ -717,14 +795,14 @@ class SinaisPlugin(Plugin):
         Returns:
             float: Valor da alavancagem.
         """
-        if not self._calculo_alavancagem:
+        if not self.calculo_alavancagem:
             logger.warning(
                 f"[{self.nome}] Plugin de cálculo de alavancagem não disponível"
             )
             return 0.0
 
         try:
-            return self._calculo_alavancagem.calcular_alavancagem(
+            return self.calculo_alavancagem.calcular_alavancagem(
                 crus=dados.get("crus", []), direcao=direcao, confianca=confianca
             )
         except Exception as e:
@@ -773,27 +851,3 @@ class SinaisPlugin(Plugin):
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao extrair timestamp: {e}")
             return None
-
-    def log_banco(
-        self,
-        tabela: str,
-        operacao: str,
-        dados: str,
-        dados: dict,
-    ):
-        """
-        Registra uma operação no banco de dados.
-
-        Args:
-            tabela: Nome da tabela.
-            operacao: Tipo de operação (INSERT, UPDATE, DELETE).
-            dados: Descrição da operação.
-            dados: Dados a serem registrados.
-        """
-        try:
-            # Implementação de registro no banco de dados
-            # Aqui você pode usar um ORM ou uma biblioteca de banco de dados
-            # para registrar os dados
-            pass
-        except Exception as e:
-            logger.error(f"[{self.nome}] Erro ao registrar no banco de dados: {e}")

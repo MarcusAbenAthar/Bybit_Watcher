@@ -5,6 +5,8 @@ Plugin para validação de dados de entrada (símbolo, timeframe, candles).
 from utils.logging_config import get_logger
 import numpy as np
 from plugins.plugin import Plugin
+from utils.config import carregar_config
+from utils.plugin_utils import validar_klines
 
 logger = get_logger(__name__)
 
@@ -29,17 +31,23 @@ class ValidadorDados(Plugin):
         """
         return []
 
-    def __init__(self, conexao=None, **kwargs):
+    def __init__(self, **kwargs):
         """
         Inicializa o plugin ValidadorDados.
 
         Args:
-            conexao: Instância do plugin Conexao (opcional, para validar símbolos).
             **kwargs: Outras dependências.
         """
         super().__init__(**kwargs)
+        # Carrega config institucional centralizada
+        config = carregar_config()
+        self._config = (
+            config.get("plugins", {}).get("validador_dados", {}).copy()
+            if "plugins" in config and "validador_dados" in config["plugins"]
+            else {}
+        )
         self.min_candles = 20
-        self._conexao = conexao
+        self._conexao = None
         self._timeframes_padrao = ["1m", "5m", "15m", "1h", "4h", "1d"]
 
     def inicializar(self, config: dict) -> bool:
@@ -173,16 +181,13 @@ class ValidadorDados(Plugin):
 
     def _validar_symbol(self, symbol: str) -> bool:
         """
-        Valida o símbolo do par.
-
+        Valida o símbolo do par usando o ID do mercado (ex: BTCUSDT).
         Args:
-            symbol: Símbolo do par.
-
+            symbol: ID do par (ex: BTCUSDT)
         Returns:
             bool: True se válido, False caso contrário.
         """
         try:
-            # Configuração de sufixos permitidos
             sufixos = self._config.get("validador", {}).get(
                 "symbol_suffixes", ["USDT", "USD", "BTC"]
             )
@@ -191,16 +196,17 @@ class ValidadorDados(Plugin):
                     f"[{self.nome}] Nenhum sufixo de símbolo configurado. Usando padrão: {sufixos}"
                 )
 
-            # Verificação via conexao.py, se disponível
+            # Busca pelo ID do par (campo 'id' em cada market)
             if self._conexao and hasattr(self._conexao, "exchange"):
                 markets = self._conexao.exchange.markets
-                if markets and symbol in markets:
-                    return True
-                logger.warning(
-                    f"[{self.nome}] Símbolo {symbol} não encontrado na exchange"
-                )
-                return False
-
+                if markets:
+                    for market in markets.values():
+                        if market.get("id") == symbol:
+                            return True
+                    logger.warning(
+                        f"[{self.nome}] ID do símbolo {symbol} não encontrado na exchange"
+                    )
+                    return False
             # Fallback: validação por sufixo
             return any(symbol.endswith(s) for s in sufixos)
         except Exception as e:
@@ -260,3 +266,29 @@ class ValidadorDados(Plugin):
             logger.debug("ValidadorDados finalizado com sucesso.")
         except Exception as e:
             logger.error(f"Erro ao finalizar ValidadorDados: {e}")
+
+    @property
+    def plugin_tabelas(self) -> dict:
+        return {
+            "validador_dados": {
+                "descricao": "Armazena logs de validação de dados de entrada, status, contexto, motivo de invalidação, candle analisado, observações e rastreabilidade.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "symbol": "VARCHAR(20) NOT NULL",
+                    "timeframe": "VARCHAR(10) NOT NULL",
+                    "status": "VARCHAR(10)",
+                    "motivo": "TEXT",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "candle": "JSONB",
+                    "observacoes": "TEXT",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+            }
+        }
+
+    @property
+    def plugin_schema_versao(self) -> str:
+        return "1.0"

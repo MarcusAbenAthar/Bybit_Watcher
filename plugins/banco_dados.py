@@ -15,6 +15,8 @@ import psycopg2
 from psycopg2.extras import DictCursor
 import datetime
 import logging
+from utils.config import carregar_config
+from utils.plugin_utils import validar_klines
 
 
 class BancoDados(Plugin):
@@ -31,6 +33,13 @@ class BancoDados(Plugin):
     def __init__(self, gerenciador_banco=None, **kwargs):
         super().__init__(**kwargs)
         self._gerenciador_banco = gerenciador_banco
+        # Carrega config institucional centralizada
+        config = carregar_config()
+        self._config = (
+            config.get("plugins", {}).get("banco_dados", {}).copy()
+            if "plugins" in config and "banco_dados" in config["plugins"]
+            else {}
+        )
         self._tabelas_registradas = {}
         self._conn = None
         self._cursor = None
@@ -43,54 +52,51 @@ class BancoDados(Plugin):
     @property
     def plugin_tabelas(self) -> dict:
         """
-        Declaração das tabelas gerenciadas por este plugin.
-        Segue o padrão mínimo esperado pelo schema_generator.
+        Define as tabelas do plugin conforme padrão institucional (regras de ouro).
         """
         return {
             "dados": {
-                "descricao": "Armazena registros genéricos de dados de plugins.",
+                "descricao": "Armazena dados genéricos do sistema, incluindo faixas, contexto e observações.",
                 "modo_acesso": "own",
                 "plugin": self.PLUGIN_NAME,
                 "schema": {
                     "id": "SERIAL PRIMARY KEY",
                     "timestamp": "TIMESTAMP NOT NULL",
-                    "symbol": "VARCHAR(20) NOT NULL",
-                    "valor": "DECIMAL(18,8)",
-                    "tipo": "VARCHAR(30)",
-                    "plugin_origem": "VARCHAR(50)",
+                    "chave": "VARCHAR(50) NOT NULL",
+                    "valor": "JSONB",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
                 },
             },
             "tabelas_registradas": {
-                "descricao": "Rastreia tabelas registradas por plugins, versão e timestamps.",
-                "modo_acesso": "own",
-                "plugin": self.PLUGIN_NAME,
-                "schema": {
-                    "nome_tabela": "VARCHAR(255) PRIMARY KEY",
-                    "plugin_owner": "VARCHAR(255) NOT NULL",
-                    "schema_versao": "VARCHAR(20) NOT NULL",
-                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-                    "updated_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-                },
-            },
-            "klines": {
-                "descricao": "Armazena candles (klines) históricos de ativos.",
+                "descricao": "Histórico de tabelas registradas e suas versões.",
                 "modo_acesso": "own",
                 "plugin": self.PLUGIN_NAME,
                 "schema": {
                     "id": "SERIAL PRIMARY KEY",
-                    "timestamp": "TIMESTAMP NOT NULL",
+                    "tabela": "VARCHAR(50) NOT NULL",
+                    "versao": "VARCHAR(10)",
+                    "plugin": "VARCHAR(50)",
+                    "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+                },
+            },
+            "klines": {
+                "descricao": "Armazena candles crus (OHLCV) para cada símbolo/timeframe.",
+                "modo_acesso": "own",
+                "plugin": self.PLUGIN_NAME,
+                "schema": {
+                    "id": "SERIAL PRIMARY KEY",
                     "symbol": "VARCHAR(20) NOT NULL",
                     "timeframe": "VARCHAR(10) NOT NULL",
-                    "open": "DECIMAL(18,8) NOT NULL",
-                    "high": "DECIMAL(18,8) NOT NULL",
-                    "low": "DECIMAL(18,8) NOT NULL",
-                    "close": "DECIMAL(18,8) NOT NULL",
-                    "volume": "DECIMAL(18,8) NOT NULL",
-                    "close_time": "TIMESTAMP NOT NULL",
-                    "quote_volume": "DECIMAL(18,8) NOT NULL",
-                    "trades": "INTEGER NOT NULL",
-                    "taker_buy_base": "DECIMAL(18,8) NOT NULL",
-                    "taker_buy_quote": "DECIMAL(18,8) NOT NULL",
+                    "timestamp": "TIMESTAMP NOT NULL",
+                    "open": "DECIMAL(18,8)",
+                    "high": "DECIMAL(18,8)",
+                    "low": "DECIMAL(18,8)",
+                    "close": "DECIMAL(18,8)",
+                    "volume": "DECIMAL(18,8)",
+                    "contexto_mercado": "VARCHAR(20)",
+                    "observacoes": "TEXT",
                     "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
                 },
             },

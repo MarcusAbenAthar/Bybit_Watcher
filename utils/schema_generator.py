@@ -52,6 +52,7 @@ class SchemaGenerator:
             tabela="ALL",
             operacao="SCHEMA_DIFF",
             dados=f"Diff gerado: {len(diff.tabelas_adicionadas)} adições, {len(diff.tabelas_removidas)} remoções",
+            nivel=logging.INFO,
         )
         return diff
 
@@ -84,6 +85,7 @@ class SchemaGenerator:
             tabela="ALL",
             operacao="SCHEMA_BACKUP",
             dados=f"Backup criado: {backup_path}",
+            nivel=logging.INFO,
         )
 
     def gerar_script_migracao(self, diff: SchemaDiff) -> List[str]:
@@ -105,6 +107,7 @@ class SchemaGenerator:
             tabela="ALL",
             operacao="MIGRATION_SCRIPT",
             dados=f"Script gerado com {len(comandos)} comandos",
+            nivel=logging.INFO,
         )
         return comandos
 
@@ -192,7 +195,8 @@ def generate_schema():
                 if hasattr(plugin, "plugin_tabelas"):
                     tabelas = plugin.plugin_tabelas
                     for nome_tabela, conf in tabelas.items():
-                        columns = conf.get("columns", {})
+                        # Aceita tanto 'schema' (padrão novo) quanto 'columns' (retrocompatibilidade)
+                        columns = conf.get("schema") or conf.get("columns", {})
                         # Corrigir columns aninhado
                         if (
                             isinstance(columns, dict)
