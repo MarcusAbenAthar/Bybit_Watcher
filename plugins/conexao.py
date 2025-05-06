@@ -1,4 +1,9 @@
-"""Plugin para gerenciar autenticação e conexão com a API da Bybit."""
+"""
+Plugin de conexão.
+Responsabilidade única: gerenciar conexão com a Bybit.
+Não deve registrar, inicializar ou finalizar automaticamente.
+Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
+"""
 
 import ccxt
 from plugins.plugin import Plugin

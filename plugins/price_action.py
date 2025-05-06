@@ -1,6 +1,8 @@
 """
-Plugin de análise de price action com reconhecimento de padrões simples de candle,
-baseado em corpo, pavio e direção.
+Plugin de price action.
+Responsabilidade única: análise de price action.
+Não deve registrar, inicializar ou finalizar automaticamente.
+Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
 """
 
 from utils.logging_config import get_logger, log_rastreamento

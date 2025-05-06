@@ -1,5 +1,8 @@
 """
-Inicializador dinâmico dos plugins.
+Módulo de inicialização dos plugins.
+Não deve registrar, inicializar ou finalizar plugins.
+Apenas expõe utilitários e facilita importações.
+Toda a lógica de ciclo de vida dos plugins é centralizada no GerenciadorPlugins.
 
 Importa automaticamente todos os módulos dentro de plugins/, exceto os explicitamente ignorados.
 Registra automaticamente todas as subclasses de Plugin e BaseGerenciador.

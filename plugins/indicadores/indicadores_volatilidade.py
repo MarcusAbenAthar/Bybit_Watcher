@@ -17,6 +17,13 @@ logger = get_logger(__name__)
 
 
 class IndicadoresVolatilidade(Plugin):
+    """
+    Indicador de volatilidade.
+    Responsabilidade única: cálculo de indicadores de volatilidade.
+    Não deve registrar, inicializar ou finalizar automaticamente.
+    Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
+    """
+
     def finalizar(self):
         """
         Finaliza o plugin IndicadoresVolatilidade, limpando estado e garantindo shutdown seguro.

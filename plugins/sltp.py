@@ -1,5 +1,8 @@
 """
-Plugin SLTP inteligente com adaptação dinâmica baseada em contexto, performance e confiança.
+Plugin de SL/TP.
+Responsabilidade única: cálculo e aplicação de estilos de stop loss e take profit.
+Não deve registrar, inicializar ou finalizar automaticamente.
+Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
 """
 
 from typing import Dict, Any, Optional

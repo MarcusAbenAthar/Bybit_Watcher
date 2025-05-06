@@ -2,8 +2,9 @@
 # Classe base para todos os gerenciadores do sistema
 
 """
-Base abstrata para gerenciadores (como Bot, Banco, Plugins).
-Incorpora sistema de auto-registro semelhante ao Plugin.
+Módulo base para gerenciadores do sistema.
+Não deve registrar, inicializar ou finalizar gerenciadores automaticamente.
+Toda a lógica de ciclo de vida dos gerenciadores é centralizada no GerenciadorPlugins.
 """
 
 from typing import Type, Dict, List

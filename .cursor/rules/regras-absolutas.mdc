@@ -29,13 +29,14 @@ Regras para Banco de Dados:
 
 Boas práticas ao programar o bot:
 
-1 - Evitar redundâncias;
-2 - Respeitar a responsabilidade de cada plugin;
-3 - Evitar importação circular;
-4 - Manter histórico de alterações no banco;
-5 - Sempre testar migrações em ambiente controlado;
-6 - Quanto mais inteligente e menos hardcoded, melhor será;
-7 - O arquivo `plugins_dependencias.json` é gerado pelo sistema, não deve ser alterado manualmente
+1 - Todos os plugins produzem dados e análises. Os dados e análises são armazenados em Dicionários "dados_completos crus e analisados" e isso deve ser repassado para a posteridade. 
+2 - Evitar redundâncias;
+3 - Respeitar a responsabilidade de cada plugin;
+4 - Evitar importação circular;
+5 - Manter histórico de alterações no banco;
+6 - Sempre testar migrações em ambiente controlado;
+7 - Quanto mais inteligente e menos hardcoded, melhor será;
+8 - O arquivo `plugins_dependencias.json` é gerado pelo sistema, não deve ser alterado manualmente
 
 Cada plugin segue:
 

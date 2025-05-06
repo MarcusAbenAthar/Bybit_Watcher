@@ -8,8 +8,10 @@ logger = get_logger(__name__)
 
 class AnalisadorMercado(Plugin):
     """
-    Plugin que consolida os sinais dos demais módulos para gerar
-    uma visão unificada da direção de mercado.
+    Plugin de análise de mercado.
+    Responsabilidade única: análise de contexto de mercado.
+    Não deve registrar, inicializar ou finalizar automaticamente.
+    Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
     """
 
     PLUGIN_NAME = "analisador_mercado"

@@ -1,5 +1,8 @@
 """
-Plugin para cálculo de risco com base em indicadores técnicos.
+Plugin de cálculo de risco.
+Responsabilidade única: cálculo de risco para operações.
+Não deve registrar, inicializar ou finalizar automaticamente.
+Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
 """
 
 from utils.logging_config import get_logger

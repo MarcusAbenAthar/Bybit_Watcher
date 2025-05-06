@@ -1,5 +1,8 @@
 """
-Plugin para executar ordens de compra/venda com SL/TP, incluindo reentradas (DCA) e controle de posição ativa.
+Plugin de execução de ordens.
+Responsabilidade única: executar ordens de acordo com sinais e regras.
+Não deve registrar, inicializar ou finalizar automaticamente.
+Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
 """
 
 from utils.logging_config import get_logger, log_rastreamento

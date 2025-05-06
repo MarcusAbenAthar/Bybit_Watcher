@@ -18,6 +18,13 @@ logger = get_logger(__name__)
 
 
 class IndicadoresOsciladores(Plugin):
+    """
+    Indicador oscilador.
+    Responsabilidade única: cálculo de indicadores osciladores.
+    Não deve registrar, inicializar ou finalizar automaticamente.
+    Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
+    """
+
     def finalizar(self):
         """
         Finaliza o plugin IndicadoresOsciladores, limpando estado e garantindo shutdown seguro.

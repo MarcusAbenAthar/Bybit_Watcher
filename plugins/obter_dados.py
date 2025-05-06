@@ -1,4 +1,9 @@
-"""Plugin para obter dados de mercado (candles) usando a conexão autenticada."""
+"""
+Plugin de obtenção de dados.
+Responsabilidade única: obter dados crus do mercado.
+Não deve registrar, inicializar ou finalizar automaticamente.
+Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
+"""
 
 from plugins.plugin import Plugin
 from utils.logging_config import get_logger, log_rastreamento

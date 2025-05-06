@@ -1,6 +1,8 @@
 """
-Plugin para consolidação de dados de análise e geração do sinal final
-com SL/TP, confiança e alavancagem.
+Plugin de sinais.
+Responsabilidade única: geração e análise de sinais de trading.
+Não deve registrar, inicializar ou finalizar automaticamente.
+Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
 """
 
 from utils.logging_config import get_logger, log_rastreamento
@@ -321,9 +323,10 @@ class SinaisPlugin(Plugin):
             logger.error(f"[{self.nome}] Erro ao inicializar: {e}", exc_info=True)
             return False
 
-    def executar(self, *args, **kwargs) -> bool:
+    def executar(self, *args, **kwargs) -> dict:
         """
-        Executa a análise de sinais.
+        Executa a análise de sinais e retorna SEMPRE o dicionário atualizado dados_completos.
+        Garante que todos os campos essenciais (symbol, timeframe, timeframes) sejam preservados e propagados.
         """
         try:
             from utils.logging_config import log_rastreamento
@@ -339,23 +342,15 @@ class SinaisPlugin(Plugin):
 
             if not dados_completos or not isinstance(dados_completos, dict):
                 logger.error(f"[{self.nome}] dados_completos não fornecido ou inválido")
-                return False
+                return kwargs.get("dados_completos", {})
 
             if not symbol:
                 logger.error(f"[{self.nome}] Symbol não fornecido")
-                return False
+                return dados_completos
 
             if not timeframe:
                 logger.error(f"[{self.nome}] Timeframe não fornecido")
-                return {
-                    "direcao": "LATERAL",
-                    "forca": "FRACA",
-                    "confianca": 0.0,
-                    "alavancagem": 0.0,
-                    "timestamp": None,
-                    "stop_loss": 0.0,
-                    "take_profit": 0.0,
-                }
+                return dados_completos
 
             # Processar análise de mercado
             analise_mercado = self._processar_analise_mercado(dados_completos)
@@ -372,7 +367,6 @@ class SinaisPlugin(Plugin):
                 if campo in dados_completos:
                     analise_mercado[campo] = dados_completos[campo]
 
-            # Log do sinal gerado
             logger_sinais.info(
                 f"[{symbol} - {timeframe}] "
                 f"DIREÇÃO: {analise_mercado['direcao']} | "
@@ -389,11 +383,11 @@ class SinaisPlugin(Plugin):
                 detalhes=f"sinais_gerados={dados_completos.get('sinais_gerados', {})} | analise_mercado={analise_mercado}",
             )
 
-            return True
+            return dados_completos
 
         except Exception as e:
             logger.error(f"[{self.nome}] Erro na execução: {e}", exc_info=True)
-            return False
+            return kwargs.get("dados_completos", {})
 
     def _processar_analise_mercado(self, dados: dict) -> dict:
         """

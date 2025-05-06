@@ -1,5 +1,8 @@
 """
-Plugin para validação de dados de entrada (símbolo, timeframe, candles).
+Plugin de validador de dados.
+Responsabilidade única: validar dados de mercado e pipeline.
+Não deve registrar, inicializar ou finalizar automaticamente.
+Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
 """
 
 from utils.logging_config import get_logger

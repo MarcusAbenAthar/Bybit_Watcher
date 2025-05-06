@@ -1,4 +1,9 @@
-"""Plugin para consolidação de sinais de múltiplos timeframes."""
+"""
+Plugin de consolidador de sinais.
+Responsabilidade única: consolidar sinais de múltiplos timeframes/plugins.
+Não deve registrar, inicializar ou finalizar automaticamente.
+Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
+"""
 
 from typing import Dict, List, Optional, Tuple, Any
 from utils.logging_config import get_logger, log_rastreamento

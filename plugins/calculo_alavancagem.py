@@ -1,6 +1,8 @@
 """
-Plugin responsável por calcular alavancagem com base na volatilidade (ATR) e na confiança do sinal.
-Autonomia, critério e segurança, com 100% de aderência à configuração externa.
+Plugin de cálculo de alavancagem.
+Responsabilidade única: cálculo de alavancagem para operações.
+Não deve registrar, inicializar ou finalizar automaticamente.
+Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
 """
 
 import numpy as np

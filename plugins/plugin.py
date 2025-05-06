@@ -75,6 +75,8 @@ class PluginRegistry:
 class Plugin:
     """
     Classe base para todos os plugins do sistema.
+    Responsabilidade única: fornecer interface e utilitários para plugins, sem executar registro automático ou inicialização global.
+    O registro, inicialização e finalização dos plugins é responsabilidade exclusiva do GerenciadorPlugins.
 
     Atributos Obrigatórios:
         PLUGIN_NAME (str): Nome único do plugin

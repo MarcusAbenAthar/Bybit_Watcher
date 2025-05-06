@@ -1,11 +1,8 @@
-"""Plugin para operações de gravação no banco de dados.
-
-Segue as regras de ouro:
-- Modular, testável, documentado, sem hardcoded.
-- Cada plugin declara suas tabelas via `plugin_tabelas`.
-- Versionamento obrigatório (plugin_schema_versao).
-- Modos de acesso claros (own/write/read).
-- Responsabilidade única: operações CRUD simples.
+"""
+Plugin de banco de dados.
+Responsabilidade única: gerenciar persistência e acesso ao banco.
+Não deve registrar, inicializar ou finalizar automaticamente.
+Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
 """
 
 from utils.logging_config import log_banco

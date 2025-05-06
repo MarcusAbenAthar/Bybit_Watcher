@@ -1,4 +1,9 @@
-"""Plugin para detecção de padrões de candle com TA-Lib."""
+"""
+Plugin de análise de candles.
+Responsabilidade única: análise de padrões de candles.
+Não deve registrar, inicializar ou finalizar automaticamente.
+Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
+"""
 
 import os
 import json

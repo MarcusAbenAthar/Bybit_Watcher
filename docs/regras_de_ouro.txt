@@ -24,13 +24,14 @@ Regras para Banco de Dados:
 
 Boas práticas ao programar o bot:
 
-1 - Evitar redundâncias;
-2 - Respeitar a responsabilidade de cada plugin;
-3 - Evitar importação circular;
-4 - Manter histórico de alterações no banco;
-5 - Sempre testar migrações em ambiente controlado;
-6 - Quanto mais inteligente e menos hardcoded, melhor será;
-7 - O arquivo `plugins_dependencias.json` é gerado pelo sistema, não deve ser alterado manualmente
+1 - Todos os plugins produzem dados e análises. Os dados e análises são armazenados em Dicionários "dados_completos crus e analisados" e isso deve ser repassado para a posteridade. 
+2 - Evitar redundâncias;
+3 - Respeitar a responsabilidade de cada plugin;
+4 - Evitar importação circular;
+5 - Manter histórico de alterações no banco;
+6 - Sempre testar migrações em ambiente controlado;
+7 - Quanto mais inteligente e menos hardcoded, melhor será;
+8 - O arquivo `plugins_dependencias.json` é gerado pelo sistema, não deve ser alterado manualmente
 
 Cada plugin segue:
 
@@ -61,35 +62,17 @@ Como usar:
 def plugin_tabelas(self) -> dict:
     return {
         "nome_da_tabela": {
-            "descricao": "Breve descrição do propósito da tabela. Deve detalhar o que é armazenado, inclusive faixas, contexto, scores, etc.",
+            "descricao": "Breve descrição do propósito da tabela.",
             "modo_acesso": "own",  # ou 'shared'
             "plugin": self.PLUGIN_NAME,
             "schema": {
-                "id": "SERIAL PRIMARY KEY",
-                "timestamp": "TIMESTAMP NOT NULL",
-                "symbol": "VARCHAR(20) NOT NULL",
-                "timeframe": "VARCHAR(10) NOT NULL",
-                "padrao": "VARCHAR(50)",
-                "direcao": "VARCHAR(10)",
-                "forca": "DECIMAL(5,2)",
-                "confianca": "DECIMAL(5,2)",
-                "preco_entrada": "DECIMAL(18,8)",
-                "faixa_entrada_min": "DECIMAL(18,8)",
-                "faixa_entrada_max": "DECIMAL(18,8)",
-                "stop_loss": "DECIMAL(18,8)",
-                "take_profit": "DECIMAL(18,8)",
-                "volume": "DECIMAL(18,8)",
-                "score": "DECIMAL(5,2)",
-                "contexto_mercado": "VARCHAR(20)",
-                "observacoes": "TEXT",
-                "candle": "JSONB",
-                "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-                # ... adicione mais colunas conforme necessário para rastreabilidade e inteligência
+                "coluna1": "TIPO_SQL [CONSTRAINTS]",
+                "coluna2": "TIPO_SQL [CONSTRAINTS]",
+                "coluna3": "TIPO_SQL [CONSTRAINTS]",
+                # ... adicione mais colunas conforme necessário
             }
         }
     }
-
-# Observação: Sempre que o plugin gerar ou processar novas métricas, faixas, scores, contexto, etc., inclua esses campos no schema. O objetivo é garantir rastreabilidade, inteligência e facilitar auditoria e evolução do bot.
 
 
 Esta estrutura:

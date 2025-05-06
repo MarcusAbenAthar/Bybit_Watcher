@@ -3,8 +3,10 @@
 # Exporta os gerenciadores disponíveis.
 
 """
-Inicializador do pacote de gerenciadores.
-Exporta os gerenciadores disponíveis.
+Módulo de inicialização dos gerenciadores.
+Não deve registrar, inicializar ou finalizar gerenciadores automaticamente.
+Apenas expõe utilitários e facilita importações.
+Toda a lógica de ciclo de vida dos gerenciadores é centralizada no GerenciadorPlugins.
 """
 
 from plugins.gerenciadores.gerenciador_banco import GerenciadorBanco

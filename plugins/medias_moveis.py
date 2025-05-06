@@ -1,5 +1,8 @@
 """
-Plugin para cálculo de sinais baseados em médias móveis.
+Plugin de médias móveis.
+Responsabilidade única: cálculo e análise de médias móveis.
+Não deve registrar, inicializar ou finalizar automaticamente.
+Toda a lógica de ciclo de vida é centralizada no GerenciadorPlugins.
 """
 
 from utils.logging_config import get_logger, log_banco, log_rastreamento

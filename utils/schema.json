@@ -408,6 +408,28 @@
       "plugin": "outros_indicadores",
       "schema_versao": "1.0"
     },
+    "modelos_ml": {
+      "columns": {
+        "schema": {
+          "id": "SERIAL PRIMARY KEY",
+          "timestamp": "TIMESTAMP NOT NULL",
+          "symbol": "VARCHAR(20) NOT NULL",
+          "timeframe": "VARCHAR(10) NOT NULL",
+          "modelo": "VARCHAR(50) NOT NULL",
+          "versao": "VARCHAR(10) NOT NULL",
+          "acuracia": "DECIMAL(5,2)",
+          "precisao": "DECIMAL(5,2)",
+          "recall": "DECIMAL(5,2)",
+          "f1_score": "DECIMAL(5,2)",
+          "features": "JSONB",
+          "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        },
+        "modo_acesso": "own",
+        "plugin": "machine_learning"
+      },
+      "plugin": "machine_learning",
+      "schema_versao": "1.0"
+    },
     "price_action": {
       "columns": {
         "descricao": "Armazena sinais de price action, padr\u00f5es identificados, faixas de entrada, score, contexto de mercado, observa\u00e7\u00f5es e candle bruto para rastreabilidade e auditoria.",

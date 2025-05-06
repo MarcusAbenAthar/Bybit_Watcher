@@ -13,6 +13,13 @@ logger = get_logger(__name__)
 
 ARQUIVO_DEPENDENCIAS = os.path.join("utils", "plugins_dependencias.json")
 
+"""
+GerenciadorPlugins é responsável por:
+- Registrar, inicializar e finalizar todos os plugins e gerenciadores do sistema.
+- Garantir que cada plugin/gerenciador seja registrado, inicializado e finalizado apenas uma vez.
+- Evitar duplicidade e garantir aderência às Regras de Ouro.
+"""
+
 
 class GerenciadorPlugins(BaseGerenciador):
     """Gerenciador responsável por carregar, inicializar e coordenar plugins do sistema."""

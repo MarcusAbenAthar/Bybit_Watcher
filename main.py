@@ -50,9 +50,11 @@ def iniciar_bot(config: dict) -> tuple:
             raise RuntimeError("Falha ao iniciar GerenciadorBot")
 
         # Verificar inicialização dos gerenciadores críticos
-        if not hasattr(gerente, 'plugins') or 'gerenciador_banco' not in gerente.plugins:
+        if (
+            not hasattr(gerente, "plugins")
+            or "gerenciador_banco" not in gerente.plugins
+        ):
             raise RuntimeError("GerenciadorBanco não inicializado corretamente")
-        logger.info(f"Gerenciadores carregados: {list(gerente.plugins.keys())}")
 
         def finalizar():
             """Callback para finalizar gerenciadores."""
@@ -106,7 +108,7 @@ def loop_principal(gerenciador_bot, gerente, cycle_interval: float):
 def main():
     """
     Ponto de entrada principal do bot.
-    Integra monitoramento contínuo institucional e monitoramento prioritário de ordens abertas.
+    Toda a inicialização e finalização de plugins e gerenciadores é feita exclusivamente pelo GerenciadorPlugins, conforme as Regras de Ouro.
     """
     try:
         # Gera schema JSON antes de iniciar o banco
@@ -134,11 +136,13 @@ def main():
 
 
 from utils.schema_generator import generate_schema
+
 if __name__ == "__main__":
     try:
         generate_schema()
     except Exception as e:
         import logging
+
         logging.error(f"[main] Falha ao gerar schema: {e}")
         raise SystemExit(1)
     main()

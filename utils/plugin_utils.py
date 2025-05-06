@@ -10,6 +10,10 @@ Utilitário institucional para auto plug-in, auto injeção e detecção de depe
 
 Utilitários para plugins de indicadores: ajuste de períodos, volatilidade, extração de OHLCV, validação de candles e wrappers para talib.
 Padroniza e reduz redundância entre plugins, conforme as regras de ouro do projeto.
+
+Utilitários auxiliares para plugins.
+Não deve registrar, inicializar ou finalizar plugins automaticamente.
+Apenas fornece funções auxiliares para uso dos plugins, sempre sob controle do GerenciadorPlugins.
 """
 
 from typing import Dict, Any, List, Callable, Type
