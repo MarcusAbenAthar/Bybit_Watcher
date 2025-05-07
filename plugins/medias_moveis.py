@@ -192,51 +192,43 @@ class MediasMoveis(Plugin):
 
     def gerar_sinal(self, crus: list) -> dict:
         """
-        Gera sinal baseado em médias móveis.
-
-        Args:
-            crus: Lista de k-lines.
-
-        Returns:
-            dict: Sinal com direção, força, confiança e valores das médias.
+        Gera sinal baseado em médias móveis, com decisão mais flexível e logs detalhados.
+        Se pelo menos 3 dos últimos 5 candles apontarem para ALTA ou BAIXA, já considera a direção.
         """
         try:
             dados = self._extrair_dados(crus, [4, 5])  # close e volume
             closes = dados[4]
             volumes = dados[5]
-
             if len(closes) < self._periodo_longo or len(volumes) < self._periodo_longo:
                 logger.warning(
                     f"[{self.nome}] Menos de {self._periodo_longo} candles disponíveis"
                 )
                 return self._resultado_padrao()
-
             ma_curta = talib.SMA(closes, timeperiod=self._periodo_curto)
             ma_longa = talib.SMA(closes, timeperiod=self._periodo_longo)
-
             if ma_curta[-1] is None or ma_longa[-1] is None:
                 logger.warning(f"[{self.nome}] Médias móveis inválidas")
                 return self._resultado_padrao()
-
-            # Calcular direção
+            # Log detalhado das médias e closes
+            logger.info(
+                f"[{self.nome}] Últimos closes: {closes[-5:].tolist() if hasattr(closes, 'tolist') else closes[-5:]}"
+            )
+            logger.info(
+                f"[{self.nome}] Últimas ma_curta: {ma_curta[-5:].tolist() if hasattr(ma_curta, 'tolist') else ma_curta[-5:]}"
+            )
+            logger.info(
+                f"[{self.nome}] Últimas ma_longa: {ma_longa[-5:].tolist() if hasattr(ma_longa, 'tolist') else ma_longa[-5:]}"
+            )
+            # Decisão mais flexível
             valid_range = range(len(ma_curta) - 5, len(ma_curta))
-            tendencia_alta = sum(
-                ma_curta[i] > ma_longa[i]
-                for i in valid_range
-                if ma_curta[i] and ma_longa[i]
-            )
-            tendencia_baixa = sum(
-                ma_curta[i] < ma_longa[i]
-                for i in valid_range
-                if ma_curta[i] and ma_longa[i]
-            )
-            direcao = (
-                "ALTA"
-                if tendencia_alta > tendencia_baixa
-                else "BAIXA" if tendencia_baixa > tendencia_alta else "LATERAL"
-            )
-
-            # Calcular distância e confiança
+            alta = sum(ma_curta[i] > ma_longa[i] for i in valid_range)
+            baixa = sum(ma_curta[i] < ma_longa[i] for i in valid_range)
+            if alta >= 3:
+                direcao = "ALTA"
+            elif baixa >= 3:
+                direcao = "BAIXA"
+            else:
+                direcao = "LATERAL"
             distancia = abs(ma_curta[-1] - ma_longa[-1]) / ma_longa[-1]
             vol_rel = (
                 volumes[-1] / np.mean(volumes[-10:])
@@ -252,18 +244,17 @@ class MediasMoveis(Plugin):
             volatilidade = (
                 atr[-1] / closes[-1] if atr[-1] is not None and closes[-1] > 0 else 0.0
             )
-
-            base_conf = max(tendencia_alta, tendencia_baixa) / 5
+            base_conf = max(alta, baixa) / 5
             confianca = base_conf * (0.5 + 0.3 * vol_rel + 0.2 * volatilidade)
             confianca = round(min(max(confianca, 0.0), 1.0), 2)
-
-            # Calcular força
             forca = (
                 "FORTE"
                 if confianca >= 0.7
                 else "MÉDIA" if confianca >= 0.3 else "FRACA"
             )
-
+            logger.info(
+                f"[{self.nome}] Decisão: DIREÇÃO={direcao}, FORÇA={forca}, CONFIANÇA={confianca}, VOL_REL={vol_rel}, VOLATILIDADE={volatilidade}"
+            )
             return {
                 "direcao": direcao,
                 "forca": forca,

@@ -22,7 +22,7 @@ def validar_caminho_log(caminho: Path) -> Path:
 
 # Caminhos
 LOG_ROOT = validar_caminho_log(Path("logs"))
-SUBDIRS = ["bot", "erros", "sinais", "banco", "rastreamento"]
+SUBDIRS = ["bot", "erros", "sinais", "banco", "rastreamento", "dados"]
 for subdir in SUBDIRS:
     (LOG_ROOT / subdir).mkdir(parents=True, exist_ok=True)
 
@@ -34,6 +34,7 @@ ARQUIVOS_LOG = {
     "sinais": LOG_ROOT / "sinais" / f"sinais_{DATA_ATUAL}.log",
     "banco": LOG_ROOT / "banco" / f"banco_{DATA_ATUAL}.log",
     "rastreamento": LOG_ROOT / "rastreamento" / f"rastreamento_{DATA_ATUAL}.log",
+    "dados": LOG_ROOT / "dados" / f"dados_{DATA_ATUAL}.log",
 }
 
 # Nível customizado para rastreamento
@@ -125,6 +126,9 @@ HANDLERS = {
     "rastreamento": _criar_handler_arquivo(
         "rastreamento", ARQUIVOS_LOG["rastreamento"], 5, "RASTREAMENTO", "rastreamento"
     ),
+    "dados": _criar_handler_arquivo(
+        "dados", ARQUIVOS_LOG["dados"], 10, "INFO", "detalhado"
+    ),
 }
 
 # Config
@@ -152,6 +156,11 @@ BASE_CONFIG = {
         "rastreamento": {
             "handlers": ["rastreamento"],
             "level": "RASTREAMENTO",
+            "propagate": False,
+        },
+        "dados": {
+            "handlers": ["dados"],
+            "level": "INFO",
             "propagate": False,
         },
         "ccxt": {"handlers": ["null"], "propagate": False},
@@ -270,3 +279,15 @@ def log_rastreamento(
         logger.log(nivel, log_msg)
     except Exception as e:
         logger.error(f"Falha ao registrar log de rastreamento: {e}", exc_info=True)
+
+
+def log_dados(componente: str, acao: str, dados: dict):
+    """
+    Loga o conteúdo dos dados em cada etapa da pipeline para depuração detalhada.
+    Args:
+        componente (str): Nome do componente ou plugin.
+        acao (str): Ação ou etapa do pipeline.
+        dados (dict): Dicionário de dados a serem logados.
+    """
+    logger = logging.getLogger("dados")
+    logger.info(f"[DADOS] {componente} | {acao} | Conteúdo: {dados}")

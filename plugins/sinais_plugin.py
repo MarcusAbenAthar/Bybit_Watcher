@@ -373,7 +373,7 @@ class SinaisPlugin(Plugin):
                 f"FORÇA: {analise_mercado['forca']} | "
                 f"CONFIANÇA: {analise_mercado['confianca']:.2f}% | "
                 f"TENDÊNCIA: {analise_mercado['tendencia']} | "
-                f"VOL REL: {analise_mercado['volume']:.2f} | "
+                f"VOL REL: {analise_mercado['volume']['rel']:.2f} | "
                 f"ATR: {analise_mercado.get('atr')} | PRECO_ATUAL: {analise_mercado.get('preco_atual')} | SUPORTE: {analise_mercado.get('suporte')} | RESISTENCIA: {analise_mercado.get('resistencia')}"
             )
 
@@ -391,37 +391,69 @@ class SinaisPlugin(Plugin):
 
     def _processar_analise_mercado(self, dados: dict) -> dict:
         """
-        Processa os dados de análise de mercado.
+        Processa os dados de análise de mercado, ponderando volume, tendência, RSI e logando decisões.
+        Agora considera todas as métricas de volume disponíveis.
         """
         try:
             analise = dados.get("analise_mercado", {})
             if not analise:
                 analise = deepcopy(self._RESULTADO_PADRAO["analise_mercado"])
-
-            # Processamento de indicadores
             rsi = float(dados.get("rsi", {}).get("valor", 50.0))
-            volume = float(dados.get("volume", {}).get("valor", 0.0))
-            volume_medio = float(dados.get("volume", {}).get("media", 1.0))
-            volume_rel = volume / volume_medio if volume_medio > 0 else 0.0
-
-            # Determinar tendência
+            volume_dict = dados.get("volume", {}) or {}
+            obv = float(volume_dict.get("obv", 0.0) or 0.0)
+            cmf = float(volume_dict.get("cmf", 0.0) or 0.0)
+            mfi = float(volume_dict.get("mfi", 0.0) or 0.0)
+            volume_rel = (
+                (abs(obv) + abs(cmf) + abs(mfi)) / 3 if any([obv, cmf, mfi]) else 0.0
+            )
+            volume_fator = self._volume_acima_media(dados.get("crus", []), n=20)
             tendencia = self._determinar_tendencia(dados)
 
-            # Ajustar direção e força
-            direcao = analise.get("direcao", "LATERAL")
-            forca = self._calcular_forca(
-                analise.get("forca", "FRACA"), rsi, volume_rel, tendencia
-            )
+            # NOVO: Coletar sinais dos outros plugins
+            sinais_plugins = []
+            for plugin in ["price_action", "medias_moveis", "analise_candles"]:
+                info = dados.get(plugin, {})
+                if isinstance(info, dict) and info.get("direcao") and info.get("forca"):
+                    sinais_plugins.append(
+                        {
+                            "direcao": str(info["direcao"]).upper(),
+                            "forca": str(info["forca"]).upper(),
+                            "confianca": float(info.get("confianca", 0.0)),
+                        }
+                    )
 
-            # Calcular confiança ajustada
-            confianca_base = float(analise.get("confianca", 0.0))
-            confianca = self._ajustar_confianca(
-                confianca_base, rsi, volume_rel, tendencia, direcao
-            )
+            # Se houver convergência clara de ALTA ou BAIXA, priorizar
+            direcoes = [s["direcao"] for s in sinais_plugins]
+            if direcoes.count("ALTA") > 1:
+                direcao = "ALTA"
+            elif direcoes.count("BAIXA") > 1:
+                direcao = "BAIXA"
+            else:
+                direcao = analise.get("direcao", "LATERAL")
 
-            # --- PROPAGAÇÃO DOS CAMPOS ESSENCIAIS DA RAIZ PARA ANALISE_MERCADO ---
+            # Força: se maioria for FORTE ou MÉDIA, refletir
+            forcas = [s["forca"] for s in sinais_plugins]
+            if forcas.count("FORTE") > 1:
+                forca = "FORTE"
+            elif forcas.count("MÉDIA") > 1:
+                forca = "MÉDIA"
+            else:
+                forca = analise.get("forca", "FRACA")
+
+            # Confiança: média das confianças dos plugins + ajuste se houver convergência
+            confiancas = [s["confianca"] for s in sinais_plugins if s["confianca"] > 0]
+            if confiancas:
+                confianca = sum(confiancas) / len(confiancas)
+                if direcao in ["ALTA", "BAIXA"] and forca in ["MÉDIA", "FORTE"]:
+                    confianca = min(1.0, confianca + 0.2)
+            else:
+                confianca = float(analise.get("confianca", 0.0))
+
+            logger.info(
+                f"[sinais_plugin] Decisão FINAL: DIREÇÃO={direcao}, FORÇA={forca}, RSI={rsi}, OBV={obv}, CMF={cmf}, MFI={mfi}, TENDÊNCIA={tendencia}, CONFIANÇA={confianca}"
+            )
             campos_essenciais = ["atr", "preco_atual", "suporte", "resistencia"]
-            analise_corrigida = dict(analise)  # cópia para não alterar original
+            analise_corrigida = dict(analise)
             for campo in campos_essenciais:
                 valor_raiz = dados.get(campo)
                 valor_analise = analise_corrigida.get(campo, None)
@@ -431,25 +463,21 @@ class SinaisPlugin(Plugin):
                     analise_corrigida[campo] = valor_analise
                 else:
                     analise_corrigida[campo] = 0.0
-
-            # Ao consolidar analise_mercado, padronizar direção
-            analise_corrigida["direcao"] = padronizar_direcao(
-                analise_corrigida.get("direcao", "LATERAL")
-            )
-
+            analise_corrigida["direcao"] = direcao
+            analise_corrigida["forca"] = forca
+            analise_corrigida["confianca"] = round(confianca, 2)
             return {
                 "direcao": analise_corrigida.get("direcao"),
-                "forca": forca,
-                "confianca": confianca,
+                "forca": analise_corrigida.get("forca"),
+                "confianca": analise_corrigida.get("confianca"),
                 "preco_atual": float(analise_corrigida.get("preco_atual", 0.0)),
-                "volume": volume_rel,
+                "volume": {"obv": obv, "cmf": cmf, "mfi": mfi, "rel": volume_rel},
                 "rsi": rsi,
                 "tendencia": tendencia,
                 "suporte": float(analise_corrigida.get("suporte", 0.0)),
                 "resistencia": float(analise_corrigida.get("resistencia", 0.0)),
                 "atr": float(analise_corrigida.get("atr", 0.0)),
             }
-
         except Exception as e:
             logger.error(f"Erro ao processar análise de mercado: {e}")
             return deepcopy(self._RESULTADO_PADRAO["analise_mercado"])
@@ -487,29 +515,30 @@ class SinaisPlugin(Plugin):
             return "LATERAL"
 
     def _calcular_forca(
-        self, forca_base: str, rsi: float, volume_rel: float, tendencia: str
+        self,
+        forca_base: str,
+        rsi: float,
+        volume_rel: float,
+        tendencia: str,
+        volume_fator: float = 1.0,
     ) -> str:
         """
-        Calcula a força do sinal com base em múltiplos indicadores.
+        Calcula a força do sinal com base em múltiplos indicadores e fator de volume.
         """
         pontos = 0
-
         # Pontos por RSI
         if 20 <= rsi <= 30 or 70 <= rsi <= 80:
             pontos += 2
         elif 30 < rsi < 40 or 60 < rsi < 70:
             pontos += 1
-
         # Pontos por volume
-        if volume_rel >= 2.0:
+        if volume_fator >= 1.0:
             pontos += 2
-        elif volume_rel >= 1.5:
+        elif volume_fator >= 0.7:
             pontos += 1
-
         # Pontos por tendência
         if tendencia != "LATERAL":
             pontos += 1
-
         # Determinar força final
         if pontos >= 4:
             return "FORTE"
@@ -557,18 +586,25 @@ class SinaisPlugin(Plugin):
             logger.error(f"Erro ao ajustar confiança: {e}")
             return self._confianca_min
 
-    def _volume_acima_media(self, candles: list, n: int = 20) -> bool:
+    def _volume_acima_media(self, candles: list, n: int = 20) -> float:
         """
-        Retorna True se o volume do candle mais recente estiver acima da média dos últimos n candles.
+        Retorna um fator de ajuste baseado no volume do candle mais recente em relação à média dos últimos n candles.
+        1.0 se acima da média, 0.7 se igual, 0.5 se abaixo.
         """
         try:
             if not candles or len(candles) < n + 1:
-                return False
+                return 0.5
             volumes = [float(c[5]) for c in candles[-(n + 1) :]]
-            return volumes[-1] > (sum(volumes[:-1]) / n)
+            media = sum(volumes[:-1]) / n
+            if volumes[-1] > media:
+                return 1.0
+            elif abs(volumes[-1] - media) / media < 0.1:
+                return 0.7
+            else:
+                return 0.5
         except Exception as e:
             logger.error(f"[sinais_plugin] Erro ao validar volume: {e}")
-            return False
+            return 0.5
 
     def _preco_acima_media(self, candles: list, periodo: int = 20) -> bool:
         """

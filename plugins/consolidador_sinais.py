@@ -207,11 +207,10 @@ class ConsolidadorSinais(Plugin):
             logger.error("[consolidador_sinais] Nenhum sinal encontrado")
             return False
 
-        # Verifica se tem os timeframes principais
-        timeframes_principais = ["4h", "1h"]
-        if not all(tf in sinais for tf in timeframes_principais):
+        # Permitir consolidação com pelo menos 1 timeframe válido
+        if len(sinais) < 1:
             logger.error(
-                f"[consolidador_sinais] Faltam timeframes principais: {timeframes_principais}"
+                f"[consolidador_sinais] Menos de 1 timeframe válido para consolidar."
             )
             return False
 
@@ -224,36 +223,80 @@ class ConsolidadorSinais(Plugin):
         return True
 
     def _calcular_media_forca_confiança(self, sinais):
-        mapa_forca = {"fraca": 0.2, "media": 0.5, "forte": 1.0}
-        mapa_confianca = {"baixa": 0.2, "media": 0.5, "alta": 1.0}
+        """
+        Calcula a média ponderada de força e confiança considerando os pesos dos timeframes.
+        """
+        mapa_forca = {"FRACA": 0.2, "MÉDIA": 0.5, "FORTE": 1.0}
+        mapa_confianca = {"BAIXA": 0.2, "MÉDIA": 0.5, "ALTA": 1.0}
 
         somatorio_forca = 0
         somatorio_confianca = 0
-        total = 0
+        total_peso = 0
 
         for sinal in sinais:
-            forca = mapa_forca.get(sinal.get("forca", "").lower(), 0)
-            confianca = mapa_confianca.get(sinal.get("confianca", "").lower(), 0)
-            somatorio_forca += forca
-            somatorio_confianca += confianca
-            total += 1
+            tf = sinal.get("timeframe")
+            peso = self.pesos_timeframe.get(tf, 0.1)  # Peso padrão 0.1 se não definido
 
-        media_forca = somatorio_forca / total if total else 0
-        media_confianca = somatorio_confianca / total if total else 0
+            forca = mapa_forca.get(str(sinal.get("forca", "FRACA")).upper(), 0.2)
+            confianca = (
+                float(sinal.get("confianca", 0.0)) / 100.0
+            )  # Converte de % para decimal
 
-        return media_forca, media_confianca
+            somatorio_forca += forca * peso
+            somatorio_confianca += confianca * peso
+            total_peso += peso
+
+        if total_peso == 0:
+            return 0.2, 0.0  # Valores padrão se não houver sinais
+
+        media_forca = somatorio_forca / total_peso
+        media_confianca = somatorio_confianca / total_peso
+
+        # Converte força numérica para texto
+        if media_forca >= 0.75:
+            forca_final = "FORTE"
+        elif media_forca >= 0.4:
+            forca_final = "MÉDIA"
+        else:
+            forca_final = "FRACA"
+
+        return forca_final, round(
+            media_confianca * 100, 2
+        )  # Converte confiança de volta para %
 
     def _gerar_hash_sinal(self, sinal: dict) -> str:
         base_str = f"{sinal['symbol']}_{sinal['direcao']}_{sinal['preco_atual']}_{sorted(sinal['timeframes'])}"
         return hashlib.sha256(base_str.encode()).hexdigest()
 
     def _determinar_direcao(self, sinais):
-        direcoes = [s["direcao"] for s in sinais]
-        long_count = direcoes.count("LONG")
-        short_count = direcoes.count("SHORT")
+        """
+        Determina a direção final com base nos sinais dos timeframes, considerando os pesos.
+        """
+        peso_alta = 0
+        peso_baixa = 0
+        total_peso = 0
 
-        if abs(long_count - short_count) >= 2:
-            return "LONG" if long_count > short_count else "SHORT"
+        for sinal in sinais:
+            tf = sinal.get("timeframe")
+            peso = self.pesos_timeframe.get(tf, 0.1)  # Peso padrão 0.1 se não definido
+            direcao = str(sinal.get("direcao", "LATERAL")).upper()
+
+            if direcao in ["ALTA", "LONG"]:
+                peso_alta += peso
+            elif direcao in ["BAIXA", "SHORT"]:
+                peso_baixa += peso
+            total_peso += peso
+
+        if total_peso == 0:
+            return "LATERAL"
+
+        # Calcula a diferença percentual
+        diff = abs(peso_alta - peso_baixa) / total_peso
+
+        # Se a diferença for significativa (>20%), retorna a direção dominante
+        if diff > 0.2:
+            return "ALTA" if peso_alta > peso_baixa else "BAIXA"
+
         return "LATERAL"
 
     def _consolidar_sinais(self, sinais: dict, symbol: str) -> dict:
@@ -289,6 +332,9 @@ class ConsolidadorSinais(Plugin):
                 "forca": sinal.get("forca"),
                 "confianca": sinal.get("confianca"),
                 "preco_atual": sinal.get("preco_atual"),
+                "stop_loss": sinal.get("stop_loss"),
+                "take_profit": sinal.get("take_profit"),
+                "alavancagem": sinal.get("alavancagem"),
             }
             sinais_processados.append(sinal_processado)
 
@@ -298,14 +344,36 @@ class ConsolidadorSinais(Plugin):
 
         # Determina a direção final com base nos sinais
         direcao_final = self._determinar_direcao(sinais_processados)
-        if direcao_final == "LATERAL":
-            logger.debug("[consolidador_sinais] Direção final é LATERAL")
-            return None
+        logger.debug(f"[consolidador_sinais] Direção final é {direcao_final}")
 
         # Calcula a média de força e confiança
-        media_forca, media_confianca = self._calcular_media_forca_confiança(
+        forca_final, confianca_final = self._calcular_media_forca_confiança(
             sinais_processados
         )
+
+        # Calcula SL/TP e alavancagem ponderados
+        sl_final = 0
+        tp_final = 0
+        alavancagem_final = 0
+        total_peso = 0
+
+        for sinal in sinais_processados:
+            tf = sinal.get("timeframe")
+            peso = self.pesos_timeframe.get(tf, 0.1)
+
+            sl = float(sinal.get("stop_loss", 0) or 0)
+            tp = float(sinal.get("take_profit", 0) or 0)
+            alav = float(sinal.get("alavancagem", 0) or 0)
+
+            sl_final += sl * peso
+            tp_final += tp * peso
+            alavancagem_final += alav * peso
+            total_peso += peso
+
+        if total_peso > 0:
+            sl_final = round(sl_final / total_peso, 8)
+            tp_final = round(tp_final / total_peso, 8)
+            alavancagem_final = round(alavancagem_final / total_peso, 2)
 
         # Obtém o preço atual do último sinal
         preco_atual = sinais_processados[-1]["preco_atual"]
@@ -316,8 +384,11 @@ class ConsolidadorSinais(Plugin):
             "direcao": direcao_final,
             "preco_atual": preco_atual,
             "timeframes": list(sinais.keys()),
-            "forca": round(media_forca, 2),
-            "confianca": round(media_confianca, 2),
+            "forca": forca_final,
+            "confianca": confianca_final,
+            "stop_loss": sl_final,
+            "take_profit": tp_final,
+            "alavancagem": alavancagem_final,
         }
 
         # Gera o hash do sinal e verifica se já foi emitido
@@ -349,7 +420,7 @@ class ConsolidadorSinais(Plugin):
         sinal_hash = hashlib.md5(sinal_str.encode()).hexdigest()
 
         # Limpa sinais antigos (mais de 5 minutos)
-        agora = time()
+        agora = time.time()
         self._ultimo_sinal = {
             k: v for k, v in self._ultimo_sinal.items() if agora - v["timestamp"] < 300
         }

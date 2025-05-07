@@ -1,6 +1,6 @@
 """Gerenciador principal do bot de trading - versão inteligente com paralelismo."""
 
-from utils.logging_config import get_logger, log_rastreamento
+from utils.logging_config import get_logger, log_rastreamento, log_dados
 from plugins.gerenciadores.gerenciador import BaseGerenciador
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
@@ -84,6 +84,12 @@ class GerenciadorBot(BaseGerenciador):
             return False
 
         try:
+            # Loga dados no início do ciclo
+            log_dados(
+                componente="gerenciador_bot",
+                acao="inicio_ciclo",
+                dados={"args": args, "kwargs": kwargs},
+            )
             pares = self._config["pares"]
             timeframes = self._config["timeframes"]
 
@@ -225,6 +231,12 @@ class GerenciadorBot(BaseGerenciador):
                 for symbol in symbol_batch:
                     if all(tf in buffer_sinais[symbol] for tf in timeframes):
                         for tf in timeframes:
+                            # Loga dados antes do processamento de cada timeframe
+                            log_dados(
+                                componente="gerenciador_bot",
+                                acao=f"antes_analise_{symbol}_{tf}",
+                                dados=buffer_sinais[symbol][tf],
+                            )
                             logger.debug(
                                 f"[pipeline] Antes do consolidador: {symbol}-{tf} chaves = {list(buffer_sinais[symbol][tf].keys())}"
                             )
@@ -245,20 +257,28 @@ class GerenciadorBot(BaseGerenciador):
                             f"[pipeline] Dados enviados ao consolidador para {symbol}: chaves = {list(dados_timeframes.keys())}"
                         )
 
-                        # Chama o consolidador passando o dicionário completo
+                        # Antes do consolidador
+                        log_dados(
+                            componente="gerenciador_bot",
+                            acao=f"antes_consolidador_{symbol}",
+                            dados=dados_completos,
+                        )
                         sinal_final = consolidador.executar(
                             dados_completos=dados_completos
                         )
-
-                        log_rastreamento(
-                            componente=f"pipeline/consolidador/{symbol}",
-                            acao="sinal_final",
-                            detalhes=str(sinal_final),
+                        log_dados(
+                            componente="gerenciador_bot",
+                            acao=f"apos_consolidador_{symbol}",
+                            dados=sinal_final,
                         )
                         # Propaga o resultado para o buffer
                         buffer_sinais[symbol]["sinal_final"] = sinal_final
 
             logger.execution(f"Ciclo finalizado para todos os pares")
+            # Loga dados ao final do ciclo
+            log_dados(
+                componente="gerenciador_bot", acao="fim_ciclo", dados=buffer_sinais
+            )
             return all(resultados_gerais)
         except Exception as e:
             logger.error(f"Erro geral no ciclo do bot: {e}", exc_info=True)
@@ -322,6 +342,11 @@ class GerenciadorBot(BaseGerenciador):
                     timeframe=timeframe,
                     dados_completos=dados_completos,
                 )
+                log_dados(
+                    componente="gerenciador_bot",
+                    acao=f"apos_sinais_plugin_{symbol}_{timeframe}",
+                    dados=resultado_sinais,
+                )
                 logger.debug(
                     f"[pipeline] Após sinais_plugin: {list(dados_completos.keys())}"
                 )
@@ -333,8 +358,11 @@ class GerenciadorBot(BaseGerenciador):
                 # Armazene o dicionário COMPLETO de dados_completos para cada timeframe
                 from copy import deepcopy
 
-                logger.debug(
-                    f"[pipeline] Antes de armazenar no buffer: {symbol}-{timeframe} chaves = {list(dados_completos.keys())}"
+                # Antes de armazenar no buffer
+                log_dados(
+                    componente="gerenciador_bot",
+                    acao=f"antes_buffer_{symbol}_{timeframe}",
+                    dados=dados_completos,
                 )
                 buffer_sinais[symbol][timeframe] = deepcopy(dados_completos)
 
