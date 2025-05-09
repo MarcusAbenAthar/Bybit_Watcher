@@ -319,6 +319,10 @@ class SLTP(Plugin):
                 return resultado_padrao
             resultado = self._calcular_sltp(candles)
             logger.debug(f"[{self.nome}] SL/TP para {symbol}-{timeframe}: {resultado}")
+            # Propaga SL/TP diretamente para dados_completos
+            if resultado and isinstance(resultado, dict):
+                dados_completos["stop_loss"] = resultado.get("stop_loss")
+                dados_completos["take_profit"] = resultado.get("take_profit")
             return {"sltp": resultado}
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao executar: {e}", exc_info=True)

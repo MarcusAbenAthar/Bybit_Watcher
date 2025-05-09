@@ -154,7 +154,11 @@ class PriceAction(Plugin):
                 return False
         return True
 
-    def executar(self, *args, **kwargs) -> bool:
+    def executar(self, *args, **kwargs) -> dict:
+        """
+        Executa a análise de price action.
+        Sempre retorna um dicionário de indicadores, nunca bool.
+        """
         from utils.logging_config import log_rastreamento
 
         symbol = kwargs.get("symbol")
@@ -189,7 +193,7 @@ class PriceAction(Plugin):
                 acao="saida",
                 detalhes=f"price_action={resultado}",
             )
-            return True
+            return {"price_action": resultado}
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao executar: {e}", exc_info=True)
             return resultado_padrao

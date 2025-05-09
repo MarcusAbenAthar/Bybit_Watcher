@@ -173,7 +173,11 @@ class IndicadoresOsciladores(Plugin):
             logger.error(f"[{self.nome}] Erro ao calcular MFI: {e}")
             return np.array([])
 
-    def executar(self, *args, **kwargs) -> bool:
+    def executar(self, *args, **kwargs) -> dict:
+        """
+        Executa o cálculo dos indicadores osciladores.
+        Sempre retorna um dicionário de indicadores, nunca bool.
+        """
         from utils.logging_config import log_rastreamento
 
         symbol = kwargs.get("symbol")
@@ -202,22 +206,24 @@ class IndicadoresOsciladores(Plugin):
             close = extrair_ohlcv(crus, [4])[4]
             volatilidade = calcular_volatilidade_generico(close, periodo=14)
             resultado = {
-                "rsi": float(rsi[-1]) if rsi.size else None,
-                "estocastico": {
-                    "slowk": float(slowk[-1]) if slowk.size else None,
-                    "slowd": float(slowd[-1]) if slowd.size else None,
-                },
-                "mfi": float(mfi[-1]) if mfi.size else None,
-                "volatilidade": volatilidade,
+                "osciladores": {
+                    "rsi": float(rsi[-1]) if rsi.size else None,
+                    "estocastico": {
+                        "slowk": float(slowk[-1]) if slowk.size else None,
+                        "slowd": float(slowd[-1]) if slowd.size else None,
+                    },
+                    "mfi": float(mfi[-1]) if mfi.size else None,
+                    "volatilidade": volatilidade,
+                }
             }
             if isinstance(dados_completos, dict):
-                dados_completos["osciladores"] = resultado
+                dados_completos["osciladores"] = resultado["osciladores"]
             log_rastreamento(
                 componente=f"indicadores_osciladores/{symbol}-{timeframe}",
                 acao="saida",
                 detalhes=f"osciladores={resultado}",
             )
-            return True
+            return resultado
         except Exception as e:
             logger.error(f"[{self.nome}] Erro geral ao executar: {e}")
             return resultado_padrao

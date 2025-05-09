@@ -598,3 +598,80 @@ class GerenciadorBanco(BaseGerenciador):
     @property
     def plugin_schema_versao(self) -> str:
         return "1.0"
+
+    def persistir_dados(self, plugin, tabela, dados):
+        """
+        Método institucional para persistência de dados.
+        Valida, loga, versiona e delega ao plugin BancoDados.
+        Args:
+            plugin (str): Nome do plugin de origem
+            tabela (str): Nome da tabela
+            dados (dict): Dados a serem persistidos
+        Returns:
+            bool: True se inserção bem-sucedida, False caso contrário
+        """
+        try:
+            if not hasattr(self, "_banco_dados") or self._banco_dados is None:
+                # Tenta obter o plugin BancoDados do gerente
+                if hasattr(self, "_plugins") and "banco_dados" in self._plugins:
+                    self._banco_dados = self._plugins["banco_dados"]
+                else:
+                    from plugins.banco_dados import BancoDados
+
+                    self._banco_dados = BancoDados(gerenciador_banco=self)
+                    self._banco_dados.inicializar(self._config)
+            # Logging institucional
+            log_banco(
+                plugin=plugin,
+                tabela=tabela,
+                operacao="PERSISTENCIA",
+                dados=f"Persistindo dados via GerenciadorBanco: {dados}",
+            )
+            return self._banco_dados.inserir(tabela, dados)
+        except Exception as e:
+            log_banco(
+                plugin=plugin,
+                tabela=tabela,
+                operacao="PERSISTENCIA",
+                dados=f"Erro ao persistir dados: {e}",
+                nivel=40,
+            )
+            return False
+
+    def buscar_dados(self, tabela, filtros=None, limite=1000):
+        """
+        Método institucional para busca de dados.
+        Delegação segura ao plugin BancoDados, com logging.
+        Args:
+            tabela (str): Nome da tabela
+            filtros (dict): Filtros opcionais
+            limite (int): Limite de registros
+        Returns:
+            list: Lista de registros encontrados
+        """
+        try:
+            if not hasattr(self, "_banco_dados") or self._banco_dados is None:
+                # Tenta obter o plugin BancoDados do gerente
+                if hasattr(self, "_plugins") and "banco_dados" in self._plugins:
+                    self._banco_dados = self._plugins["banco_dados"]
+                else:
+                    from plugins.banco_dados import BancoDados
+
+                    self._banco_dados = BancoDados(gerenciador_banco=self)
+                    self._banco_dados.inicializar(self._config)
+            log_banco(
+                plugin=self.PLUGIN_NAME,
+                tabela=tabela,
+                operacao="BUSCA",
+                dados=f"Buscando dados via GerenciadorBanco: filtros={filtros}, limite={limite}",
+            )
+            return self._banco_dados.buscar(tabela, filtros, limite)
+        except Exception as e:
+            log_banco(
+                plugin=self.PLUGIN_NAME,
+                tabela=tabela,
+                operacao="BUSCA",
+                dados=f"Erro ao buscar dados: {e}",
+                nivel=40,
+            )
+            return []

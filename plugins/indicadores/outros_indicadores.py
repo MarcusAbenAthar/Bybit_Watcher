@@ -292,23 +292,26 @@ class OutrosIndicadores(Plugin):
             logger.error(f"[{self.nome}] Erro ao calcular Pivot Points: {e}")
             return {"PP": None, "R1": None, "S1": None}
 
-    def executar(self, *args, **kwargs) -> bool:
+    def executar(self, *args, **kwargs) -> dict:
         """
         Executa o cálculo dos indicadores e armazena resultados.
+        Sempre retorna um dicionário de indicadores, nunca bool.
         """
         resultado_padrao = {
-            "ichimoku": {
-                k: None
-                for k in [
-                    "tenkan_sen",
-                    "kijun_sen",
-                    "senkou_span_a",
-                    "senkou_span_b",
-                    "chikou_span",
-                ]
-            },
-            "fibonacci": {k: None for k in ["23.6%", "38.2%", "50%", "61.8%"]},
-            "pivot_points": {k: None for k in ["PP", "R1", "S1"]},
+            "outros": {
+                "ichimoku": {
+                    k: None
+                    for k in [
+                        "tenkan_sen",
+                        "kijun_sen",
+                        "senkou_span_a",
+                        "senkou_span_b",
+                        "chikou_span",
+                    ]
+                },
+                "fibonacci": {k: None for k in ["23.6%", "38.2%", "50%", "61.8%"]},
+                "pivot_points": {k: None for k in ["PP", "R1", "S1"]},
+            }
         }
         try:
             dados_completos = kwargs.get("dados_completos")
@@ -317,26 +320,26 @@ class OutrosIndicadores(Plugin):
             if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"[{self.nome}] Parâmetros ausentes")
                 if isinstance(dados_completos, dict):
-                    dados_completos["outros"] = resultado_padrao
-                return True
+                    dados_completos["outros"] = resultado_padrao["outros"]
+                return resultado_padrao
             if not isinstance(dados_completos, dict):
                 logger.error(
                     f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
                 )
-                dados_completos["outros"] = resultado_padrao
-                return True
+                dados_completos["outros"] = resultado_padrao["outros"]
+                return resultado_padrao
             klines = dados_completos.get("crus", [])
             if not validar_klines(klines, min_len=52):
-                dados_completos["outros"] = resultado_padrao
-                return True
+                dados_completos["outros"] = resultado_padrao["outros"]
+                return resultado_padrao
             extr = extrair_ohlcv(klines, [2, 3, 4])
             high, low, close = extr[2], extr[3], extr[4]
             if not all([high.size >= 52, low.size >= 52, close.size >= 52]):
                 logger.warning(
                     f"[{self.nome}] Dados extraídos insuficientes para {symbol} - {timeframe}"
                 )
-                dados_completos["outros"] = resultado_padrao
-                return True
+                dados_completos["outros"] = resultado_padrao["outros"]
+                return resultado_padrao
             volatilidade = calcular_volatilidade_generico(close, periodo=14)
             self.config["periodos"] = ajustar_periodos_generico(
                 {
@@ -360,30 +363,34 @@ class OutrosIndicadores(Plugin):
             )
             pivot_points = self._calcular_pivot_points(klines[-1])
             resultado = {
-                "ichimoku": {
-                    k: (
-                        float(v[-1])
-                        if isinstance(v, np.ndarray) and v.size and not np.isnan(v[-1])
-                        else None
-                    )
-                    for k, v in ichimoku.items()
-                },
-                "fibonacci": {
-                    k: round(v, 2) if v is not None else None
-                    for k, v in fibonacci.items()
-                },
-                "pivot_points": {
-                    k: round(v, 2) if v is not None else None
-                    for k, v in pivot_points.items()
-                },
+                "outros": {
+                    "ichimoku": {
+                        k: (
+                            float(v[-1])
+                            if isinstance(v, np.ndarray)
+                            and v.size
+                            and not np.isnan(v[-1])
+                            else None
+                        )
+                        for k, v in ichimoku.items()
+                    },
+                    "fibonacci": {
+                        k: round(v, 2) if v is not None else None
+                        for k, v in fibonacci.items()
+                    },
+                    "pivot_points": {
+                        k: round(v, 2) if v is not None else None
+                        for k, v in pivot_points.items()
+                    },
+                }
             }
-            dados_completos["outros"] = resultado
+            dados_completos["outros"] = resultado["outros"]
             logger.debug(
                 f"[{self.nome}] Outros indicadores calculados para {symbol} - {timeframe}: {resultado}"
             )
-            return True
+            return resultado
         except Exception as e:
             logger.error(f"[{self.nome}] Erro geral ao executar: {e}")
             if isinstance(dados_completos, dict):
-                dados_completos["outros"] = resultado_padrao
-            return True
+                dados_completos["outros"] = resultado_padrao["outros"]
+            return resultado_padrao

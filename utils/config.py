@@ -135,7 +135,7 @@ class ConfigManager:
             "futuros": False,  # True para analisar futuros ("future")
             "swap": True,  # True para analisar swaps perpétuos
             "option": False,  # True para analisar opções
-            "timeframes": ["1h"],
+            "timeframes": ["15m", "1h", "4h", "1d"],
             # Quantidade de symbols processados em lote (ajuste conforme desejado)
             "batch_size": 3,
             # Número máximo de workers para o ThreadPoolExecutor (ajuste conforme desejado)

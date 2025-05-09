@@ -263,16 +263,11 @@ class IndicadoresVolume(Plugin):
             logger.error(f"[{self.nome}] Erro ao calcular volatilidade: {e}")
             return 0.0
 
-    def executar(self, *args, **kwargs) -> bool:
+    def executar(self, *args, **kwargs) -> dict:
         """
         Executa a análise de volume.
-
-        Args:
-            *args: Argumentos posicionais
-            **kwargs: Argumentos nomeados, deve incluir dados_completos
-
-        Returns:
-            bool: True se executado com sucesso
+        Sempre retorna um dicionário de indicadores, nunca bool.
+        Também persiste os dados via GerenciadorBanco, seguindo o padrão institucional.
         """
         from utils.logging_config import log_rastreamento
 
@@ -284,23 +279,23 @@ class IndicadoresVolume(Plugin):
             acao="entrada",
             detalhes=f"chaves={list(dados_completos.keys()) if isinstance(dados_completos, dict) else dados_completos}",
         )
-        resultado_padrao = {"obv": None, "cmf": None, "mfi": None}
+        resultado_padrao = {"volume": {"obv": None, "cmf": None, "mfi": None}}
         try:
             if not all([dados_completos, symbol, timeframe]):
                 logger.error(f"[{self.nome}] Parâmetros ausentes")
                 if isinstance(dados_completos, dict):
-                    dados_completos["volume"] = resultado_padrao
-                return True
+                    dados_completos["volume"] = resultado_padrao["volume"]
+                return resultado_padrao
             if not isinstance(dados_completos, dict):
                 logger.error(
                     f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
                 )
-                dados_completos["volume"] = resultado_padrao
-                return True
+                dados_completos["volume"] = resultado_padrao["volume"]
+                return resultado_padrao
             klines = dados_completos.get("crus", [])
             if not validar_klines(klines, min_len=20):
-                dados_completos["volume"] = resultado_padrao
-                return True
+                dados_completos["volume"] = resultado_padrao["volume"]
+                return resultado_padrao
             extr = extrair_ohlcv(klines, [2, 3, 4, 5])
             high, low, close, volume = extr[2], extr[3], extr[4], extr[5]
             log_rastreamento(
@@ -312,8 +307,8 @@ class IndicadoresVolume(Plugin):
                 logger.warning(
                     f"[{self.nome}] Dados extraídos vazios para {symbol} - {timeframe}"
                 )
-                dados_completos["volume"] = resultado_padrao
-                return True
+                dados_completos["volume"] = resultado_padrao["volume"]
+                return resultado_padrao
             volatilidade = calcular_volatilidade_generico(
                 close, periodo=self.config.get("periodo_base", 14)
             )
@@ -345,11 +340,13 @@ class IndicadoresVolume(Plugin):
                 ),
             )
             resultado = {
-                "obv": float(obv[-1]) if obv.size > 0 else None,
-                "cmf": float(cmf[-1]) if cmf.size > 0 else None,
-                "mfi": float(mfi[-1]) if mfi.size > 0 else None,
+                "volume": {
+                    "obv": float(obv[-1]) if obv.size > 0 else None,
+                    "cmf": float(cmf[-1]) if cmf.size > 0 else None,
+                    "mfi": float(mfi[-1]) if mfi.size > 0 else None,
+                }
             }
-            dados_completos["volume"] = resultado
+            dados_completos["volume"] = resultado["volume"]
             logger.debug(
                 f"[{self.nome}] Indicadores de volume gerados para {symbol} - {timeframe}: {resultado}"
             )
@@ -358,9 +355,31 @@ class IndicadoresVolume(Plugin):
                 acao="saida",
                 detalhes=f"indicadores_volume={resultado}",
             )
-            return True
+            # Persistência institucional (exemplo)
+            if hasattr(self, "_gerenciador_banco") and self._gerenciador_banco:
+                dados_persistir = {
+                    "timestamp": pd.Timestamp.now(),
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "indicador": "volume",
+                    "valor": resultado["volume"].get("obv"),
+                    "volume_base": float(volume[-1]) if volume.size > 0 else None,
+                    "volume_quote": None,
+                    "direcao": None,
+                    "forca": None,
+                    "score": None,
+                    "contexto_mercado": None,
+                    "observacoes": None,
+                    "candle": None,
+                }
+                self._gerenciador_banco.persistir_dados(
+                    plugin=self.PLUGIN_NAME,
+                    tabela="indicadores_volume",
+                    dados=dados_persistir,
+                )
+            return resultado
         except Exception as e:
             logger.error(f"[{self.nome}] Erro geral na execução: {e}", exc_info=True)
             if isinstance(dados_completos, dict):
-                dados_completos["volume"] = resultado_padrao
-            return False
+                dados_completos["volume"] = resultado_padrao["volume"]
+            return resultado_padrao

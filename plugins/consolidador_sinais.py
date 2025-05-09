@@ -91,14 +91,7 @@ class ConsolidadorSinais(Plugin):
     def executar(self, **kwargs) -> dict:
         """
         Executa a consolidação de sinais de múltiplos timeframes.
-
-        Args:
-            **kwargs: Argumentos nomeados que podem incluir:
-                - dados_completos: Dicionário contendo os dados de todos os timeframes
-                - symbol: Símbolo do par (opcional, será extraído dos dados se não fornecido)
-
-        Returns:
-            dict: Dicionário com o sinal consolidado ou dados originais se não houver sinal
+        Garante que o dicionário de timeframes seja sempre preenchido corretamente, mesmo para apenas um timeframe.
         """
         try:
             # Extrai os argumentos
@@ -109,14 +102,20 @@ class ConsolidadorSinais(Plugin):
             if not dados_completos:
                 dados_completos = kwargs
 
-            # Extrai o símbolo e os timeframes
+            # Extrai o símbolo
             if not symbol:
                 symbol = dados_completos.get("symbol")
 
             # Extrai os timeframes do dados_completos
             timeframes = {}
-            if "timeframes" in dados_completos:
+            if "timeframes" in dados_completos and isinstance(
+                dados_completos["timeframes"], dict
+            ):
                 timeframes = dados_completos["timeframes"]
+            elif "timeframe" in dados_completos and symbol:
+                # Caso só exista um timeframe, monta o dicionário corretamente
+                tf = dados_completos["timeframe"]
+                timeframes = {tf: dados_completos}
             else:
                 # Tenta extrair timeframes do buffer
                 for tf in ["5m", "15m", "1h", "4h"]:
@@ -156,20 +155,12 @@ class ConsolidadorSinais(Plugin):
 
     def _extrair_sinais(self, timeframes: dict) -> dict:
         """
-        Extrai sinais de cada timeframe.
-
-        Args:
-            timeframes: Dicionário com dados de cada timeframe
-
-        Returns:
-            dict: Dicionário com sinais extraídos por timeframe
+        Extrai sinais de cada timeframe, garantindo extração de alavancagem, SL e TP.
         """
         sinais = {}
-
         for tf, dados in timeframes.items():
             # Primeiro tenta extrair do sinal consolidado
             sinal = dados.get("sinal_consolidado")
-
             # Se não houver sinal consolidado, tenta extrair da análise de mercado
             if not sinal:
                 analise = dados.get("analise_mercado", {})
@@ -185,12 +176,27 @@ class ConsolidadorSinais(Plugin):
                         "suporte": analise.get("suporte"),
                         "resistencia": analise.get("resistencia"),
                         "atr": analise.get("atr"),
+                        # Garante extração de SL/TP/alavancagem se existirem
+                        "stop_loss": analise.get("stop_loss", dados.get("stop_loss")),
+                        "take_profit": analise.get(
+                            "take_profit", dados.get("take_profit")
+                        ),
+                        "alavancagem": analise.get(
+                            "alavancagem", dados.get("alavancagem")
+                        ),
                     }
-
+            else:
+                # Garante que SL/TP/alavancagem estejam presentes
+                sinal["stop_loss"] = sinal.get("stop_loss", dados.get("stop_loss"))
+                sinal["take_profit"] = sinal.get(
+                    "take_profit", dados.get("take_profit")
+                )
+                sinal["alavancagem"] = sinal.get(
+                    "alavancagem", dados.get("alavancagem")
+                )
             if sinal:
                 sinais[tf] = sinal
                 logger.debug(f"[consolidador_sinais] Sinal extraído para {tf}: {sinal}")
-
         return sinais
 
     def _validar_sinais(self, sinais: dict) -> bool:
@@ -302,29 +308,18 @@ class ConsolidadorSinais(Plugin):
     def _consolidar_sinais(self, sinais: dict, symbol: str) -> dict:
         """
         Consolida os sinais de múltiplos timeframes em um único sinal.
-
-        Args:
-            sinais (dict): Dicionário com sinais por timeframe
-            symbol (str): Símbolo do par
-
-        Returns:
-            dict: Sinal consolidado ou None se inválido
+        Garante que SL, TP e alavancagem não fiquem zerados se houver valores válidos em algum timeframe.
         """
         if not sinais or not symbol:
             logger.error(
                 f"[consolidador_sinais] Sinais ou symbol não fornecidos: sinais={bool(sinais)}, symbol={symbol}"
             )
             return None
-
-        # Lista para armazenar os sinais processados
         sinais_processados = []
-
-        # Processa cada timeframe
         for tf, sinal in sinais.items():
             if not isinstance(sinal, dict):
                 logger.error(f"[consolidador_sinais] Sinal inválido para {tf}: {sinal}")
                 continue
-
             sinal_processado = {
                 "timeframe": tf,
                 "symbol": symbol,
@@ -337,48 +332,56 @@ class ConsolidadorSinais(Plugin):
                 "alavancagem": sinal.get("alavancagem"),
             }
             sinais_processados.append(sinal_processado)
-
         if not sinais_processados:
             logger.error("[consolidador_sinais] Nenhum sinal válido para processar")
             return None
-
-        # Determina a direção final com base nos sinais
         direcao_final = self._determinar_direcao(sinais_processados)
         logger.debug(f"[consolidador_sinais] Direção final é {direcao_final}")
-
-        # Calcula a média de força e confiança
         forca_final, confianca_final = self._calcular_media_forca_confiança(
             sinais_processados
         )
-
         # Calcula SL/TP e alavancagem ponderados
         sl_final = 0
         tp_final = 0
         alavancagem_final = 0
         total_peso = 0
-
+        sl_validos = []
+        tp_validos = []
+        alav_validos = []
         for sinal in sinais_processados:
             tf = sinal.get("timeframe")
             peso = self.pesos_timeframe.get(tf, 0.1)
-
             sl = float(sinal.get("stop_loss", 0) or 0)
             tp = float(sinal.get("take_profit", 0) or 0)
             alav = float(sinal.get("alavancagem", 0) or 0)
-
+            if sl > 0:
+                sl_validos.append(sl)
+            if tp > 0:
+                tp_validos.append(tp)
+            if alav > 0:
+                alav_validos.append(alav)
             sl_final += sl * peso
             tp_final += tp * peso
             alavancagem_final += alav * peso
             total_peso += peso
-
+        # Se todos os valores forem zero, mas houver valores válidos, usa a média dos válidos
         if total_peso > 0:
-            sl_final = round(sl_final / total_peso, 8)
-            tp_final = round(tp_final / total_peso, 8)
-            alavancagem_final = round(alavancagem_final / total_peso, 2)
-
-        # Obtém o preço atual do último sinal
+            sl_final = (
+                round(sl_final / total_peso, 8)
+                if sl_final > 0
+                else (sum(sl_validos) / len(sl_validos) if sl_validos else 0)
+            )
+            tp_final = (
+                round(tp_final / total_peso, 8)
+                if tp_final > 0
+                else (sum(tp_validos) / len(tp_validos) if tp_validos else 0)
+            )
+            alavancagem_final = (
+                round(alavancagem_final / total_peso, 2)
+                if alavancagem_final > 0
+                else (sum(alav_validos) / len(alav_validos) if alav_validos else 0)
+            )
         preco_atual = sinais_processados[-1]["preco_atual"]
-
-        # Monta o sinal consolidado
         sinal_consolidado = {
             "symbol": symbol,
             "direcao": direcao_final,
@@ -390,13 +393,11 @@ class ConsolidadorSinais(Plugin):
             "take_profit": tp_final,
             "alavancagem": alavancagem_final,
         }
-
         # Gera o hash do sinal e verifica se já foi emitido
         hash_sinal = self._gerar_hash_sinal(sinal_consolidado)
         if hash_sinal in self._ultimo_sinal:
             logger.debug(f"[consolidador_sinais] Sinal duplicado: {hash_sinal}")
             return None
-
         logger.info(
             f"[consolidador_sinais] Sinal consolidado gerado: {sinal_consolidado}"
         )

@@ -105,7 +105,11 @@ class IndicadoresTendencia(Plugin):
         config = carregar_config()
         self.config = config["indicadores"]["tendencia"].copy()
 
-    def executar(self, *args, **kwargs) -> bool:
+    def executar(self, *args, **kwargs) -> dict:
+        """
+        Executa o cálculo dos indicadores de tendência.
+        Sempre retorna um dicionário de indicadores, nunca bool.
+        """
         from utils.logging_config import log_rastreamento
 
         symbol = kwargs.get("symbol")
@@ -184,27 +188,29 @@ class IndicadoresTendencia(Plugin):
                 ),
             )
             tendencia = {
-                "medias_moveis": {
-                    "sma_rapida": float(sma_r[-1]) if sma_r.size else None,
-                    "sma_lenta": float(sma_l[-1]) if sma_l.size else None,
-                    "ema_rapida": float(ema_r[-1]) if ema_r.size else None,
-                    "ema_lenta": float(ema_l[-1]) if ema_l.size else None,
-                },
-                "macd": {
-                    "macd": float(macd[-1]) if macd.size else None,
-                    "signal": float(signal[-1]) if signal.size else None,
-                    "histogram": float(hist[-1]) if hist.size else None,
-                },
-                "adx": {
-                    "adx": float(adx[-1]) if adx.size else None,
-                    "pdi": float(pdi[-1]) if pdi.size else None,
-                    "ndi": float(ndi[-1]) if ndi.size else None,
-                },
-                "atr": float(atr[-1]) if atr.size else 0.0,
+                "tendencia": {
+                    "medias_moveis": {
+                        "sma_rapida": float(sma_r[-1]) if sma_r.size else None,
+                        "sma_lenta": float(sma_l[-1]) if sma_l.size else None,
+                        "ema_rapida": float(ema_r[-1]) if ema_r.size else None,
+                        "ema_lenta": float(ema_l[-1]) if ema_l.size else None,
+                    },
+                    "macd": {
+                        "macd": float(macd[-1]) if macd.size else None,
+                        "signal": float(signal[-1]) if signal.size else None,
+                        "histogram": float(hist[-1]) if hist.size else None,
+                    },
+                    "adx": {
+                        "adx": float(adx[-1]) if adx.size else None,
+                        "pdi": float(pdi[-1]) if pdi.size else None,
+                        "ndi": float(ndi[-1]) if ndi.size else None,
+                    },
+                    "atr": float(atr[-1]) if atr.size else 0.0,
+                }
             }
             if isinstance(dados_completos, dict):
-                dados_completos["tendencia"] = tendencia
-                dados_completos["atr"] = tendencia["atr"]
+                dados_completos["tendencia"] = tendencia["tendencia"]
+                dados_completos["atr"] = tendencia["tendencia"]["atr"]
                 dados_completos["preco_atual"] = (
                     float(close[-1]) if len(close) > 0 else 0.0
                 )
@@ -217,7 +223,7 @@ class IndicadoresTendencia(Plugin):
                 acao="saida",
                 detalhes=f"tendencia={tendencia}",
             )
-            return True
+            return tendencia
         except Exception as e:
             logger.error(f"[{self.nome}] Erro geral ao executar: {e}")
             return resultado_padrao

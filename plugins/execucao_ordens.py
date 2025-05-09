@@ -113,18 +113,11 @@ class ExecucaoOrdens(Plugin):
             logger.error(f"[{self.nome}] Erro ao inicializar: {e}", exc_info=True)
             return False
 
-    def executar(self, *args, **kwargs) -> bool:
+    def executar(self, *args, **kwargs) -> dict:
         """
         Executa ordens com base nos sinais fornecidos.
-
-        Args:
-            dados_completos (dict): Dados de análise com sinais.
-            symbol (str): Símbolo do par (ex: BTC/USDT) - preferencialmente o market_id para swaps/futuros/options.
-            market_id (str): ID do mercado (ex: BTCUSDT, FARTCOINUSDT). Prioritário para swaps/futuros/options.
-            timeframe (str): Timeframe.
-
-        Returns:
-            bool: True (mesmo em erro, para não interromper o pipeline).
+        Aceita tanto dados_completos['sinais'] quanto campos diretos (direcao, preco_atual, etc).
+        Sempre retorna um dicionário de resultado, mesmo em caso de erro.
         """
         symbol = kwargs.get("symbol")
         market_id = kwargs.get("market_id")
@@ -135,7 +128,6 @@ class ExecucaoOrdens(Plugin):
             acao="entrada",
             detalhes=f"chaves={list(dados_completos.keys()) if isinstance(dados_completos, dict) else dados_completos}",
         )
-        # Se market_id for fornecido, ele tem prioridade
         symbol_or_id = market_id or symbol
 
         resultado_padrao = {
@@ -150,68 +142,53 @@ class ExecucaoOrdens(Plugin):
             logger.error(
                 f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
             )
-            dados_completos["execucao_ordens"] = resultado_padrao["execucao_ordens"]
-            log_rastreamento(
-                componente=f"execucao_ordens/{symbol or market_id}-{timeframe}",
-                acao="saida",
-                detalhes=f"execucao_ordens={dados_completos.get('execucao_ordens', {})}",
-            )
-            return True
+            return {"erro": "dados_completos não é um dicionário"}
 
         if not all([symbol_or_id, timeframe]):
             logger.error(
                 f"[{self.nome}] Parâmetros obrigatórios ausentes (symbol_or_id={symbol_or_id}, timeframe={timeframe})"
             )
-            dados_completos["execucao_ordens"] = resultado_padrao["execucao_ordens"]
-            log_rastreamento(
-                componente=f"execucao_ordens/{symbol or market_id}-{timeframe}",
-                acao="saida",
-                detalhes=f"execucao_ordens={dados_completos.get('execucao_ordens', {})}",
-            )
-            return True
+            return {"erro": "Parâmetros obrigatórios ausentes"}
 
-        if not dados_completos.get("sinais") or not dados_completos.get("crus"):
+        # Aceita tanto 'sinais' quanto campos diretos
+        tem_sinais = isinstance(dados_completos.get("sinais"), dict)
+        tem_direto = all(
+            k in dados_completos
+            for k in [
+                "direcao",
+                "preco_atual",
+                "alavancagem",
+                "stop_loss",
+                "take_profit",
+            ]
+        )
+        if not (tem_sinais or (tem_direto and dados_completos.get("crus"))):
             logger.error(f"[{self.nome}] Sinais ou crus ausentes em dados_completos")
-            dados_completos["execucao_ordens"] = resultado_padrao["execucao_ordens"]
-            log_rastreamento(
-                componente=f"execucao_ordens/{symbol or market_id}-{timeframe}",
-                acao="saida",
-                detalhes=f"execucao_ordens={dados_completos.get('execucao_ordens', {})}",
-            )
-            return True
+            return {"erro": "Sinais ou crus ausentes em dados_completos"}
 
         sinal = self._extrair_sinal(dados_completos)
-        # Padronização: aceitar apenas 'LONG' ou 'SHORT' como direção válida
+        # Se não houver 'sinais', monta sinal a partir dos campos diretos
+        if not sinal and tem_direto:
+            sinal = {
+                "direcao": dados_completos["direcao"],
+                "preco_atual": dados_completos["preco_atual"],
+                "alavancagem": dados_completos["alavancagem"],
+                "stop_loss": dados_completos["stop_loss"],
+                "take_profit": dados_completos["take_profit"],
+            }
         direcao = sinal.get("direcao")
-        if direcao not in ["LONG", "SHORT"]:
+        if direcao not in ["LONG", "SHORT", "ALTA", "BAIXA"]:
             logger.info(
                 f"[{self.nome}] Nenhum sinal válido para {symbol_or_id} ({direcao})"
             )
-            dados_completos["execucao_ordens"] = resultado_padrao["execucao_ordens"]
-            log_rastreamento(
-                componente=f"execucao_ordens/{symbol or market_id}-{timeframe}",
-                acao="saida",
-                detalhes=f"execucao_ordens={dados_completos.get('execucao_ordens', {})}",
-            )
-            return True
+            return {"erro": f"Nenhum sinal válido para {symbol_or_id} ({direcao})"}
 
         auto_trade = self._config.get("trading", {}).get("auto_trade", False)
         if not auto_trade:
             logger.info(f"[{self.nome}] Auto Trade desativado para {symbol_or_id}")
-            dados_completos["execucao_ordens"] = {
-                "status": "PRONTO",
-                "ordem_id": None,
-                "resultado": "Sinal válido detectado - aguardando confirmação manual",
-            }
-            log_rastreamento(
-                componente=f"execucao_ordens/{symbol or market_id}-{timeframe}",
-                acao="saida",
-                detalhes=f"execucao_ordens={dados_completos.get('execucao_ordens', {})}",
-            )
-            return True
+            return {"info": "Auto Trade desativado"}
 
         try:
-            # Usa sempre o id para swaps/futuros/options, e symbol para spot
             if symbol_or_id in self._ordens_ativas and self._verificar_ordem_ativa(
                 symbol_or_id
             ):
@@ -222,26 +199,10 @@ class ExecucaoOrdens(Plugin):
             else:
                 logger.info(f"[{self.nome}] Ordem principal para {symbol_or_id}")
                 resultado = self._executar_ordem(dados_completos, symbol_or_id, sinal)
-            dados_completos["execucao_ordens"] = resultado
-            log_rastreamento(
-                componente=f"execucao_ordens/{symbol or market_id}-{timeframe}",
-                acao="saida",
-                detalhes=f"execucao_ordens={dados_completos.get('execucao_ordens', {})}",
-            )
-            return True
+            return resultado
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao executar: {e}", exc_info=True)
-            dados_completos["execucao_ordens"] = {
-                "status": "ERRO",
-                "ordem_id": None,
-                "resultado": str(e),
-            }
-            log_rastreamento(
-                componente=f"execucao_ordens/{symbol or market_id}-{timeframe}",
-                acao="saida",
-                detalhes=f"execucao_ordens={dados_completos.get('execucao_ordens', {})}",
-            )
-            return True
+            return {"erro": str(e)}
 
     def _extrair_sinal(self, dados_completos: dict) -> dict:
         """

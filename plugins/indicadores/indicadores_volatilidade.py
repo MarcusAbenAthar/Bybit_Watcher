@@ -67,7 +67,11 @@ class IndicadoresVolatilidade(Plugin):
         if "periodos" in self.config:
             self.periodos.update(self.config["periodos"])
 
-    def executar(self, *args, **kwargs) -> bool:
+    def executar(self, *args, **kwargs) -> dict:
+        """
+        Executa o cálculo dos indicadores de volatilidade.
+        Sempre retorna um dicionário de indicadores, nunca bool.
+        """
         from utils.logging_config import log_rastreamento
 
         symbol = kwargs.get("symbol")
@@ -122,24 +126,28 @@ class IndicadoresVolatilidade(Plugin):
             atr = talib.ATR(high, low, close_atr, timeperiod=self.periodos["atr"])
             atr_valor = float(atr[-1]) if atr.size > 0 else None
             resultado = {
-                "bandas_bollinger": {
-                    "superior": float(upper[-1]) if upper.size > 0 else None,
-                    "media": float(middle[-1]) if middle.size > 0 else None,
-                    "inferior": float(lower[-1]) if lower.size > 0 else None,
-                },
-                "atr": atr_valor,
-                "volatilidade": float(volatilidade_base),
+                "volatilidade": {
+                    "bandas_bollinger": {
+                        "superior": float(upper[-1]) if upper.size > 0 else None,
+                        "media": float(middle[-1]) if middle.size > 0 else None,
+                        "inferior": float(lower[-1]) if lower.size > 0 else None,
+                    },
+                    "atr": atr_valor,
+                    "volatilidade": float(volatilidade_base),
+                }
             }
             # Alias temporário para retrocompatibilidade
-            resultado["bb"] = resultado["bandas_bollinger"]
+            resultado["volatilidade"]["bb"] = resultado["volatilidade"][
+                "bandas_bollinger"
+            ]
             if isinstance(dados_completos, dict):
-                dados_completos["volatilidade"] = resultado
+                dados_completos["volatilidade"] = resultado["volatilidade"]
             log_rastreamento(
                 componente=f"indicadores_volatilidade/{symbol}-{timeframe}",
                 acao="saida",
                 detalhes=f"volatilidade={resultado}",
             )
-            return True
+            return resultado
         except Exception as e:
             logger.error(
                 f"[indicadores_volatilidade] Erro geral ao executar: {e}", exc_info=True

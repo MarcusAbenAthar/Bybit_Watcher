@@ -329,17 +329,22 @@ class MachineLearning(Plugin):
             logger.error(f"[{self.nome}] Erro ao fazer previsões: {e}")
             raise
 
-    def executar(self, dados_completos: dict) -> dict:
+    def executar(self, *args, **kwargs) -> dict:
         """
         Executa o plugin de Machine Learning.
-
-        Args:
-            dados_completos: Dicionário com todos os dados
-
-        Returns:
-            dict: Dicionário atualizado com resultados
+        Aceita argumentos nomeados (symbol, timeframe, dados_completos, etc) para compatibilidade total.
+        Sempre retorna um dicionário de resultado.
         """
         try:
+            # Compatibilidade: aceita tanto dados_completos como kwargs
+            dados_completos = kwargs.get("dados_completos")
+            if dados_completos is None and args:
+                dados_completos = args[0]
+            if not isinstance(dados_completos, dict):
+                logger.error(
+                    f"[{self.nome}] dados_completos não é um dicionário: {type(dados_completos)}"
+                )
+                return {}
             if not self._validar_dados_entrada(dados_completos):
                 return dados_completos
 
@@ -365,7 +370,7 @@ class MachineLearning(Plugin):
 
         except Exception as e:
             logger.error(f"[{self.nome}] Erro ao executar: {e}")
-            return dados_completos
+            return {}
 
     def _validar_dados_entrada(self, dados_completos: dict) -> bool:
         """

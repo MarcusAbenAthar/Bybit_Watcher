@@ -137,3 +137,40 @@ Bybit_Watcher/
 
 
 https://github.com/MarcusAbenAthar/Bybit_Watcher
+
+# Padrão Institucional de Persistência de Dados entre Plugins e Banco
+
+## Fluxo recomendado para persistência de dados (CRUD):
+
+1. **O plugin executa sua lógica e produz os dados a serem persistidos.**
+2. **O plugin envia os dados ao GerenciadorBanco** (ou ao orquestrador institucional) através de um método padronizado, ex: `gerenciador_banco.persistir_dados(plugin, tabela, dados)`.
+3. **O GerenciadorBanco valida, versiona e delega a operação ao plugin BancoDados** (ou outro plugin de persistência), que executa o CRUD real.
+4. **O BancoDados executa a operação, faz logging, versionamento e retorna o resultado ao GerenciadorBanco**, que pode repassar ao plugin de origem.
+
+## Vantagens desse padrão:
+- Desacoplamento total: plugins não dependem diretamente do BancoDados.
+- Clareza e responsabilidade única: cada parte do sistema faz apenas o que lhe compete.
+- Testabilidade: fácil mockar o gerenciador em testes.
+- Evolução: backend de persistência pode mudar sem afetar plugins.
+- Rastreabilidade e versionamento centralizados.
+
+## Exemplo de interface sugerida:
+
+```python
+# No plugin:
+resultado = self.gerenciador_banco.persistir_dados(
+    plugin=self.PLUGIN_NAME,
+    tabela="minha_tabela",
+    dados=meus_dados
+)
+
+# No GerenciadorBanco:
+def persistir_dados(self, plugin, tabela, dados):
+    # Valida, versiona, loga e delega ao BancoDados
+    return self._banco_dados.inserir(tabela, dados)
+```
+
+## Observações:
+- O plugin nunca deve acessar diretamente o BancoDados.
+- O GerenciadorBanco pode implementar lógica adicional de versionamento, auditoria, fallback, etc.
+- O padrão deve ser seguido por todos os plugins que produzem dados a serem persistidos.
